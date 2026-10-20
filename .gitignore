@@ -4,3 +4,4 @@ data/*.sqlite
 data/*.sqlite-*
 public/uploads/*
 !public/uploads/.gitkeep
+tsconfig.tsbuildinfo
