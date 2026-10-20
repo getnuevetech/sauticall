@@ -24,53 +24,41 @@ Create the server first. Deploying the site is a separate step.
 
 ### 1. Create the server
 
-Install the AWS CLI and configure credentials that can manage Lightsail. Then, from this repository:
+In the Lightsail console, region **Virginia (us-east-1)**:
+
+1. Create an instance named `sauticall` using **Linux/Unix** and **Ubuntu 24.04 LTS**.
+2. Under **Add launch script**, paste `deploy/lightsail/cloud-init.yaml`. That installs Node.js 22 and Nginx, then clones `https://github.com/getnuevetech/sauticall.git` into `/opt/sauticall`.
+3. Choose the **2 GB RAM** plan.
+4. Create a static IP named `sauticall-ip` and attach it to the instance.
+5. In the IPv4 firewall, keep SSH on port 22 and add HTTP 80 and HTTPS 443.
+
+The database directory `/var/lib/sauticall` stays outside the git checkout, so a later pull does not wipe content or uploads. Wait until the instance is **Running** and cloud-init has had a few minutes to clone.
+
+If the AWS CLI is configured on a machine that has this repository, `bash deploy/lightsail/provision.sh` creates the same instance. Optional overrides: `LIGHTSAIL_REGION`, `LIGHTSAIL_AZ`, `LIGHTSAIL_INSTANCE`, `LIGHTSAIL_BUNDLE`, `LIGHTSAIL_BLUEPRINT`, `LIGHTSAIL_KEY_NAME`, `LIGHTSAIL_STATIC_IP`.
+
+### 2. Pull GitHub onto the server and install
+
+No other computer needs the repository. On the Lightsail instance page, choose **Connect**, then **Connect using SSH**. That opens a terminal on the server. Paste:
 
 ```bash
-bash deploy/lightsail/provision.sh
+curl -fsSL https://raw.githubusercontent.com/getnuevetech/sauticall/main/deploy/lightsail/bootstrap.sh -o /tmp/sauticall-bootstrap.sh
+sudo ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='choose a long password' bash /tmp/sauticall-bootstrap.sh
 ```
 
-That creates an Ubuntu 24.04 instance named `sauticall` in `us-east-1` on the `small_3_0` bundle (2 GB memory, so the later production build has room), a static IP named `sauticall-ip`, and firewall rules for SSH (22), HTTP (80), and HTTPS (443). The private key is written to `deploy/lightsail/keys/` and is not committed. Cloud-init installs Node.js 22, Nginx, and the `/opt/sauticall` and `/var/lib/sauticall` directories. It does not copy the application.
+The script installs git, clones `https://github.com/getnuevetech/sauticall.git` into `/opt/sauticall` when that checkout is missing, then builds and starts the site. Nginx serves it on port 80. Open `http://STATIC_IP`.
 
-Optional overrides: `LIGHTSAIL_REGION`, `LIGHTSAIL_AZ`, `LIGHTSAIL_INSTANCE`, `LIGHTSAIL_BUNDLE`, `LIGHTSAIL_BLUEPRINT`, `LIGHTSAIL_KEY_NAME`, `LIGHTSAIL_STATIC_IP`.
+If cloud-init already cloned the repository, this same command uses that checkout and continues with the install.
 
-Check the instance after a few minutes:
+After the domain points at the static IP, paste this in the same SSH terminal:
 
 ```bash
-bash deploy/lightsail/status.sh
+sudo DOMAIN=sauticall.example CERT_EMAIL=you@example.com bash /opt/sauticall/deploy/lightsail/enable-https.sh
 ```
 
-### 2. Deploy the site
-
-After the static IP answers SSH, copy the project and install it. The site stays on port 3000 and Nginx serves it on port 80. The database and uploaded images live in `/var/lib/sauticall`, so a later code update does not wipe them.
+Later updates pull `main` from GitHub and rebuild:
 
 ```bash
-rsync -az -e "ssh -i deploy/lightsail/keys/sauticall.pem" \
-  --exclude node_modules --exclude .next --exclude data --exclude public/uploads \
-  ./ ubuntu@STATIC_IP:/tmp/sauticall
-ssh -i deploy/lightsail/keys/sauticall.pem ubuntu@STATIC_IP \
-  'sudo mkdir -p /opt/sauticall && sudo rsync -a /tmp/sauticall/ /opt/sauticall/'
-ssh -i deploy/lightsail/keys/sauticall.pem ubuntu@STATIC_IP \
-  'sudo ADMIN_EMAIL=you@example.com ADMIN_PASSWORD="choose a long password" bash /opt/sauticall/deploy/lightsail/install.sh'
-```
-
-The design is then available at `http://STATIC_IP`.
-
-After the domain points at the static IP, run:
-
-```bash
-ssh -i deploy/lightsail/keys/sauticall.pem ubuntu@STATIC_IP \
-  'sudo DOMAIN=sauticall.example CERT_EMAIL=you@example.com bash /opt/sauticall/deploy/lightsail/enable-https.sh'
-```
-
-Later updates:
-
-```bash
-rsync -az -e "ssh -i deploy/lightsail/keys/sauticall.pem" \
-  --exclude node_modules --exclude .next --exclude data --exclude public/uploads \
-  ./ ubuntu@STATIC_IP:/tmp/sauticall
-ssh -i deploy/lightsail/keys/sauticall.pem ubuntu@STATIC_IP \
-  'sudo rsync -a /tmp/sauticall/ /opt/sauticall/ && sudo bash /opt/sauticall/deploy/lightsail/update.sh'
+sudo bash /opt/sauticall/deploy/lightsail/update.sh
 ```
 
 `GET /api/health` returns `{ "ok": true }` when the app and database are up.

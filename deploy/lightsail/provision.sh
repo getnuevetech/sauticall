@@ -95,7 +95,7 @@ key=${KEY_FILE}
 EOF
 chmod 600 "${KEY_DIR}/instance.txt"
 
-echo "Lightsail server is up. SautiCall is not installed."
+echo "Lightsail server is up. Cloud-init is cloning https://github.com/getnuevetech/sauticall.git into /opt/sauticall."
 echo "Static IP: ${ip}"
 echo "SSH: ssh -i ${KEY_FILE} ubuntu@${ip}"
-echo "Cloud-init is installing Node.js and Nginx. Wait a few minutes, then run: bash deploy/lightsail/status.sh"
+echo "After a few minutes, open the Lightsail browser SSH session and run deploy/lightsail/bootstrap.sh with ADMIN_EMAIL and ADMIN_PASSWORD."

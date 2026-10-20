@@ -11,13 +11,12 @@ DATA_DIR=/var/lib/sauticall
 ENV_FILE=/etc/sauticall.env
 
 if [[ ! -f "${APP_DIR}/package.json" ]]; then
-  echo "Copy the SautiCall project to ${APP_DIR} before running this script."
-  exit 1
+  bash "$(dirname "${BASH_SOURCE[0]}")/git-sync.sh"
 fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl gnupg build-essential python3 nginx
+apt-get install -y ca-certificates curl gnupg build-essential python3 nginx git
 
 if ! command -v node >/dev/null 2>&1 || [[ "$(node -p 'process.versions.node.split(".")[0]')" -lt 22 ]]; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
@@ -74,4 +73,5 @@ nginx -t
 systemctl reload nginx
 
 echo "SautiCall is proxied on port 80."
-echo "In the Lightsail console, allow HTTP (80). After a domain is attached, run deploy/lightsail/enable-https.sh."
+echo "The files came from ${SAUTICALL_REPO:-https://github.com/getnuevetech/sauticall.git}."
+echo "After a domain is attached, run: bash /opt/sauticall/deploy/lightsail/enable-https.sh"

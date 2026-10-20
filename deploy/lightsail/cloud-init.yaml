@@ -1,10 +1,11 @@
 #cloud-config
-# Prepare the Ubuntu host only. The SautiCall app is installed later.
+# Prepare the Ubuntu host and clone the public GitHub repository. The app is installed later.
 package_update: true
 packages:
   - ca-certificates
   - curl
   - gnupg
+  - git
   - build-essential
   - python3
   - nginx
@@ -14,6 +15,7 @@ users:
     home: /var/lib/sauticall
     shell: /usr/sbin/nologin
 runcmd:
-  - mkdir -p /var/lib/sauticall/uploads /opt/sauticall
-  - chown -R sauticall:sauticall /var/lib/sauticall /opt/sauticall
+  - mkdir -p /var/lib/sauticall/uploads
+  - chown -R sauticall:sauticall /var/lib/sauticall
+  - bash -lc 'if [ ! -d /opt/sauticall/.git ]; then rm -rf /opt/sauticall; git clone --branch main https://github.com/getnuevetech/sauticall.git /opt/sauticall; chown -R sauticall:sauticall /opt/sauticall; fi'
   - bash -lc 'if ! command -v node >/dev/null 2>&1 || [ "$(node -p "Number(process.versions.node.split(\".\")[0])")" -lt 22 ]; then curl -fsSL https://deb.nodesource.com/setup_22.x | bash -; apt-get install -y nodejs; fi'
