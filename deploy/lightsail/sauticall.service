@@ -1,0 +1,16 @@
+[Unit]
+Description=SautiCall
+After=network.target
+
+[Service]
+Type=simple
+User=sauticall
+Group=sauticall
+WorkingDirectory=/opt/sauticall
+EnvironmentFile=/etc/sauticall.env
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

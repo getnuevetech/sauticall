@@ -3,6 +3,7 @@ import path from "path";
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { audit, getDb } from "@/lib/db";
+import { uploadDir } from "@/lib/paths";
 
 export async function POST(request: Request) {
   const user = await currentUser();
@@ -16,7 +17,7 @@ export async function POST(request: Request) {
   const bytes = Buffer.from(await file.arrayBuffer());
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "");
   const filename = `${Date.now()}-${safe || "image"}`;
-  const dir = path.join(process.cwd(), "public", "uploads");
+  const dir = uploadDir();
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, filename), bytes);
   const url = `/uploads/${filename}`;

@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
 import { hashPassword } from "./auth";
+import { dataDir } from "./paths";
 import {
   defaultFaqs,
   defaultFlags,
@@ -18,7 +19,7 @@ let db: Database.Database | null = null;
 
 export function getDb() {
   if (db) return db;
-  const dir = path.join(process.cwd(), "data");
+  const dir = dataDir();
   fs.mkdirSync(dir, { recursive: true });
   db = new Database(path.join(dir, "sauticall.sqlite"));
   db.pragma("journal_mode = WAL");
@@ -125,9 +126,12 @@ function seed(database: Database.Database) {
 
   const admin = database.prepare("SELECT id FROM users WHERE role = 'super_admin' LIMIT 1").get();
   if (!admin) {
+    const env = process.env;
+    const email = env["ADMIN_EMAIL"] || "admin@sauticall.test";
+    const password = env["ADMIN_PASSWORD"] || "SautiCall-Admin-2026";
     database
       .prepare("INSERT INTO users (email, name, password_hash, role, mfa_secret, created_at) VALUES (?, ?, ?, 'super_admin', NULL, ?)")
-      .run("admin@sauticall.test", "SautiCall Admin", hashPassword("SautiCall-Admin-2026"), new Date().toISOString());
+      .run(email, "SautiCall Admin", hashPassword(password), new Date().toISOString());
   }
   const gatewayCount = database.prepare("SELECT COUNT(*) AS n FROM gateways").get() as { n: number };
   if (gatewayCount.n === 0) {

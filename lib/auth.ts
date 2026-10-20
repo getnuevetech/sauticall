@@ -87,7 +87,13 @@ export async function createSession(userId: number, mfaPending = false) {
     .prepare("INSERT INTO sessions (token, user_id, expires_at, mfa_pending) VALUES (?, ?, ?, ?)")
     .run(token, userId, expires, mfaPending ? 1 : 0);
   const jar = await cookies();
-  jar.set(COOKIE, token, { httpOnly: true, sameSite: "lax", path: "/", expires: new Date(expires) });
+  jar.set(COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.SAUTICALL_COOKIE_SECURE === "1",
+    path: "/",
+    expires: new Date(expires),
+  });
 }
 
 export async function markMfaComplete() {
