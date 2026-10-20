@@ -20,31 +20,57 @@ Sign in at http://localhost:3000/account/login and open Admin. Leave the theme v
 
 ## AWS Lightsail
 
-This runs on an Ubuntu Lightsail instance. The site stays on port 3000 and Nginx serves it on port 80. The database and uploaded images live in `/var/lib/sauticall`, so a later code update does not wipe them.
+Create the server first. Deploying the site is a separate step.
 
-From your computer, copy the project to the instance (replace the IP):
+### 1. Create the server
+
+Install the AWS CLI and configure credentials that can manage Lightsail. Then, from this repository:
 
 ```bash
-rsync -az --exclude node_modules --exclude .next --exclude data --exclude public/uploads \
-  ./ ubuntu@LIGHTSAIL_IP:/tmp/sauticall
-ssh ubuntu@LIGHTSAIL_IP 'sudo mkdir -p /opt/sauticall && sudo rsync -a /tmp/sauticall/ /opt/sauticall/'
-ssh ubuntu@LIGHTSAIL_IP 'sudo ADMIN_EMAIL=you@example.com ADMIN_PASSWORD="choose a long password" bash /opt/sauticall/deploy/lightsail/install.sh'
+bash deploy/lightsail/provision.sh
 ```
 
-In the Lightsail networking tab, allow HTTP (80). The design is then available at `http://LIGHTSAIL_IP`.
+That creates an Ubuntu 24.04 instance named `sauticall` in `us-east-1` on the `small_3_0` bundle (2 GB memory, so the later production build has room), a static IP named `sauticall-ip`, and firewall rules for SSH (22), HTTP (80), and HTTPS (443). The private key is written to `deploy/lightsail/keys/` and is not committed. Cloud-init installs Node.js 22, Nginx, and the `/opt/sauticall` and `/var/lib/sauticall` directories. It does not copy the application.
 
-After the domain points at the instance static IP, allow HTTPS (443) and run:
+Optional overrides: `LIGHTSAIL_REGION`, `LIGHTSAIL_AZ`, `LIGHTSAIL_INSTANCE`, `LIGHTSAIL_BUNDLE`, `LIGHTSAIL_BLUEPRINT`, `LIGHTSAIL_KEY_NAME`, `LIGHTSAIL_STATIC_IP`.
+
+Check the instance after a few minutes:
 
 ```bash
-ssh ubuntu@LIGHTSAIL_IP 'sudo DOMAIN=sauticall.example CERT_EMAIL=you@example.com bash /opt/sauticall/deploy/lightsail/enable-https.sh'
+bash deploy/lightsail/status.sh
+```
+
+### 2. Deploy the site
+
+After the static IP answers SSH, copy the project and install it. The site stays on port 3000 and Nginx serves it on port 80. The database and uploaded images live in `/var/lib/sauticall`, so a later code update does not wipe them.
+
+```bash
+rsync -az -e "ssh -i deploy/lightsail/keys/sauticall.pem" \
+  --exclude node_modules --exclude .next --exclude data --exclude public/uploads \
+  ./ ubuntu@STATIC_IP:/tmp/sauticall
+ssh -i deploy/lightsail/keys/sauticall.pem ubuntu@STATIC_IP \
+  'sudo mkdir -p /opt/sauticall && sudo rsync -a /tmp/sauticall/ /opt/sauticall/'
+ssh -i deploy/lightsail/keys/sauticall.pem ubuntu@STATIC_IP \
+  'sudo ADMIN_EMAIL=you@example.com ADMIN_PASSWORD="choose a long password" bash /opt/sauticall/deploy/lightsail/install.sh'
+```
+
+The design is then available at `http://STATIC_IP`.
+
+After the domain points at the static IP, run:
+
+```bash
+ssh -i deploy/lightsail/keys/sauticall.pem ubuntu@STATIC_IP \
+  'sudo DOMAIN=sauticall.example CERT_EMAIL=you@example.com bash /opt/sauticall/deploy/lightsail/enable-https.sh'
 ```
 
 Later updates:
 
 ```bash
-rsync -az --exclude node_modules --exclude .next --exclude data --exclude public/uploads \
-  ./ ubuntu@LIGHTSAIL_IP:/tmp/sauticall
-ssh ubuntu@LIGHTSAIL_IP 'sudo rsync -a /tmp/sauticall/ /opt/sauticall/ && sudo bash /opt/sauticall/deploy/lightsail/update.sh'
+rsync -az -e "ssh -i deploy/lightsail/keys/sauticall.pem" \
+  --exclude node_modules --exclude .next --exclude data --exclude public/uploads \
+  ./ ubuntu@STATIC_IP:/tmp/sauticall
+ssh -i deploy/lightsail/keys/sauticall.pem ubuntu@STATIC_IP \
+  'sudo rsync -a /tmp/sauticall/ /opt/sauticall/ && sudo bash /opt/sauticall/deploy/lightsail/update.sh'
 ```
 
 `GET /api/health` returns `{ "ok": true }` when the app and database are up.

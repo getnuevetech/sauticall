@@ -1,0 +1,19 @@
+#cloud-config
+# Prepare the Ubuntu host only. The SautiCall app is installed later.
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - build-essential
+  - python3
+  - nginx
+users:
+  - name: sauticall
+    system: true
+    home: /var/lib/sauticall
+    shell: /usr/sbin/nologin
+runcmd:
+  - mkdir -p /var/lib/sauticall/uploads /opt/sauticall
+  - chown -R sauticall:sauticall /var/lib/sauticall /opt/sauticall
+  - bash -lc 'if ! command -v node >/dev/null 2>&1 || [ "$(node -p "Number(process.versions.node.split(\".\")[0])")" -lt 22 ]; then curl -fsSL https://deb.nodesource.com/setup_22.x | bash -; apt-get install -y nodejs; fi'
