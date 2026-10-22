@@ -1,0 +1,160 @@
+import crypto from "crypto";
+import { pbxRequest } from "./carriers";
+import { flagOn, getDb, readDoc } from "./db";
+import type { Plan } from "./types";
+
+export function extensionCapacity(plan: { base?: boolean; units?: string } | undefined) {
+  if (!plan) return 1;
+  if (plan.base) return 1;
+  const match = String(plan.units || "").match(/(\d+)/);
+  return match ? Number(match[1]) : 1;
+}
+
+export function extensionRange(userId: number) {
+  const from = 100 + (Math.max(userId, 1) - 1) * 10;
+  return { from, to: from + 9 };
+}
+
+export function nextExtension(from: number, to: number, used: string[]) {
+  for (let number = from; number <= to; number += 1) {
+    if (!used.includes(String(number))) return String(number);
+  }
+  return "";
+}
+
+export function appPassword() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#";
+  const bytes = crypto.randomBytes(16);
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
+}
+
+type Department = { user_id: number; name: string; xapi_id: number; number_from: string; number_to: string; open_time: string; close_time: string; last_message: string };
+type ExtensionRow = { id: number; user_id: number; number: string; first_name: string; last_name: string; email: string; xapi_id: number; status: string; access_password: string; last_message: string };
+
+function readId(body: unknown) {
+  if (body && typeof body === "object" && "Id" in body) return Number((body as { Id?: unknown }).Id) || 0;
+  return 0;
+}
+
+function readList(body: unknown) {
+  if (body && typeof body === "object" && "value" in body && Array.isArray((body as { value?: unknown }).value)) {
+    return (body as { value: { Id?: number; EmailAddress?: string }[] }).value;
+  }
+  return [];
+}
+
+export function paidPlan(userId: number) {
+  const row = getDb().prepare("SELECT plan_name FROM payment_attempts WHERE user_id = ? AND status = 'paid' ORDER BY id DESC LIMIT 1").get(userId) as { plan_name: string } | undefined;
+  if (!row?.plan_name) return null;
+  const plans = readDoc<Plan[]>("plans");
+  return plans.find((plan) => plan.name === row.plan_name && !plan.custom) || null;
+}
+
+async function ensureDepartment(userId: number) {
+  const database = getDb();
+  const existing = database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department | undefined;
+  const range = extensionRange(userId);
+  const name = `SautiCall ${userId}`;
+  if (existing?.xapi_id) return existing;
+  const found = await pbxRequest(`Groups?$filter=${encodeURIComponent(`Name eq '${name}'`)}&$select=Id,Name`);
+  const listed = readId(readList(found.body)[0]);
+  if (found.ok && listed) {
+    database.prepare(
+      `INSERT INTO pbx_departments (user_id, name, xapi_id, number_from, number_to, open_time, close_time, last_message)
+       VALUES (?, ?, ?, ?, ?, '09:00', '17:00', '')
+       ON CONFLICT(user_id) DO UPDATE SET name = excluded.name, xapi_id = excluded.xapi_id, number_from = excluded.number_from, number_to = excluded.number_to`,
+    ).run(userId, name, listed, String(range.from), String(range.to));
+    return database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department;
+  }
+  const created = await pbxRequest("Groups", {
+    method: "POST",
+    body: {
+      AllowCallService: true,
+      Language: "EN",
+      Name: name,
+      UserNumberFrom: String(range.from),
+      UserNumberTo: String(range.to),
+    },
+  });
+  const id = readId(created.body);
+  if (!created.ok || !id) throw new Error(created.message);
+  database.prepare(
+    `INSERT INTO pbx_departments (user_id, name, xapi_id, number_from, number_to, open_time, close_time, last_message)
+     VALUES (?, ?, ?, ?, ?, '09:00', '17:00', '')
+     ON CONFLICT(user_id) DO UPDATE SET xapi_id = excluded.xapi_id, name = excluded.name`,
+  ).run(userId, name, id, String(range.from), String(range.to));
+  return database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department;
+}
+
+function route(number: string, to: "Extension" | "VoiceMail") {
+  return { IsPromptEnabled: false, Route: { External: "", Number: number, To: to } };
+}
+
+async function routeDepartment(department: Department, number: string) {
+  const result = await pbxRequest(`Groups(${department.xapi_id})`, {
+    method: "PATCH",
+    body: {
+      Id: department.xapi_id,
+      OfficeRoute: route(number, "Extension"),
+      BreakRoute: route(number, "VoiceMail"),
+      OutOfOfficeRoute: route(number, "VoiceMail"),
+      HolidaysRoute: route(number, "VoiceMail"),
+    },
+  });
+  getDb().prepare("UPDATE pbx_departments SET last_message = ? WHERE user_id = ?").run(result.ok ? `Calls go to ${number} during the day and voicemail after hours.` : result.message, department.user_id);
+  return result;
+}
+
+export async function provisionExtension(id: number) {
+  const database = getDb();
+  const row = database.prepare("SELECT * FROM pbx_extensions WHERE id = ?").get(id) as ExtensionRow | undefined;
+  if (!row) return { ok: false, message: "That person was not found." };
+  if (row.xapi_id) return { ok: true, message: "Already on the phone system." };
+  if (!flagOn("pbx.live_provision")) {
+    database.prepare("UPDATE pbx_extensions SET status = 'waiting', last_message = ? WHERE id = ?").run("Creating people on the phone system is turned off.", id);
+    return { ok: false, message: "Creating people on the phone system is turned off." };
+  }
+  try {
+    const department = await ensureDepartment(row.user_id);
+    const created = await pbxRequest("Users", {
+      method: "POST",
+      body: {
+        Id: 0,
+        FirstName: row.first_name,
+        LastName: row.last_name,
+        EmailAddress: row.email,
+        Number: row.number,
+        Language: "EN",
+        SendEmailMissedCalls: false,
+        VMEmailOptions: "None",
+        Require2FA: false,
+        AccessPassword: row.access_password,
+        Groups: [{ "@odata.type": "#Pbx.UserGroup", GroupId: department.xapi_id, Rights: { RoleName: "users" } }],
+      },
+    });
+    let xapiId = readId(created.body);
+    if (!created.ok && created.message.includes("ALREADY_IN_USE")) {
+      const found = await pbxRequest(`Users?$filter=${encodeURIComponent(`Number eq '${row.number}'`)}&$select=Id,Number,EmailAddress`);
+      const match = readList(found.body).find((item) => !item.EmailAddress || item.EmailAddress.toLowerCase() === row.email.toLowerCase());
+      xapiId = readId(match);
+    }
+    if (!xapiId) throw new Error(created.message);
+    database.prepare("UPDATE pbx_extensions SET xapi_id = ?, status = 'created', last_message = ? WHERE id = ?").run(xapiId, "Created on the phone system.", id);
+    const first = database.prepare("SELECT number FROM pbx_extensions WHERE user_id = ? AND xapi_id != 0 ORDER BY id LIMIT 1").get(row.user_id) as { number: string };
+    await routeDepartment(department, first.number);
+    return { ok: true, message: "Created on the phone system." };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "The phone system did not create this person.";
+    database.prepare("UPDATE pbx_extensions SET status = 'failed', last_message = ? WHERE id = ?").run(message.slice(0, 400), id);
+    return { ok: false, message };
+  }
+}
+
+export async function updateRouting(userId: number) {
+  const department = getDb().prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department | undefined;
+  const first = getDb().prepare("SELECT number FROM pbx_extensions WHERE user_id = ? AND xapi_id != 0 ORDER BY id LIMIT 1").get(userId) as { number: string } | undefined;
+  if (!department?.xapi_id || !first) return { ok: true, message: "Hours saved." };
+  if (!flagOn("pbx.live_provision")) return { ok: false, message: "Creating people on the phone system is turned off." };
+  const result = await routeDepartment(department, first.number);
+  return { ok: result.ok, message: result.ok ? "Call routing updated." : result.message };
+}

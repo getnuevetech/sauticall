@@ -34,6 +34,7 @@ const GROUPS = [
       ["What customers can do", "/admin/flags"],
       ["Payments", "/admin/gateways"],
       ["Phone connections", "/admin/connections"],
+      ["Extensions", "/admin/phone"],
     ],
   },
   {

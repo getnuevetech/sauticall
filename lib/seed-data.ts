@@ -30,6 +30,7 @@ export const defaultFlags: Flag[] = [
   { key: "numbers.live_order", label: "Live number ordering", description: "Allow staff to place a VoIP.ms order for a saved number request. This spends carrier balance.", enabled: false },
   { key: "porting.requests", label: "Number transfer requests", description: "Allow customers to open the porting request screen.", enabled: true },
   { key: "porting.live_submit", label: "Live number transfer submission", description: "Submit transfer requests to VoIP.ms when that connection is enabled.", enabled: false },
+  { key: "pbx.live_provision", label: "Create people on the phone system", description: "Create a department and extensions on 3CX when a customer adds a person. Leave this off until the 3CX connection is checked.", enabled: false },
 ];
 
 export const defaultNav: NavLink[] = [
@@ -48,6 +49,7 @@ export const defaultNav: NavLink[] = [
   { label: "Numbers", href: "/account/numbers", location: "account" },
   { label: "Number transfer", href: "/account/porting", location: "account" },
   { label: "Security", href: "/account/security", location: "account" },
+  { label: "Phone system", href: "/account/phone", location: "account" },
 ];
 
 export const defaultFooter = {
@@ -462,5 +464,19 @@ export const defaultPages: Record<string, Record<string, unknown>> = {
     portAccountLabel: "Carrier account number",
     portPinLabel: "PIN, if the carrier uses one",
     portSubmit: "Save transfer request",
+    phoneTitle: "Phone system",
+    phoneBody: "Add the people who should have an extension. During the day calls go to the first person. After hours they go to voicemail.",
+    phoneClosed: "Pay for a plan before adding people to the phone system.",
+    phoneLimit: "This plan has no room for another person.",
+    phoneSaved: "Person saved.",
+    phoneEmpty: "No one has an extension yet.",
+    phoneAdd: "Add a person",
+    phoneFirst: "First name",
+    phoneLast: "Last name",
+    phoneEmail: "Email for the 3CX apps",
+    phoneHours: "Daytime hours",
+    phoneOpen: "Opens",
+    phoneClose: "Closes",
+    phoneRoute: "Send call routing",
   },
 };

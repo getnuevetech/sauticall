@@ -195,3 +195,48 @@ export async function savePort(formData: FormData) {
   audit(user.email, "request.port", status);
   redirect("/account/porting?saved=1");
 }
+
+export async function addPerson(formData: FormData) {
+  const user = await currentUser();
+  if (!user) redirect("/account/login");
+  const { appPassword, extensionCapacity, extensionRange, nextExtension, paidPlan, provisionExtension } = await import("@/lib/pbx");
+  const plan = paidPlan(user.id);
+  if (!plan) redirect("/account/phone?error=Pay%20for%20a%20plan%20before%20adding%20people.");
+  const first = String(formData.get("first_name") || "").trim().slice(0, 40);
+  const last = String(formData.get("last_name") || "").trim().slice(0, 40);
+  const email = String(formData.get("email") || "").trim().slice(0, 120);
+  if (!first || !last || !email.includes("@")) redirect("/account/phone?error=First%20name%2C%20last%20name%2C%20and%20email%20are%20required.");
+  const count = getDb().prepare("SELECT COUNT(*) AS n FROM pbx_extensions WHERE user_id = ?").get(user.id) as { n: number };
+  if (count.n >= extensionCapacity(plan)) redirect("/account/phone?error=This%20plan%20has%20no%20room%20for%20another%20person.");
+  const range = extensionRange(user.id);
+  const used = getDb().prepare("SELECT number FROM pbx_extensions WHERE user_id = ?").all(user.id) as { number: string }[];
+  const number = nextExtension(range.from, range.to, used.map((row) => row.number));
+  if (!number) redirect("/account/phone?error=This%20plan%20has%20no%20room%20for%20another%20person.");
+  const info = getDb()
+    .prepare("INSERT INTO pbx_extensions (user_id, number, first_name, last_name, email, status, access_password, created_at) VALUES (?, ?, ?, ?, ?, 'waiting', ?, ?)")
+    .run(user.id, number, first, last, email, appPassword(), new Date().toISOString());
+  audit(user.email, "pbx.person", number);
+  if (flagOn("pbx.live_provision")) {
+    const result = await provisionExtension(Number(info.lastInsertRowid));
+    if (!result.ok) redirect(`/account/phone?error=${encodeURIComponent(result.message)}`);
+  }
+  redirect("/account/phone?saved=1");
+}
+
+export async function savePhoneHours(formData: FormData) {
+  const user = await currentUser();
+  if (!user) redirect("/account/login");
+  const open = String(formData.get("open_time") || "09:00").slice(0, 5);
+  const close = String(formData.get("close_time") || "17:00").slice(0, 5);
+  if (!/^\d{2}:\d{2}$/.test(open) || !/^\d{2}:\d{2}$/.test(close)) redirect("/account/phone?error=Use%20hours%20like%2009%3A00.");
+  getDb().prepare(
+    `INSERT INTO pbx_departments (user_id, name, xapi_id, number_from, number_to, open_time, close_time, last_message)
+     VALUES (?, ?, 0, '', '', ?, ?, '')
+     ON CONFLICT(user_id) DO UPDATE SET open_time = excluded.open_time, close_time = excluded.close_time`,
+  ).run(user.id, `SautiCall ${user.id}`, open, close);
+  const { updateRouting } = await import("@/lib/pbx");
+  const result = await updateRouting(user.id);
+  audit(user.email, "pbx.hours", `${open}-${close}`);
+  if (!result.ok) redirect(`/account/phone?error=${encodeURIComponent(result.message)}`);
+  redirect("/account/phone?saved=1");
+}

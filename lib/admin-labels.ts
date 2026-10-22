@@ -29,6 +29,8 @@ const WORDS: Record<string, string> = {
 };
 
 export function fieldLabel(key: string, docKey = "") {
+  if (docKey === "page.account" && key === "phoneTitle") return "Phone system heading";
+  if (docKey === "page.account" && key === "phoneBody") return "Phone system text";
   if (docKey === "flags") {
     if (key === "key") return "Which feature";
     if (key === "label") return "Name of this switch";
@@ -229,6 +231,18 @@ const LABELS: Record<string, string> = {
   portAccountLabel: "Account number with that company",
   portPinLabel: "PIN, if they use one",
   portSubmit: "Save transfer button",
+  phoneClosed: "Message when no plan is paid",
+  phoneLimit: "Message when the plan is full",
+  phoneSaved: "Message after a person is added",
+  phoneEmpty: "Message when there are no extensions",
+  phoneAdd: "Add person button",
+  phoneFirst: "First name",
+  phoneLast: "Last name",
+  phoneEmail: "Email",
+  phoneHours: "Daytime hours heading",
+  phoneOpen: "Opens",
+  phoneClose: "Closes",
+  phoneRoute: "Send call routing button",
   languageBadge: "Any-language badge",
   languageException: "Which plan does not include any language",
   deviceHeader: "Sample screen title",

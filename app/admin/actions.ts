@@ -174,3 +174,13 @@ export async function setRequestStatus(formData: FormData) {
   audit(user.email, "request.status", `${id}:${status}`);
   redirect("/admin/requests");
 }
+
+export async function provisionPerson(formData: FormData) {
+  const user = await staff();
+  const id = Number(formData.get("id"));
+  const { provisionExtension } = await import("@/lib/pbx");
+  const result = await provisionExtension(id);
+  audit(user.email, "pbx.provision", `${id}:${result.ok ? "ok" : "failed"}`);
+  if (!result.ok) redirect(`/admin/phone?error=${encodeURIComponent(result.message)}`);
+  redirect("/admin/phone");
+}

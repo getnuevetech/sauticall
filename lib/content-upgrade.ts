@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import { anyLanguageFeature, defaultFlags, defaultPages, defaultPersonas, defaultPlans } from "./seed-data";
-import type { Faq, Flag, Persona, Plan } from "./types";
+import type { Faq, Flag, NavLink, Persona, Plan } from "./types";
 
 function readJson<T>(database: Database.Database, key: string): T | null {
   const row = database.prepare("SELECT json FROM documents WHERE key = ?").get(key) as { json: string } | undefined;
@@ -146,6 +146,12 @@ export function upgradeContent(database: Database.Database) {
       }
     }
     if (changed) writeJson(database, "page.account", account);
+  }
+
+  const nav = readJson<NavLink[]>(database, "nav");
+  if (nav && !nav.some((link) => link.href === "/account/phone")) {
+    nav.push({ label: "Phone system", href: "/account/phone", location: "account" });
+    writeJson(database, "nav", nav);
   }
 
   const explore = footer?.groups.find((group) => group.title === "Explore");

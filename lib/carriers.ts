@@ -128,23 +128,59 @@ export async function testVoipms() {
   }
 }
 
+async function accessToken(connection: ReturnType<typeof getConnection>) {
+  if (!connection.enabled || !connection.public.base_url || !connection.public.client_id || !connection.secret) {
+    throw new Error("3CX is not enabled or is missing credentials.");
+  }
+  const origin = httpsHost(connection.public.base_url);
+  const tokenResponse = await fetch(`${origin}/connect/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_id: connection.public.client_id, client_secret: connection.secret, grant_type: "client_credentials" }),
+    signal: AbortSignal.timeout(20000),
+  });
+  const token = (await tokenResponse.json().catch(() => null)) as { access_token?: string } | null;
+  if (!tokenResponse.ok || !token?.access_token) throw new Error("3CX did not return an access token.");
+  return { origin, token: token.access_token };
+}
+
+export async function pbxRequest(path: string, init: { method?: string; body?: unknown } = {}) {
+  try {
+    const { origin, token } = await accessToken(getConnection("3cx"));
+    const response = await fetch(`${origin}/xapi/v1/${path}`, {
+      method: init.method || "GET",
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: "application/json",
+        ...(init.body ? { "content-type": "application/json" } : {}),
+      },
+      body: init.body ? JSON.stringify(init.body) : undefined,
+      cache: "no-store",
+      signal: AbortSignal.timeout(20000),
+    });
+    const body = await response.json().catch(() => null);
+    const message = xapiMessage(body, `3CX answered ${response.status}.`);
+    return { ok: response.ok, status: response.status, body, message };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "3CX could not be reached.";
+    return { ok: false, status: 0, body: null, message };
+  }
+}
+
+function xapiMessage(body: unknown, fallback: string) {
+  if (body && typeof body === "object" && "error" in body) {
+    const message = (body as { error?: { message?: string } }).error?.message;
+    if (message) return message.replace(/\s+/g, " ").slice(0, 400);
+  }
+  return fallback;
+}
+
 export async function test3cx() {
   const connection = getConnection("3cx");
   try {
-    if (!connection.enabled || !connection.public.base_url || !connection.public.client_id || !connection.secret) {
-      throw new Error("3CX is not enabled or is missing credentials.");
-    }
-    const origin = httpsHost(connection.public.base_url);
-    const tokenResponse = await fetch(`${origin}/connect/token`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ client_id: connection.public.client_id, client_secret: connection.secret, grant_type: "client_credentials" }),
-      signal: AbortSignal.timeout(20000),
-    });
-    const token = (await tokenResponse.json().catch(() => null)) as { access_token?: string } | null;
-    if (!tokenResponse.ok || !token?.access_token) throw new Error("3CX did not return an access token.");
+    const { origin, token } = await accessToken(connection);
     const defs = await fetch(`${origin}/xapi/v1/Defs?$select=Id`, {
-      headers: { authorization: `Bearer ${token.access_token}` },
+      headers: { authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(20000),
     });
     const version = defs.headers.get("x-3cx-version") || "";

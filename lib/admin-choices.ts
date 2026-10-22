@@ -22,6 +22,7 @@ export const pageChoices: Choice[] = [
   { value: "/account/numbers", label: "Numbers" },
   { value: "/account/porting", label: "Number transfer" },
   { value: "/account/security", label: "Security" },
+  { value: "/account/phone", label: "Phone system" },
 ];
 
 export const locationChoices: Choice[] = [

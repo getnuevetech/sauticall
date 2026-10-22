@@ -130,6 +130,32 @@ function migrate(database: Database.Database) {
   if (!paymentCols.has("provider_ref")) database.exec("ALTER TABLE payment_attempts ADD COLUMN provider_ref TEXT NOT NULL DEFAULT ''");
   if (!paymentCols.has("checkout_url")) database.exec("ALTER TABLE payment_attempts ADD COLUMN checkout_url TEXT NOT NULL DEFAULT ''");
   if (!paymentCols.has("plan_name")) database.exec("ALTER TABLE payment_attempts ADD COLUMN plan_name TEXT NOT NULL DEFAULT ''");
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS pbx_departments (
+      user_id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      xapi_id INTEGER NOT NULL DEFAULT 0,
+      number_from TEXT NOT NULL,
+      number_to TEXT NOT NULL,
+      open_time TEXT NOT NULL DEFAULT '09:00',
+      close_time TEXT NOT NULL DEFAULT '17:00',
+      last_message TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS pbx_extensions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      number TEXT NOT NULL,
+      first_name TEXT NOT NULL,
+      last_name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      xapi_id INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL,
+      access_password TEXT NOT NULL DEFAULT '',
+      last_message TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      UNIQUE(user_id, number)
+    );
+  `);
 }
 
 function put(database: Database.Database, key: string, value: unknown) {
