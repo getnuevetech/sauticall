@@ -20,6 +20,8 @@ const LINKS = [
   ["Theme and fonts", "/admin/theme"],
   ["Feature switches", "/admin/flags"],
   ["Payment gateways", "/admin/gateways"],
+  ["Connections", "/admin/connections"],
+  ["Number requests", "/admin/requests"],
   ["Images", "/admin/media"],
   ["Messages", "/admin/messages"],
 ];

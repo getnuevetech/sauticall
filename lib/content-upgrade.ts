@@ -116,6 +116,28 @@ export function upgradeContent(database: Database.Database) {
   }
 
   const footer = readJson<{ groups: { title: string; links: { label: string; href: string }[] }[] }>(database, "footer");
+  const account = readJson<Record<string, unknown>>(database, "page.account");
+  if (account) {
+    const replacements: Record<string, string> = {
+      "Request a new business number. Live inventory is connected in a later provisioning step; the request is saved now.":
+        "Search available business numbers when live search is on. A request is saved either way, and an administrator places the carrier order.",
+      "Start a transfer request. Carrier submission runs when the VoIP.ms connection is enabled; until then the request waits for the team.":
+        "Tell us the number and the details on your current carrier bill. Live submission runs only when an administrator has enabled it.",
+    };
+    let changed = false;
+    for (const [from, to] of Object.entries(replacements)) {
+      if (account[from] === undefined && Object.entries(account).some(([, value]) => value === from)) {
+        for (const [key, value] of Object.entries(account)) {
+          if (value === from) {
+            account[key] = to;
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) writeJson(database, "page.account", account);
+  }
+
   const explore = footer?.groups.find((group) => group.title === "Explore");
   if (explore && !explore.links.some((link) => link.href === "/custom")) {
     explore.links.push({ label: "Custom plan", href: "/custom" });

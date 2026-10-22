@@ -108,22 +108,78 @@ export async function startCheckout(formData: FormData) {
 }
 
 export async function saveNumber(formData: FormData) {
-  return saveRequest("number", formData);
+  const user = await currentUser();
+  if (!user) redirect("/account/login");
+  if (!flagOn("numbers.search")) redirect("/account/numbers?error=An%20administrator%20has%20turned%20this%20request%20off.");
+  const payload = {
+    did: String(formData.get("did") || "").replace(/\D/g, ""),
+    country: String(formData.get("country") || "US").slice(0, 2).toUpperCase(),
+    region: String(formData.get("region") || "").trim().toUpperCase(),
+    ratecenter: String(formData.get("ratecenter") || "").trim().toUpperCase(),
+    detail: String(formData.get("detail") || "").trim(),
+  };
+  if (!payload.did && !payload.detail) redirect("/account/numbers?error=Choose%20a%20number%20or%20describe%20the%20one%20you%20want.");
+  getDb()
+    .prepare("INSERT INTO account_requests (user_id, kind, payload, status, created_at) VALUES (?, 'number', ?, 'requested', ?)")
+    .run(user.id, JSON.stringify(payload), new Date().toISOString());
+  audit(user.email, "request.number", payload.did || "described");
+  redirect("/account/numbers?saved=1");
 }
 
 export async function savePort(formData: FormData) {
-  return saveRequest("port", formData);
-}
-
-async function saveRequest(kind: "number" | "port", formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
-  const flag = kind === "number" ? "numbers.search" : "porting.requests";
-  if (!flagOn(flag)) return { error: "An administrator has turned this request off." };
-  const payload = JSON.stringify({ detail: String(formData.get("detail") || "") });
+  if (!flagOn("porting.requests")) redirect("/account/porting?error=An%20administrator%20has%20turned%20this%20request%20off.");
+  const payload = {
+    numbers: String(formData.get("numbers") || "").replace(/[^\d,]/g, ""),
+    country: String(formData.get("country") || "US").toUpperCase() === "CA" ? "CA" : "US",
+    first_name: String(formData.get("first_name") || "").trim(),
+    last_name: String(formData.get("last_name") || "").trim(),
+    statement_name: String(formData.get("statement_name") || "").trim(),
+    address1: String(formData.get("address1") || "").trim(),
+    city: String(formData.get("city") || "").trim(),
+    state: String(formData.get("state") || "").trim().toUpperCase(),
+    zip_code: String(formData.get("zip_code") || "").trim(),
+    provider_name: String(formData.get("provider_name") || "").trim(),
+    provider_account: String(formData.get("provider_account") || "").trim(),
+    pin: String(formData.get("pin") || "").trim(),
+  };
+  if (!payload.numbers || !payload.first_name || !payload.last_name || !payload.address1 || !payload.city || !payload.state || !payload.zip_code || !payload.provider_name || !payload.provider_account) {
+    redirect("/account/porting?error=Number%2C%20name%2C%20service%20address%2C%20current%20carrier%2C%20and%20carrier%20account%20are%20required.");
+  }
+  let status = "requested";
+  let providerRef = "";
+  let note = "";
+  if (flagOn("porting.live_submit")) {
+    const { submitPort } = await import("@/lib/carriers");
+    const result = await submitPort({
+      port_type: payload.country === "CA" ? "2" : "1",
+      numbers: payload.numbers,
+      location_type: "business",
+      statement_name: payload.statement_name,
+      first_name: payload.first_name,
+      last_name: payload.last_name,
+      address1: payload.address1,
+      city: payload.city,
+      state: payload.state,
+      zip_code: payload.zip_code,
+      country: payload.country === "CA" ? "CA" : "US",
+      provider_name: payload.provider_name,
+      provider_account: payload.provider_account,
+      pin: payload.pin,
+    });
+    if (result.ok) {
+      status = "submitted";
+      const port = result.body && typeof result.body === "object" ? (result.body as { port?: unknown }).port : "";
+      providerRef = String(port || "");
+    } else {
+      status = "exception";
+      note = result.message;
+    }
+  }
   getDb()
-    .prepare("INSERT INTO account_requests (user_id, kind, payload, status, created_at) VALUES (?, ?, ?, 'submitted', ?)")
-    .run(user.id, kind, payload, new Date().toISOString());
-  audit(user.email, `request.${kind}`, "submitted");
-  redirect(kind === "number" ? "/account/numbers?saved=1" : "/account/porting?saved=1");
+    .prepare("INSERT INTO account_requests (user_id, kind, payload, status, provider_ref, staff_note, created_at) VALUES (?, 'port', ?, ?, ?, ?, ?)")
+    .run(user.id, JSON.stringify(payload), status, providerRef, note, new Date().toISOString());
+  audit(user.email, "request.port", status);
+  redirect("/account/porting?saved=1");
 }

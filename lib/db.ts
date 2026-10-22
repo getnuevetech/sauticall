@@ -95,6 +95,15 @@ function migrate(database: Database.Database) {
       status TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS connections (
+      provider TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      public_json TEXT NOT NULL,
+      secret TEXT NOT NULL DEFAULT '',
+      last_ok INTEGER NOT NULL DEFAULT 0,
+      last_message TEXT NOT NULL DEFAULT '',
+      checked_at TEXT NOT NULL DEFAULT ''
+    );
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       actor TEXT NOT NULL,
@@ -108,6 +117,10 @@ function migrate(database: Database.Database) {
   if (!names.has("phone")) database.exec("ALTER TABLE messages ADD COLUMN phone TEXT NOT NULL DEFAULT ''");
   if (!names.has("company")) database.exec("ALTER TABLE messages ADD COLUMN company TEXT NOT NULL DEFAULT ''");
   if (!names.has("kind")) database.exec("ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'contact'");
+  const requestCols = database.prepare("PRAGMA table_info(account_requests)").all() as { name: string }[];
+  const requestNames = new Set(requestCols.map((column) => column.name));
+  if (!requestNames.has("provider_ref")) database.exec("ALTER TABLE account_requests ADD COLUMN provider_ref TEXT NOT NULL DEFAULT ''");
+  if (!requestNames.has("staff_note")) database.exec("ALTER TABLE account_requests ADD COLUMN staff_note TEXT NOT NULL DEFAULT ''");
 }
 
 function put(database: Database.Database, key: string, value: unknown) {
@@ -149,6 +162,9 @@ function seed(database: Database.Database) {
     insert.run("Stripe", "stripe", "Card via Stripe", 1, 10);
     insert.run("PayPal", "paypal", "PayPal", 0, 20);
   }
+  const connection = database.prepare("INSERT INTO connections (provider, enabled, public_json, secret) VALUES (?, 0, ?, '') ON CONFLICT(provider) DO NOTHING");
+  connection.run("voipms", JSON.stringify({ api_username: "", endpoint: "https://voip.ms/api/v1/rest.php", routing: "", pop: "", dialtime: "60", cnam: "0", billing_type: "1" }));
+  connection.run("3cx", JSON.stringify({ base_url: "", client_id: "" }));
 }
 
 export function readDoc<T>(key: string): T {
