@@ -49,7 +49,17 @@ The script installs git, clones `https://github.com/getnuevetech/sauticall.git` 
 
 If cloud-init already cloned the repository, this same command uses that checkout and continues with the install.
 
-After the domain points at the static IP, paste this in the same SSH terminal:
+### 3. Turn on HTTPS
+
+In the Lightsail instance networking page, HTTPS on TCP 443 must be allowed. Then, in the same SSH terminal, paste:
+
+```bash
+sudo CERT_EMAIL=you@example.com bash /opt/sauticall/deploy/lightsail/enable-https.sh
+```
+
+That gets a certificate for the server's public IP address from Let's Encrypt and sends every HTTP visit to HTTPS. The IP certificate lasts about six days, and Certbot renews it. Sign-in cookies are sent only over HTTPS after this.
+
+When a domain name already points at the static IP, use that name instead:
 
 ```bash
 sudo DOMAIN=sauticall.example CERT_EMAIL=you@example.com bash /opt/sauticall/deploy/lightsail/enable-https.sh

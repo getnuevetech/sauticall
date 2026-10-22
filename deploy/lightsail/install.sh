@@ -66,12 +66,16 @@ systemctl daemon-reload
 systemctl enable sauticall
 systemctl restart sauticall
 
-install -m 644 "${APP_DIR}/deploy/lightsail/nginx.conf" /etc/nginx/sites-available/sauticall
-ln -sfn /etc/nginx/sites-available/sauticall /etc/nginx/sites-enabled/sauticall
-rm -f /etc/nginx/sites-enabled/default
-nginx -t
-systemctl reload nginx
+if [[ -f /etc/nginx/sites-available/sauticall ]] && grep -q ssl_certificate /etc/nginx/sites-available/sauticall; then
+  echo "HTTPS is already configured. The Nginx site file was left in place."
+else
+  install -m 644 "${APP_DIR}/deploy/lightsail/nginx.conf" /etc/nginx/sites-available/sauticall
+  ln -sfn /etc/nginx/sites-available/sauticall /etc/nginx/sites-enabled/sauticall
+  rm -f /etc/nginx/sites-enabled/default
+  nginx -t
+  systemctl reload nginx
+fi
 
-echo "SautiCall is proxied on port 80."
+echo "SautiCall is proxied by Nginx."
 echo "The files came from ${SAUTICALL_REPO:-https://github.com/getnuevetech/sauticall.git}."
-echo "After a domain is attached, run: bash /opt/sauticall/deploy/lightsail/enable-https.sh"
+echo "Turn on HTTPS with: CERT_EMAIL=you@example.com bash /opt/sauticall/deploy/lightsail/enable-https.sh"

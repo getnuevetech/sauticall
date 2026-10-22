@@ -19,3 +19,6 @@ sudo --preserve-env=ADMIN_EMAIL,ADMIN_PASSWORD,SAUTICALL_DATA_DIR,SAUTICALL_UPLO
   -u sauticall bash -lc "set -a; . '${ENV_FILE}'; set +a; cd '${APP_DIR}' && npm ci && npm run build"
 systemctl restart sauticall
 systemctl --no-pager --full status sauticall
+if [[ -f "${ENV_FILE}" ]] && grep -q '^SAUTICALL_COOKIE_SECURE=0' "${ENV_FILE}"; then
+  echo "The site is still on HTTP. Open TCP 443 in the Lightsail firewall, then run: CERT_EMAIL=you@example.com bash ${APP_DIR}/deploy/lightsail/enable-https.sh"
+fi
