@@ -11,6 +11,7 @@ import {
   defaultNav,
   defaultPages,
   defaultPersonas,
+  defaultMinuteBundles,
   defaultPlans,
   defaultServices,
   defaultTheme,
@@ -130,6 +131,10 @@ function migrate(database: Database.Database) {
   if (!paymentCols.has("provider_ref")) database.exec("ALTER TABLE payment_attempts ADD COLUMN provider_ref TEXT NOT NULL DEFAULT ''");
   if (!paymentCols.has("checkout_url")) database.exec("ALTER TABLE payment_attempts ADD COLUMN checkout_url TEXT NOT NULL DEFAULT ''");
   if (!paymentCols.has("plan_name")) database.exec("ALTER TABLE payment_attempts ADD COLUMN plan_name TEXT NOT NULL DEFAULT ''");
+  if (!paymentCols.has("product_kind")) database.exec("ALTER TABLE payment_attempts ADD COLUMN product_kind TEXT NOT NULL DEFAULT 'plan'");
+  if (!paymentCols.has("product_minutes")) database.exec("ALTER TABLE payment_attempts ADD COLUMN product_minutes INTEGER NOT NULL DEFAULT 0");
+  if (!paymentCols.has("bundle_name")) database.exec("ALTER TABLE payment_attempts ADD COLUMN bundle_name TEXT NOT NULL DEFAULT ''");
+  if (!paymentCols.has("paid_at")) database.exec("ALTER TABLE payment_attempts ADD COLUMN paid_at TEXT NOT NULL DEFAULT ''");
   database.exec(`
     CREATE TABLE IF NOT EXISTS pbx_departments (
       user_id INTEGER PRIMARY KEY,
@@ -155,6 +160,67 @@ function migrate(database: Database.Database) {
       created_at TEXT NOT NULL,
       UNIQUE(user_id, number)
     );
+    CREATE TABLE IF NOT EXISTS minute_grants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      payment_id INTEGER NOT NULL UNIQUE,
+      kind TEXT NOT NULL,
+      minutes INTEGER NOT NULL,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS cdr_events (
+      uniqueid TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      seconds INTEGER NOT NULL,
+      destination TEXT NOT NULL DEFAULT '',
+      started_at TEXT NOT NULL,
+      allocated INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS minute_debits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uniqueid TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      grant_id INTEGER NOT NULL,
+      seconds INTEGER NOT NULL,
+      UNIQUE(uniqueid, grant_id)
+    );
+    CREATE TABLE IF NOT EXISTS voip_subaccounts (
+      user_id INTEGER PRIMARY KEY,
+      account TEXT NOT NULL,
+      username TEXT NOT NULL,
+      password TEXT NOT NULL,
+      sip_host TEXT NOT NULL DEFAULT '',
+      locked INTEGER NOT NULL DEFAULT 0,
+      settings_json TEXT NOT NULL DEFAULT '{}',
+      last_message TEXT NOT NULL DEFAULT '',
+      last_sync TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS phone_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      request_id INTEGER NOT NULL UNIQUE,
+      did TEXT NOT NULL,
+      status TEXT NOT NULL,
+      trunk_id INTEGER NOT NULL DEFAULT 0,
+      last_message TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS trunk_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      line_id INTEGER NOT NULL UNIQUE,
+      user_id INTEGER NOT NULL,
+      did TEXT NOT NULL,
+      department_name TEXT NOT NULL,
+      extension_number TEXT NOT NULL,
+      sip_user TEXT NOT NULL DEFAULT '',
+      sip_host TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
   `);
 }
 
@@ -174,6 +240,7 @@ function seed(database: Database.Database) {
   put(database, "footer", defaultFooter);
   put(database, "services", defaultServices);
   put(database, "plans", defaultPlans);
+  put(database, "minute_bundles", defaultMinuteBundles);
   put(database, "faqs", defaultFaqs);
   put(database, "personas", defaultPersonas);
   for (const [key, value] of Object.entries(defaultPages)) put(database, `page.${key}`, value);

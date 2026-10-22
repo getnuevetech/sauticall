@@ -13,10 +13,10 @@ export default async function PayPage({ params, searchParams }: { params: Promis
   await confirmReturn(Number(id), query);
   const attempt = getDb()
     .prepare(
-      `SELECT a.id, a.amount_cents, a.currency, a.description, a.status, a.user_id, a.checkout_url, g.public_label
+      `SELECT a.id, a.amount_cents, a.currency, a.description, a.status, a.user_id, a.checkout_url, a.product_minutes, g.public_label
        FROM payment_attempts a JOIN gateways g ON g.id = a.gateway_id WHERE a.id = ?`,
     )
-    .get(id) as { id: number; amount_cents: number; currency: string; description: string; status: string; user_id: number; checkout_url: string; public_label: string } | undefined;
+    .get(id) as { id: number; amount_cents: number; currency: string; description: string; status: string; user_id: number; checkout_url: string; product_minutes: number; public_label: string } | undefined;
   if (!attempt || attempt.user_id !== user.id) notFound();
   return (
     <Frame pathname="/account/billing">
@@ -34,7 +34,8 @@ export default async function PayPage({ params, searchParams }: { params: Promis
               {query.error ? <p className="form-feedback">{query.error}</p> : null}
               <p>Status: {attempt.status === "paid" ? "Paid" : attempt.status === "cancelled" ? "Cancelled" : attempt.status === "failed" ? "Could not start" : "Waiting for payment"}</p>
               {attempt.status === "pending" && attempt.checkout_url ? <a className="btn btn-primary" href={attempt.checkout_url}>Continue to payment</a> : null}
-              {attempt.status === "paid" ? <p>Payment received. This charge will not be taken again.</p> : null}
+              {attempt.status === "paid" ? <p>Payment received. This charge will not be taken again.{attempt.product_minutes > 0 ? ` ${attempt.product_minutes} outbound minutes are on the account.` : ""}</p> : null}
+              <p><Link className="text-link" href="/account/minutes">Call minutes</Link></p>
               <p><Link className="text-link" href="/account/billing">Back to billing</Link></p>
             </div>
           </div>

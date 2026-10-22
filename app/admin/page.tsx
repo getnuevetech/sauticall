@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 const START = [
   ["Change the home page", "/admin/content/page.home"],
   ["Change plans and prices", "/admin/content/plans"],
+  ["Call minutes and trunks", "/admin/lines"],
   ["Turn features on or off", "/admin/flags"],
   ["Read messages", "/admin/messages"],
 ];

@@ -99,7 +99,7 @@ export async function startCheckout(formData: FormData) {
   if (!flagOn("billing.checkout")) return { error: "Checkout is turned off by an administrator." };
   const gatewayId = Number(formData.get("gatewayId"));
   const planName = String(formData.get("plan") || "");
-  const plans = (await import("@/lib/db")).readDoc<{ name: string; price: number; custom?: boolean }[]>("plans");
+  const plans = (await import("@/lib/db")).readDoc<{ name: string; price: number; custom?: boolean; includedMinutes?: number }[]>("plans");
   const plan = plans.find((item) => item.name === planName && !item.custom && item.price > 0);
   if (!plan) return { error: "Choose a priced plan." };
   const gateway = getDb().prepare("SELECT id, currencies, secret FROM gateways WHERE id = ? AND enabled = 1").get(gatewayId) as { id: number; currencies: string; secret: string } | undefined;
@@ -107,16 +107,51 @@ export async function startCheckout(formData: FormData) {
   const { readGatewaySecret } = await import("@/lib/payment-keys");
   if (!readGatewaySecret(gateway.secret).key) return { error: "That way to pay is missing its API secret." };
   const amount = Math.round(plan.price * 100);
+  const minutes = Math.max(0, Math.round(Number(plan.includedMinutes) || 0));
   const currency = (gateway.currencies || "USD").split(",")[0].trim().toUpperCase() || "USD";
   const info = getDb()
-    .prepare("INSERT INTO payment_attempts (user_id, gateway_id, amount_cents, currency, description, status, plan_name, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)")
-    .run(user.id, gateway.id, amount, currency, `${plan.name} monthly`, plan.name, new Date().toISOString());
+    .prepare("INSERT INTO payment_attempts (user_id, gateway_id, amount_cents, currency, description, status, plan_name, product_kind, product_minutes, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, 'plan', ?, ?)")
+    .run(user.id, gateway.id, amount, currency, `${plan.name} monthly`, plan.name, minutes, new Date().toISOString());
   const attemptId = Number(info.lastInsertRowid);
   audit(user.email, "billing.checkout", `${gateway.id}:${plan.name}`);
   const { beginCheckout, requestOrigin } = await import("@/lib/payments");
   const started = await beginCheckout(attemptId, await requestOrigin());
   if (!started.ok) redirect(`/pay/${attemptId}?error=${encodeURIComponent(started.message)}`);
   redirect(started.url);
+}
+
+export async function startBundleCheckout(formData: FormData) {
+  const user = await currentUser();
+  if (!user) redirect("/account/login");
+  if (!flagOn("billing.checkout")) redirect("/account/minutes?error=Checkout%20is%20turned%20off.");
+  const gatewayId = Number(formData.get("gatewayId"));
+  const bundleName = String(formData.get("bundle") || "");
+  const { bundleByName } = await import("@/lib/minutes");
+  const bundle = bundleByName(bundleName);
+  if (!bundle) redirect("/account/minutes?error=That%20minute%20bundle%20is%20not%20for%20sale.");
+  const gateway = getDb().prepare("SELECT id, currencies, secret FROM gateways WHERE id = ? AND enabled = 1").get(gatewayId) as { id: number; currencies: string; secret: string } | undefined;
+  if (!gateway) redirect("/account/minutes?error=That%20way%20to%20pay%20is%20not%20available.");
+  const { readGatewaySecret } = await import("@/lib/payment-keys");
+  if (!readGatewaySecret(gateway.secret).key) redirect("/account/minutes?error=That%20way%20to%20pay%20is%20missing%20its%20API%20secret.");
+  const currency = (gateway.currencies || "USD").split(",")[0].trim().toUpperCase() || "USD";
+  const info = getDb()
+    .prepare("INSERT INTO payment_attempts (user_id, gateway_id, amount_cents, currency, description, status, plan_name, product_kind, product_minutes, bundle_name, created_at) VALUES (?, ?, ?, ?, ?, 'pending', '', 'bundle', ?, ?, ?)")
+    .run(user.id, gateway.id, Math.round(bundle.price * 100), currency, `${bundle.minutes} call minutes`, bundle.minutes, bundle.name, new Date().toISOString());
+  audit(user.email, "billing.bundle", bundle.name);
+  const { beginCheckout, requestOrigin } = await import("@/lib/payments");
+  const started = await beginCheckout(Number(info.lastInsertRowid), await requestOrigin());
+  if (!started.ok) redirect(`/pay/${info.lastInsertRowid}?error=${encodeURIComponent(started.message)}`);
+  redirect(started.url);
+}
+
+export async function refreshMinutes() {
+  const user = await currentUser();
+  if (!user) redirect("/account/login");
+  const { syncUserMinutes } = await import("@/lib/minutes");
+  const result = await syncUserMinutes(user.id);
+  audit(user.email, "minutes.sync", result.ok ? "ok" : "failed");
+  if (!result.ok) redirect(`/account/minutes?error=${encodeURIComponent(result.message)}`);
+  redirect("/account/minutes?saved=1");
 }
 
 export async function saveNumber(formData: FormData) {

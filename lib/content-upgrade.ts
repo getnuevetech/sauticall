@@ -69,6 +69,11 @@ export function upgradeContent(database: Database.Database) {
         plan.note = "Base plan. Any-language AI starts on the plans above.";
         changed = true;
       }
+      if (plan.includedMinutes == null) {
+        const seeded = defaultPlans.find((item) => item.name === plan.name);
+        plan.includedMinutes = seeded ? seeded.includedMinutes : plan.custom ? 0 : 200;
+        changed = true;
+      }
     });
     if (changed) writeJson(database, "plans", plans);
   }
@@ -96,6 +101,7 @@ export function upgradeContent(database: Database.Database) {
   const extraFaqs: Faq[] = [
     { q: "Can the AI understand a caller in any language?", a: "Yes, on every plan except the base plan. The AI receptionist can receive the call and understand the caller in the language they speak. The Solo plan is the base plan and does not include this." },
     { q: "What if none of the priced plans fit?", a: "Choose Custom. There is no public price. Describe the system you need and leave your contact details. A salesperson will reach out." },
+    { q: "How do call minutes work?", a: "Each priced plan includes outbound minutes for 30 days after you pay. You can also buy minute bundles, and those minutes last until you use them. When the balance reaches zero, outbound calls stop at the phone company. An administrator sets the included minutes and the bundle prices." },
   ];
   if (faqs) {
     let changed = false;
@@ -152,6 +158,24 @@ export function upgradeContent(database: Database.Database) {
   if (nav && !nav.some((link) => link.href === "/account/phone")) {
     nav.push({ label: "Phone system", href: "/account/phone", location: "account" });
     writeJson(database, "nav", nav);
+  }
+  const withPhone = readJson<NavLink[]>(database, "nav");
+  if (withPhone && !withPhone.some((link) => link.href === "/account/minutes")) {
+    withPhone.push({ label: "Call minutes", href: "/account/minutes", location: "account" });
+    writeJson(database, "nav", withPhone);
+  }
+
+  const disclaimers = [
+    "*Illustrative concept prices only. Not live plans or a purchase offer. Custom has no public price. Minutes, DIDs, 3CX licenses, telecom charges, taxes, E911 and AI usage require final commercial validation.",
+    "*Illustrative concept prices only. Not live plans or a purchase offer. The Custom plan has no public price. Minutes, DIDs, 3CX licenses, telecom charges, taxes, E911 and AI usage require final commercial validation. Plans, prices, and which plans include any-language AI are managed from the admin portal.",
+  ];
+  const nextDisclaimer = "*Monthly price includes the outbound minutes set on that plan. Extra minutes can be bought as bundles and last until they are used. Custom has no public price. Taxes, number fees, and emergency calling are separate.";
+  for (const key of ["page.home", "page.pricing"]) {
+    const page = readJson<Record<string, unknown>>(database, key);
+    if (page && disclaimers.includes(String(page.disclaimer || ""))) {
+      page.disclaimer = nextDisclaimer;
+      writeJson(database, key, page);
+    }
   }
 
   const explore = footer?.groups.find((group) => group.title === "Explore");

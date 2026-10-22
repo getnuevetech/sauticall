@@ -80,9 +80,9 @@ export async function searchDids(country: string, region: string, ratecenter: st
   return { ok: true, message: "success", dids: readDids(result.body) };
 }
 
-export async function orderDid(did: string) {
+export async function orderDid(did: string, routingOverride?: string) {
   const connection = getConnection("voipms");
-  const routing = connection.public.routing;
+  const routing = routingOverride || connection.public.routing;
   const pop = connection.public.pop;
   const dialtime = connection.public.dialtime || "60";
   if (!routing || !pop) return { ok: false, message: "Set the VoIP.ms routing and POP in Connections before ordering." };

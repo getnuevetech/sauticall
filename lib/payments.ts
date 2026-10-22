@@ -207,8 +207,13 @@ function saveCheckout(id: number, providerRef: string, url: string) {
   getDb().prepare("UPDATE payment_attempts SET provider_ref = ?, checkout_url = ? WHERE id = ?").run(providerRef, url, id);
 }
 
-function markPaid(id: number) {
-  getDb().prepare("UPDATE payment_attempts SET status = 'paid' WHERE id = ? AND status = 'pending'").run(id);
+async function markPaid(id: number) {
+  const info = getDb().prepare("UPDATE payment_attempts SET status = 'paid', paid_at = ? WHERE id = ? AND status = 'pending'").run(new Date().toISOString(), id);
+  if (!info.changes) return;
+  const { grantForPayment, enforceUser } = await import("./minutes");
+  grantForPayment(id);
+  const attempt = attemptById(id);
+  if (attempt?.user_id) await enforceUser(attempt.user_id);
 }
 
 export async function confirmReturn(attemptId: number, query: { session_id?: string; token?: string; orderId?: string; cancelled?: string }) {
@@ -231,7 +236,7 @@ export async function confirmReturn(attemptId: number, query: { session_id?: str
       });
       const session = (await response.json().catch(() => null)) as { payment_status?: string; amount_total?: number; client_reference_id?: string; currency?: string } | null;
       if (response.ok && session?.payment_status === "paid" && session.client_reference_id === String(attempt.id) && session.amount_total === attempt.amount_cents && session.currency?.toUpperCase() === attempt.currency) {
-        markPaid(attempt.id);
+        await markPaid(attempt.id);
       }
     } else if (gateway.provider_key === "paypal" && query.token === attempt.provider_ref) {
       const token = await paypalToken(gateway, secret.key);
@@ -244,7 +249,7 @@ export async function confirmReturn(attemptId: number, query: { session_id?: str
       const order = (await response.json().catch(() => null)) as { status?: string; purchase_units?: { amount?: { value?: string; currency_code?: string }; custom_id?: string }[] } | null;
       const unit = order?.purchase_units?.[0];
       if (response.ok && order?.status === "COMPLETED" && unit?.custom_id === String(attempt.id) && unit.amount?.value === money(attempt.amount_cents) && unit.amount.currency_code === attempt.currency) {
-        markPaid(attempt.id);
+        await markPaid(attempt.id);
       }
     } else if (gateway.provider_key === "square" && (!query.orderId || query.orderId === attempt.provider_ref)) {
       const response = await fetch(`${squareHost(gateway.mode)}/v2/orders/${encodeURIComponent(attempt.provider_ref)}`, {
@@ -255,7 +260,7 @@ export async function confirmReturn(attemptId: number, query: { session_id?: str
       const payload = (await response.json().catch(() => null)) as { order?: { state?: string; total_money?: { amount?: number; currency?: string } } } | null;
       const order = payload?.order;
       if (response.ok && order?.state === "COMPLETED" && order.total_money?.amount === attempt.amount_cents && order.total_money.currency === attempt.currency) {
-        markPaid(attempt.id);
+        await markPaid(attempt.id);
       }
     }
   } catch {
@@ -263,7 +268,7 @@ export async function confirmReturn(attemptId: number, query: { session_id?: str
   }
 }
 
-export function applyStripeEvent(raw: string, header: string) {
+export async function applyStripeEvent(raw: string, header: string) {
   const rows = getDb().prepare("SELECT id, secret FROM gateways WHERE provider_key = 'stripe' AND secret != ''").all() as { id: number; secret: string }[];
   const gateway = rows.find((row) => stripeSignatureOk(raw, header, readGatewaySecret(row.secret).webhook));
   if (!gateway) return false;
@@ -273,6 +278,6 @@ export function applyStripeEvent(raw: string, header: string) {
   const attemptId = Number(session?.client_reference_id || 0);
   const attempt = attemptById(attemptId);
   if (!attempt || attempt.gateway_id !== gateway.id || attempt.status !== "pending") return true;
-  if (session?.payment_status === "paid" && session.amount_total === attempt.amount_cents && session.currency?.toUpperCase() === attempt.currency) markPaid(attempt.id);
+  if (session?.payment_status === "paid" && session.amount_total === attempt.amount_cents && session.currency?.toUpperCase() === attempt.currency) await markPaid(attempt.id);
   return true;
 }

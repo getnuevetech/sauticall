@@ -29,6 +29,11 @@ const WORDS: Record<string, string> = {
 };
 
 export function fieldLabel(key: string, docKey = "") {
+  if (docKey === "plans" && key === "includedMinutes") return "Outbound minutes included each month";
+  if (docKey === "minute_bundles" && key === "name") return "Bundle name";
+  if (docKey === "minute_bundles" && key === "minutes") return "Minutes in this bundle";
+  if (docKey === "minute_bundles" && key === "price") return "Price";
+  if (docKey === "minute_bundles" && key === "enabled") return "Customers can buy this";
   if (docKey === "page.account" && key === "phoneTitle") return "Phone system heading";
   if (docKey === "page.account" && key === "phoneBody") return "Phone system text";
   if (docKey === "flags") {
@@ -243,6 +248,14 @@ const LABELS: Record<string, string> = {
   phoneOpen: "Opens",
   phoneClose: "Closes",
   phoneRoute: "Send call routing button",
+  minutesTitle: "Call minutes heading",
+  minutesBody: "Call minutes text",
+  minutesPlan: "Plan minutes label",
+  minutesBundle: "Bundle minutes label",
+  minutesUsed: "Used minutes label",
+  minutesBuy: "Buy minutes heading",
+  minutesEmpty: "Message when no bundles are for sale",
+  minutesClosed: "Message when checkout is off",
   languageBadge: "Any-language badge",
   languageException: "Which plan does not include any language",
   deviceHeader: "Sample screen title",
@@ -277,7 +290,8 @@ export const documentScreens: Record<string, { title: string; intro: string }> =
   nav: { title: "Menu", intro: "Choose the links people see at the top, on a phone, and inside an account." },
   footer: { title: "Footer", intro: "Edit the links and notes at the bottom of every page." },
   services: { title: "Services", intro: "Edit the service cards." },
-  plans: { title: "Plans", intro: "Edit prices, what is included, and which plan is the base plan." },
+  plans: { title: "Plans", intro: "Edit prices, the outbound minutes included each month, and which plan is the base plan. Plan minutes last 30 days from the day the customer pays." },
+  minute_bundles: { title: "Call minute bundles", intro: "These are extra outbound minutes a customer can buy. Bought minutes last until they are used. Turn a bundle off to hide it." },
   faqs: { title: "Questions", intro: "Edit the questions and answers." },
   personas: { title: "Who it is for", intro: "Edit the four short stories on the home page." },
   theme: { title: "Colors and font", intro: "Leave these as they are to keep the approved look. Change a color only when you mean to." },

@@ -27,25 +27,23 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
             {params.error ? <p className="form-feedback">{params.error}</p> : null}
             {!open ? <div className="contact-form"><p>{text("billingClosed")}</p></div> : null}
             {open && ready.length === 0 ? <div className="contact-form"><p>{gateways.length ? "A way to pay is turned on, but its API secret is not saved yet." : text("billingEmpty")}</p></div> : null}
-            {open && ready.length > 0 ? (
-              <div className="faq-list">
-                {plans.map((plan) => (
-                  <article key={plan.name} className="feature-card" style={{ marginBottom: 16 }}>
-                    <h3>{plan.name}</h3>
-                    <p>${plan.price} per month · {plan.units}</p>
-                    {ready.map((gateway) => (
-                      <AuthForm
-                        key={gateway.id}
-                        action={startCheckout}
-                        submit={`Pay with ${gateway.public_label}`}
-                        fields={[]}
-                        extra={<><input type="hidden" name="plan" value={plan.name} /><input type="hidden" name="gatewayId" value={gateway.id} /></>}
-                      />
-                    ))}
-                  </article>
-                ))}
-              </div>
-            ) : null}
+            <div className="faq-list">
+              {plans.map((plan) => (
+                <article key={plan.name} className="feature-card" style={{ marginBottom: 16 }}>
+                  <h3>{plan.name}</h3>
+                  <p>${plan.price} per month · {plan.units}{plan.includedMinutes > 0 ? ` · ${plan.includedMinutes} outbound minutes for 30 days` : ""}</p>
+                  {open ? ready.map((gateway) => (
+                    <AuthForm
+                      key={gateway.id}
+                      action={startCheckout}
+                      submit={`Pay with ${gateway.public_label}`}
+                      fields={[]}
+                      extra={<><input type="hidden" name="plan" value={plan.name} /><input type="hidden" name="gatewayId" value={gateway.id} /></>}
+                    />
+                  )) : null}
+                </article>
+              ))}
+            </div>
           </div>
         </section>
       </main>

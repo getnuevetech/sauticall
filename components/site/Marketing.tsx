@@ -30,6 +30,7 @@ function PricingCards({ plans, ribbon, languageBadge }: { plans: Plan[]; ribbon:
           </div>
           {plan.multilingual && languageBadge ? <div className="lang-pill">{languageBadge}</div> : null}
           <div className="unit-line"><Icon name="users" size={16} /> {plan.units}</div>
+          {plan.includedMinutes > 0 ? <div className="unit-line"><Icon name="phone" size={16} /> {plan.includedMinutes} outbound minutes / month</div> : null}
           <div className="plan-rule" />
           <ul>
             {plan.features.map((feature) => <li key={feature}><Icon name="check" size={17} /> <span>{feature}</span></li>)}

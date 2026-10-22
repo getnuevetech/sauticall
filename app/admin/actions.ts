@@ -113,11 +113,19 @@ export async function saveConnection(formData: FormData) {
       dialtime: String(formData.get("dialtime") || "60").trim(),
       cnam: formData.get("cnam") === "on" ? "1" : "0",
       billing_type: String(formData.get("billing_type") || "1") === "2" ? "2" : "1",
+      device_type: String(formData.get("device_type") || "1").trim() || "1",
+      lock_international: formData.get("lock_international") === "on" ? "1" : "0",
+      international_route: String(formData.get("international_route") || "1") === "2" ? "2" : "1",
+      music_on_hold: String(formData.get("music_on_hold") || "default").trim() || "default",
+      allowed_codecs: String(formData.get("allowed_codecs") || "ulaw;alaw;g729").trim() || "ulaw;alaw;g729",
+      dtmf_mode: String(formData.get("dtmf_mode") || "auto").trim() || "auto",
+      nat: String(formData.get("nat") || "yes").trim() || "yes",
     }, secret);
   } else {
     persist(provider, enabled, {
       base_url: String(formData.get("base_url") || "").trim(),
       client_id: String(formData.get("client_id") || "").trim(),
+      trunk_template: String(formData.get("trunk_template") || "GenericSIPTrunk.pv.xml").trim() || "GenericSIPTrunk.pv.xml",
     }, secret);
   }
   audit(user.email, "connection.save", provider);
@@ -138,14 +146,14 @@ export async function orderSavedNumber(formData: FormData) {
   const { flagOn, getDb: database } = await import("@/lib/db");
   if (!flagOn("numbers.live_order")) redirect("/admin/requests?error=Live%20number%20ordering%20is%20turned%20off.");
   const id = Number(formData.get("id"));
-  const row = database().prepare("SELECT payload, kind FROM account_requests WHERE id = ?").get(id) as { payload: string; kind: string } | undefined;
+  const row = database().prepare("SELECT user_id, payload, kind FROM account_requests WHERE id = ?").get(id) as { user_id: number; payload: string; kind: string } | undefined;
   if (!row || row.kind !== "number") redirect("/admin/requests?error=That%20request%20is%20not%20a%20number.");
   const payload = JSON.parse(row.payload) as { did?: string };
   if (!payload.did) redirect("/admin/requests?error=This%20request%20has%20no%20specific%20number%20to%20order.");
-  const { orderDid } = await import("@/lib/carriers");
-  const result = await orderDid(payload.did);
+  const { purchaseNumber } = await import("@/lib/lines");
+  const result = await purchaseNumber({ requestId: id, userId: row.user_id, did: payload.did });
   const status = result.ok ? "ordered" : "exception";
-  database().prepare("UPDATE account_requests SET status = ?, staff_note = ? WHERE id = ?").run(status, result.ok ? "Ordered with VoIP.ms." : result.message, id);
+  database().prepare("UPDATE account_requests SET status = ?, staff_note = ? WHERE id = ?").run(status, result.message, id);
   audit(user.email, "request.order", `${id}:${status}`);
   redirect("/admin/requests");
 }
@@ -183,4 +191,34 @@ export async function provisionPerson(formData: FormData) {
   audit(user.email, "pbx.provision", `${id}:${result.ok ? "ok" : "failed"}`);
   if (!result.ok) redirect(`/admin/phone?error=${encodeURIComponent(result.message)}`);
   redirect("/admin/phone");
+}
+
+export async function syncMinutes() {
+  const user = await staff();
+  const { syncAllMinutes } = await import("@/lib/minutes");
+  const result = await syncAllMinutes();
+  audit(user.email, "minutes.sync", result.ok ? "ok" : "failed");
+  if (!result.ok) redirect(`/admin/lines?error=${encodeURIComponent(result.message)}`);
+  redirect("/admin/lines?saved=1");
+}
+
+export async function retryTrunk(formData: FormData) {
+  const user = await staff();
+  const id = Number(formData.get("id"));
+  const { attachTrunk } = await import("@/lib/lines");
+  const result = await attachTrunk(id);
+  audit(user.email, "trunk.retry", `${id}:${result.ok ? "ok" : "failed"}`);
+  if (!result.ok) redirect(`/admin/lines?error=${encodeURIComponent(result.message)}`);
+  redirect("/admin/lines");
+}
+
+export async function completeTrunk(formData: FormData) {
+  const user = await staff();
+  const id = Number(formData.get("id"));
+  const note = String(formData.get("note") || "");
+  const { markTrunkDone } = await import("@/lib/lines");
+  const result = markTrunkDone(id, note);
+  audit(user.email, "trunk.done", String(id));
+  if (!result.ok) redirect(`/admin/lines?error=${encodeURIComponent(result.message)}`);
+  redirect("/admin/lines");
 }

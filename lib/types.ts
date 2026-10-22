@@ -19,6 +19,7 @@ export type Plan = {
   priceLabel: string;
   desc: string;
   units: string;
+  includedMinutes: number;
   features: string[];
   note: string;
   popular: boolean;

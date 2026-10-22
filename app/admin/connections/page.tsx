@@ -28,6 +28,15 @@ function VoipForm() {
             <select name="billing_type" defaultValue={config.billing_type || "1"}><option value="1">Per minute</option><option value="2">One monthly price</option></select>
           </label>
           <label className="check-option"><input type="checkbox" name="cnam" defaultChecked={config.cnam === "1"} /> Show the caller’s name</label>
+          <label>Line account phone type code <input name="device_type" defaultValue={config.device_type || "1"} /></label>
+          <label>International route
+            <select name="international_route" defaultValue={config.international_route || "1"}><option value="1">Value</option><option value="2">Premium</option></select>
+          </label>
+          <label className="check-option"><input type="checkbox" name="lock_international" defaultChecked={config.lock_international === "1"} /> Block international calls on new line accounts</label>
+          <label>Hold music <input name="music_on_hold" defaultValue={config.music_on_hold || "default"} /></label>
+          <label>Codecs <input name="allowed_codecs" defaultValue={config.allowed_codecs || "ulaw;alaw;g729"} /></label>
+          <label>DTMF <input name="dtmf_mode" defaultValue={config.dtmf_mode || "auto"} /></label>
+          <label>NAT <input name="nat" defaultValue={config.nat || "yes"} /></label>
         </div>
       </details>
       <p>{connection.checked_at ? `${connection.last_ok ? "Last check worked" : "Last check failed"}: ${connection.last_message}` : "Not checked yet."}</p>
@@ -48,6 +57,7 @@ function PbxForm() {
       <label>API base URL <input name="base_url" defaultValue={config.base_url || ""} placeholder="https://pbx.example.com" autoComplete="off" /></label>
       <label>API client ID <input name="client_id" defaultValue={config.client_id || ""} autoComplete="off" /></label>
       <label>API client secret <input name="secret" type="password" placeholder={connection.hasSecret ? "Saved. Leave blank to keep it." : "Client secret"} autoComplete="new-password" /></label>
+      <label>Trunk template <input name="trunk_template" defaultValue={config.trunk_template || "GenericSIPTrunk.pv.xml"} /></label>
       <p>{connection.checked_at ? `${connection.last_ok ? "Last check worked" : "Last check failed"}: ${connection.last_message}` : "Not checked yet."}</p>
       <button className="btn btn-primary" type="submit">Save 3CX</button>
     </form>
@@ -59,7 +69,7 @@ export default function ConnectionsPage() {
     <>
       <span className="eyebrow">Settings</span>
       <h2>Phone connections</h2>
-      <p>Enter the VoIP.ms and 3CX API credentials. They stay on this server and are not shown again after you save. Searching, buying, and sending transfers are separate switches under What customers can do. Buying a number spends money, so leave that switch off until you mean to.</p>
+      <p>Enter the VoIP.ms and 3CX API credentials. They stay on this server and are not shown again after you save. Searching, buying, sending transfers, reading call minutes, and adding trunks are separate switches under What customers can do. Buying a number spends money, so leave that switch off until you mean to.</p>
       <div className="features-grid">
         <div>
           <VoipForm />

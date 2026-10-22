@@ -19,6 +19,7 @@ const GROUPS = [
       ["Footer", "/admin/content/footer"],
       ["Services", "/admin/content/services"],
       ["Plans", "/admin/content/plans"],
+      ["Call minute bundles", "/admin/content/minute_bundles"],
       ["Questions", "/admin/content/faqs"],
       ["Who it's for", "/admin/content/personas"],
     ],
@@ -35,6 +36,7 @@ const GROUPS = [
       ["Payments", "/admin/gateways"],
       ["Phone connections", "/admin/connections"],
       ["Extensions", "/admin/phone"],
+      ["Lines and trunks", "/admin/lines"],
     ],
   },
   {

@@ -31,6 +31,9 @@ export const defaultFlags: Flag[] = [
   { key: "porting.requests", label: "Number transfer requests", description: "Allow customers to open the porting request screen.", enabled: true },
   { key: "porting.live_submit", label: "Live number transfer submission", description: "Submit transfer requests to VoIP.ms when that connection is enabled.", enabled: false },
   { key: "pbx.live_provision", label: "Create people on the phone system", description: "Create a department and extensions on 3CX when a customer adds a person. Leave this off until the 3CX connection is checked.", enabled: false },
+  { key: "pbx.live_trunk", label: "Add purchased numbers as trunks", description: "When a number is bought, try to add it as a SIP trunk on that customer's department in 3CX. If this is off, or 3CX does not accept the trunk, the team finishes it on the 3CX server.", enabled: false },
+  { key: "minutes.live_sync", label: "Read call minutes from VoIP.ms", description: "Read outbound call history from VoIP.ms and subtract those minutes from the customer's balance.", enabled: false },
+  { key: "minutes.enforce", label: "Stop outbound calls when minutes run out", description: "When the balance is zero, VoIP.ms stops that customer's line account from placing calls. If a main routing value is saved on the VoIP.ms connection, inbound calls move there until minutes are added. Leave this off until call minutes are being read.", enabled: false },
 ];
 
 export const defaultNav: NavLink[] = [
@@ -50,6 +53,7 @@ export const defaultNav: NavLink[] = [
   { label: "Number transfer", href: "/account/porting", location: "account" },
   { label: "Security", href: "/account/security", location: "account" },
   { label: "Phone system", href: "/account/phone", location: "account" },
+  { label: "Call minutes", href: "/account/minutes", location: "account" },
 ];
 
 export const defaultFooter = {
@@ -100,10 +104,16 @@ export const defaultServices: Service[] = [
 export const anyLanguageFeature = "AI that understands callers in any language";
 
 export const defaultPlans: Plan[] = [
-  { name: "Solo", price: 19, custom: false, base: true, multilingual: false, priceLabel: "", desc: "For individuals and one-person businesses.", units: "1 user / extension", features: ["Business number request", "Mobile & desktop softphone", "Voicemail and call forwarding", "Online account management"], note: "Base plan. Any-language AI starts on the plans above.", popular: false, ctaLabel: "Request this plan", ctaHref: "/contact" },
-  { name: "Small Business", price: 39, custom: false, base: false, multilingual: true, priceLabel: "", desc: "For small teams that want to sound established.", units: "Up to 5 extensions", features: ["Everything in Solo", anyLanguageFeature, "Business-hour routing", "Ring groups and transfers", "Supported desk-phone setup", "AI setup assistant"], note: "Most popular starting point", popular: true, ctaLabel: "Request this plan", ctaHref: "/contact" },
-  { name: "Team", price: 79, custom: false, base: false, multilingual: true, priceLabel: "", desc: "For busy offices and customer-facing teams.", units: "Up to 10 extensions", features: ["Everything in Small Business", anyLanguageFeature, "Call queues and reporting", "Multi-user administration", "Priority setup assistance"], note: "Scale as your call traffic grows", popular: false, ctaLabel: "Request this plan", ctaHref: "/contact" },
-  { name: "Custom", price: 0, custom: true, base: false, multilingual: true, priceLabel: "Custom", desc: "A phone system shaped around a specific business.", units: "Scoped with you", features: ["A design for your call flow", anyLanguageFeature, "Extensions, queues, and numbers sized to the business", "A salesperson follows up on the request"], note: "No public price. Tell us what you need.", popular: false, ctaLabel: "Request a custom system", ctaHref: "/custom" },
+  { name: "Solo", price: 19, custom: false, base: true, multilingual: false, includedMinutes: 200, priceLabel: "", desc: "For individuals and one-person businesses.", units: "1 user / extension", features: ["Business number request", "Mobile & desktop softphone", "Voicemail and call forwarding", "Online account management"], note: "Base plan. Any-language AI starts on the plans above.", popular: false, ctaLabel: "Request this plan", ctaHref: "/contact" },
+  { name: "Small Business", price: 39, custom: false, base: false, multilingual: true, includedMinutes: 800, priceLabel: "", desc: "For small teams that want to sound established.", units: "Up to 5 extensions", features: ["Everything in Solo", anyLanguageFeature, "Business-hour routing", "Ring groups and transfers", "Supported desk-phone setup", "AI setup assistant"], note: "Most popular starting point", popular: true, ctaLabel: "Request this plan", ctaHref: "/contact" },
+  { name: "Team", price: 79, custom: false, base: false, multilingual: true, includedMinutes: 2000, priceLabel: "", desc: "For busy offices and customer-facing teams.", units: "Up to 10 extensions", features: ["Everything in Small Business", anyLanguageFeature, "Call queues and reporting", "Multi-user administration", "Priority setup assistance"], note: "Scale as your call traffic grows", popular: false, ctaLabel: "Request this plan", ctaHref: "/contact" },
+  { name: "Custom", price: 0, custom: true, base: false, multilingual: true, includedMinutes: 0, priceLabel: "Custom", desc: "A phone system shaped around a specific business.", units: "Scoped with you", features: ["A design for your call flow", anyLanguageFeature, "Extensions, queues, and numbers sized to the business", "A salesperson follows up on the request"], note: "No public price. Tell us what you need.", popular: false, ctaLabel: "Request a custom system", ctaHref: "/custom" },
+];
+
+export const defaultMinuteBundles = [
+  { name: "100 minutes", minutes: 100, price: 10, enabled: true },
+  { name: "500 minutes", minutes: 500, price: 40, enabled: true },
+  { name: "1000 minutes", minutes: 1000, price: 70, enabled: true },
 ];
 
 export const defaultFaqs: Faq[] = [
@@ -176,7 +186,7 @@ export const defaultPages: Record<string, Record<string, unknown>> = {
     endCta: "Start with your idea",
     endHref: "/how-it-works",
     ribbon: "Popular for small teams",
-    disclaimer: "*Illustrative concept prices only. Not live plans or a purchase offer. Custom has no public price. Minutes, DIDs, 3CX licenses, telecom charges, taxes, E911 and AI usage require final commercial validation.",
+    disclaimer: "*Monthly price includes the outbound minutes set on that plan. Extra minutes can be bought as bundles and last until they are used. Custom has no public price. Taxes, number fees, and emergency calling are separate.",
     chatTitle: "SautiCall Setup Assistant",
     chatSub: "Try a sample request",
     chatStatus: "Preview",
@@ -287,7 +297,7 @@ export const defaultPages: Record<string, Record<string, unknown>> = {
     lead: "Explore concept packages for SautiCall. Plans, allowances, and final prices will be finalized after provider licensing and operating costs are confirmed.",
     ribbon: "Popular for small teams",
     languageBadge: "Any language",
-    disclaimer: "*Illustrative concept prices only. Not live plans or a purchase offer. The Custom plan has no public price. Minutes, DIDs, 3CX licenses, telecom charges, taxes, E911 and AI usage require final commercial validation. Plans, prices, and which plans include any-language AI are managed from the admin portal.",
+    disclaimer: "*Monthly price includes the outbound minutes set on that plan. Extra minutes can be bought as bundles and last until they are used. Custom has no public price. Taxes, number fees, and emergency calling are separate.",
     estimateEyebrow: "EXPLORE YOUR SETUP",
     estimateTitle: "Build a sample estimate.",
     estimateBody: "This is a design-demo estimator, not a checkout or binding quote.",
@@ -478,5 +488,13 @@ export const defaultPages: Record<string, Record<string, unknown>> = {
     phoneOpen: "Opens",
     phoneClose: "Closes",
     phoneRoute: "Send call routing",
+    minutesTitle: "Call minutes",
+    minutesBody: "Your plan includes outbound minutes for 30 days after you pay. Bought bundles stay until you use them. When the balance is zero, outbound calls stop at the phone company.",
+    minutesPlan: "Plan minutes left",
+    minutesBundle: "Bundle minutes left",
+    minutesUsed: "Outbound minutes used",
+    minutesBuy: "Buy minutes",
+    minutesEmpty: "No minute bundles are for sale right now.",
+    minutesClosed: "Checkout is turned off, so minute bundles cannot be bought right now.",
   },
 };
