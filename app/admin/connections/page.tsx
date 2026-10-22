@@ -1,5 +1,6 @@
 import { saveConnection, testConnection } from "../actions";
 import { getConnection } from "@/lib/carriers";
+import { dialTimeChoices, withCurrent } from "@/lib/admin-choices";
 
 function VoipForm() {
   const connection = getConnection("voipms");
@@ -17,7 +18,11 @@ function VoipForm() {
         <label>POP <input name="pop" defaultValue={config.pop || ""} /></label>
       </div>
       <div className="form-grid">
-        <label>Dial time <input name="dialtime" defaultValue={config.dialtime || "60"} /></label>
+        <label>Dial time
+          <select name="dialtime" defaultValue={config.dialtime || "60"}>
+            {withCurrent(dialTimeChoices, config.dialtime || "60").map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
         <label>Billing type
           <select name="billing_type" defaultValue={config.billing_type || "1"}><option value="1">Per minute</option><option value="2">Flat</option></select>
         </label>

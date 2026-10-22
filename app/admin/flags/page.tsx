@@ -6,7 +6,7 @@ export default function FlagsPage() {
     <>
       <span className="eyebrow">SWITCHES</span>
       <h2>Enable or disable actions</h2>
-      <p>Turn registration, password sign-in, multi-factor authentication, checkout, number requests, porting, and the marketing demos on or off. Add another switch by using Add item; code that checks that key will follow it.</p>
+      <p>Turn a switch on or off. The switch name is chosen from the list the site already understands, so a mistyped name cannot turn the wrong thing off.</p>
       <DocumentEditor docKey="flags" initial={readDoc("flags")} />
     </>
   );

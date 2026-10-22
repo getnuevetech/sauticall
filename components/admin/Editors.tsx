@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { saveDocument, saveGateway } from "@/app/admin/actions";
+import { choicesFor, currencyChoices, providerChoices, withCurrent } from "@/lib/admin-choices";
 
 type Json = null | string | number | boolean | Json[] | { [key: string]: Json };
 
@@ -17,17 +18,38 @@ function setPath(root: Json, path: (string | number)[], next: Json): Json {
   return next;
 }
 
-function Field({ value, path, onChange }: { value: Json; path: (string | number)[]; onChange: (path: (string | number)[], next: Json) => void }) {
+function Field({ docKey, value, path, onChange }: { docKey: string; value: Json; path: (string | number)[]; onChange: (path: (string | number)[], next: Json) => void }) {
   const label = path.length ? String(path[path.length - 1]) : "value";
   if (typeof value === "string" || typeof value === "number") {
+    const text = String(value);
+    const options = typeof value === "string" ? choicesFor(docKey, label) : null;
+    if (options) {
+      const list = withCurrent(options, text);
+      return (
+        <label>
+          {label}
+          <select value={text} onChange={(event) => onChange(path, event.target.value)}>
+            {list.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+      );
+    }
+    if (docKey === "theme" && typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value)) {
+      return (
+        <label>
+          {label}
+          <input type="color" value={value} onChange={(event) => onChange(path, event.target.value)} />
+        </label>
+      );
+    }
     const long = typeof value === "string" && value.length > 90;
     return (
       <label>
         {label}
         {long ? (
-          <textarea rows={4} value={String(value)} onChange={(event) => onChange(path, event.target.value)} />
+          <textarea rows={4} value={text} onChange={(event) => onChange(path, event.target.value)} />
         ) : (
-          <input value={String(value)} onChange={(event) => onChange(path, typeof value === "number" ? Number(event.target.value) : event.target.value)} />
+          <input value={text} onChange={(event) => onChange(path, typeof value === "number" ? Number(event.target.value) : event.target.value)} />
         )}
       </label>
     );
@@ -43,7 +65,7 @@ function Field({ value, path, onChange }: { value: Json; path: (string | number)
     return (
       <fieldset>
         <legend>{label}</legend>
-        {value.map((item, index) => <Field key={`${label}-${index}`} value={item} path={[...path, index]} onChange={onChange} />)}
+        {value.map((item, index) => <Field key={`${label}-${index}`} docKey={docKey} value={item} path={[...path, index]} onChange={onChange} />)}
         <button
           type="button"
           className="btn btn-secondary"
@@ -61,7 +83,7 @@ function Field({ value, path, onChange }: { value: Json; path: (string | number)
     return (
       <fieldset>
         {path.length ? <legend>{label}</legend> : null}
-        {Object.entries(value).map(([key, child]) => <Field key={key} value={child as Json} path={[...path, key]} onChange={onChange} />)}
+        {Object.entries(value).map(([key, child]) => <Field key={key} docKey={docKey} value={child as Json} path={[...path, key]} onChange={onChange} />)}
       </fieldset>
     );
   }
@@ -86,7 +108,7 @@ export function DocumentEditor({ docKey, initial }: { docKey: string; initial: u
         }
       }}
     >
-      <Field value={value} path={[]} onChange={(path, next) => setValue((current) => setPath(current, path, next))} />
+      <Field docKey={docKey} value={value} path={[]} onChange={(path, next) => setValue((current) => setPath(current, path, next))} />
       <button className="btn btn-primary" type="submit">Save</button>
       {saved ? <div className="form-feedback">Saved.</div> : null}
       {error ? <div className="form-feedback">{error}</div> : null}
@@ -106,10 +128,18 @@ export function GatewayForm({ gateway }: { gateway?: { id: number; name: string;
     >
       {gateway ? <input type="hidden" name="id" value={gateway.id} /> : null}
       <label>Name <input name="name" defaultValue={gateway?.name || ""} required /></label>
-      <label>Provider key <input name="provider_key" defaultValue={gateway?.provider_key || ""} placeholder="stripe" required /></label>
+      <label>Provider
+        <select name="provider_key" defaultValue={gateway?.provider_key || "stripe"} required>
+          {withCurrent(providerChoices, gateway?.provider_key || "").map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      </label>
       <label>Public label <input name="public_label" defaultValue={gateway?.public_label || ""} required /></label>
       <label>Priority <input name="priority" type="number" defaultValue={gateway?.priority ?? 100} /></label>
-      <label>Currencies <input name="currencies" defaultValue={gateway?.currencies || "USD"} /></label>
+      <label>Currency
+        <select name="currencies" defaultValue={gateway?.currencies || "USD"}>
+          {withCurrent(currencyChoices, gateway?.currencies || "USD").map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      </label>
       <label>Secret reference <input name="secret_ref" defaultValue={gateway?.secret_ref || ""} placeholder="vault key, not the secret itself" /></label>
       <label>Mode
         <select name="mode" defaultValue={gateway?.mode || "test"}>
