@@ -2,25 +2,22 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Frame } from "@/components/site/Frame";
 import { currentUser } from "@/lib/auth";
-import { audit, getDb } from "@/lib/db";
+import { getDb } from "@/lib/db";
+import { confirmReturn } from "@/lib/payments";
 
-export default async function PayPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ done?: string }> }) {
+export default async function PayPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ session_id?: string; token?: string; orderId?: string; cancelled?: string; error?: string }> }) {
   const { id } = await params;
   const query = await searchParams;
   const user = await currentUser();
   if (!user) redirect("/account/login");
+  await confirmReturn(Number(id), query);
   const attempt = getDb()
     .prepare(
-      `SELECT a.id, a.amount_cents, a.currency, a.description, a.status, a.user_id, g.public_label, g.mode, g.enabled
+      `SELECT a.id, a.amount_cents, a.currency, a.description, a.status, a.user_id, a.checkout_url, g.public_label
        FROM payment_attempts a JOIN gateways g ON g.id = a.gateway_id WHERE a.id = ?`,
     )
-    .get(id) as { id: number; amount_cents: number; currency: string; description: string; status: string; user_id: number; public_label: string; mode: string; enabled: number } | undefined;
+    .get(id) as { id: number; amount_cents: number; currency: string; description: string; status: string; user_id: number; checkout_url: string; public_label: string } | undefined;
   if (!attempt || attempt.user_id !== user.id) notFound();
-  if (query.done === "1" && attempt.mode === "test" && attempt.enabled) {
-    getDb().prepare("UPDATE payment_attempts SET status = 'paid' WHERE id = ? AND status = 'pending'").run(attempt.id);
-    audit(user.email, "billing.paid", String(attempt.id));
-    attempt.status = "paid";
-  }
   return (
     <Frame pathname="/account/billing">
       <main>
@@ -34,15 +31,10 @@ export default async function PayPage({ params, searchParams }: { params: Promis
         <section className="section">
           <div className="wrap" style={{ maxWidth: 720 }}>
             <div className="contact-form">
-              <p>Status: {attempt.status}</p>
-              {attempt.mode === "test" && attempt.status !== "paid" ? (
-                <>
-                  <p>This gateway is in test mode. Confirming does not charge a card.</p>
-                  <Link className="btn btn-primary" href={`/pay/${attempt.id}?done=1`}>Confirm test payment</Link>
-                </>
-              ) : null}
-              {attempt.mode === "live" && attempt.status !== "paid" ? <p>Live charges are not connected for this gateway yet. An administrator can keep it in test mode until credentials are verified.</p> : null}
-              {attempt.status === "paid" ? <p>Payment recorded. No second charge will be created for this attempt.</p> : null}
+              {query.error ? <p className="form-feedback">{query.error}</p> : null}
+              <p>Status: {attempt.status === "paid" ? "Paid" : attempt.status === "cancelled" ? "Cancelled" : attempt.status === "failed" ? "Could not start" : "Waiting for payment"}</p>
+              {attempt.status === "pending" && attempt.checkout_url ? <a className="btn btn-primary" href={attempt.checkout_url}>Continue to payment</a> : null}
+              {attempt.status === "paid" ? <p>Payment received. This charge will not be taken again.</p> : null}
               <p><Link className="text-link" href="/account/billing">Back to billing</Link></p>
             </div>
           </div>

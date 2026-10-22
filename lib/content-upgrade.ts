@@ -105,6 +105,12 @@ export function upgradeContent(database: Database.Database) {
         changed = true;
       }
     }
+    for (const faq of faqs) {
+      if (faq.q === "Is this a real subscription offer?" && faq.a.startsWith("This website is a design prototype")) {
+        faq.a = "Yes. In your account, choose a plan and pay with a method an administrator has connected. The charge is that plan’s monthly price.";
+        changed = true;
+      }
+    }
     if (changed) writeJson(database, "faqs", faqs);
   }
 
@@ -115,7 +121,11 @@ export function upgradeContent(database: Database.Database) {
     writeJson(database, "personas", personas);
   }
 
-  const footer = readJson<{ groups: { title: string; links: { label: string; href: string }[] }[] }>(database, "footer");
+  const footer = readJson<{ legalRight?: string; groups: { title: string; links: { label: string; href: string }[] }[] }>(database, "footer");
+  if (footer?.legalRight === "Preview only · No purchases or phone provisioning occur here.") {
+    footer.legalRight = "Payments and phone orders run only after an administrator connects them.";
+    writeJson(database, "footer", footer);
+  }
   const account = readJson<Record<string, unknown>>(database, "page.account");
   if (account) {
     const replacements: Record<string, string> = {

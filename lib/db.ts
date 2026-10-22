@@ -121,6 +121,15 @@ function migrate(database: Database.Database) {
   const requestNames = new Set(requestCols.map((column) => column.name));
   if (!requestNames.has("provider_ref")) database.exec("ALTER TABLE account_requests ADD COLUMN provider_ref TEXT NOT NULL DEFAULT ''");
   if (!requestNames.has("staff_note")) database.exec("ALTER TABLE account_requests ADD COLUMN staff_note TEXT NOT NULL DEFAULT ''");
+  const gatewayCols = new Set((database.prepare("PRAGMA table_info(gateways)").all() as { name: string }[]).map((column) => column.name));
+  if (!gatewayCols.has("secret")) database.exec("ALTER TABLE gateways ADD COLUMN secret TEXT NOT NULL DEFAULT ''");
+  if (!gatewayCols.has("last_ok")) database.exec("ALTER TABLE gateways ADD COLUMN last_ok INTEGER NOT NULL DEFAULT 0");
+  if (!gatewayCols.has("last_message")) database.exec("ALTER TABLE gateways ADD COLUMN last_message TEXT NOT NULL DEFAULT ''");
+  if (!gatewayCols.has("checked_at")) database.exec("ALTER TABLE gateways ADD COLUMN checked_at TEXT NOT NULL DEFAULT ''");
+  const paymentCols = new Set((database.prepare("PRAGMA table_info(payment_attempts)").all() as { name: string }[]).map((column) => column.name));
+  if (!paymentCols.has("provider_ref")) database.exec("ALTER TABLE payment_attempts ADD COLUMN provider_ref TEXT NOT NULL DEFAULT ''");
+  if (!paymentCols.has("checkout_url")) database.exec("ALTER TABLE payment_attempts ADD COLUMN checkout_url TEXT NOT NULL DEFAULT ''");
+  if (!paymentCols.has("plan_name")) database.exec("ALTER TABLE payment_attempts ADD COLUMN plan_name TEXT NOT NULL DEFAULT ''");
 }
 
 function put(database: Database.Database, key: string, value: unknown) {

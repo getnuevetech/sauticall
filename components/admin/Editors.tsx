@@ -148,8 +148,11 @@ export function DocumentEditor({ docKey, initial }: { docKey: string; initial: u
   );
 }
 
-export function GatewayForm({ gateway }: { gateway?: { id: number; name: string; provider_key: string; public_label: string; enabled: number; priority: number; mode: string; currencies: string; secret_ref: string } }) {
+export function GatewayForm({ gateway }: { gateway?: { id: number; name: string; provider_key: string; public_label: string; enabled: number; priority: number; mode: string; currencies: string; config: { publishable_key: string; client_id: string; application_id: string; location_id: string }; hasSecret: boolean; hasWebhook: boolean } }) {
   const [error, setError] = useState("");
+  const [provider, setProvider] = useState(gateway?.provider_key || "stripe");
+  const savedHere = gateway?.provider_key === provider;
+  const secretHint = savedHere && gateway?.hasSecret ? "Saved. Leave blank to keep it." : "Paste the secret";
   return (
     <form
       className="contact-form"
@@ -161,8 +164,8 @@ export function GatewayForm({ gateway }: { gateway?: { id: number; name: string;
       {gateway ? <input type="hidden" name="id" value={gateway.id} /> : null}
       <label>Name for your team <input name="name" defaultValue={gateway?.name || ""} required /></label>
       <label>Payment company
-        <select name="provider_key" defaultValue={gateway?.provider_key || "stripe"} required>
-          {withCurrent(providerChoices, gateway?.provider_key || "").map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        <select name="provider_key" value={provider} onChange={(event) => setProvider(event.target.value)} required>
+          {withCurrent(providerChoices, provider).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       </label>
       <label>Name customers see <input name="public_label" defaultValue={gateway?.public_label || ""} required /></label>
@@ -172,14 +175,36 @@ export function GatewayForm({ gateway }: { gateway?: { id: number; name: string;
           {withCurrent(currencyChoices, gateway?.currencies || "USD").map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       </label>
-      <label>Nickname for the secret <input name="secret_ref" defaultValue={gateway?.secret_ref || ""} placeholder="A name only. Do not paste the secret itself." /></label>
       <label>Payments
         <select name="mode" defaultValue={gateway?.mode || "test"}>
           <option value="test">Practice only</option>
           <option value="live">Real payments</option>
         </select>
       </label>
-      <label className="check-option"><input type="checkbox" name="enabled" defaultChecked={gateway ? gateway.enabled === 1 : true} /> Customers can use this</label>
+      {provider === "stripe" ? (
+        <>
+          <p>From Stripe → Developers → API keys. Practice only uses the test keys. Real payments uses the live keys. If you add a webhook, point it at /api/pay/stripe on this site.</p>
+          <label>Publishable key <input name="publishable_key" defaultValue={savedHere ? gateway?.config.publishable_key || "" : ""} placeholder="pk_test_ or pk_live_" autoComplete="off" /></label>
+          <label>Secret key <input name="secret_key" type="password" placeholder={secretHint} autoComplete="new-password" /></label>
+          <label>Webhook signing secret <input name="webhook_secret" type="password" placeholder={savedHere && gateway?.hasWebhook ? "Saved. Leave blank to keep it." : "whsec_ optional"} autoComplete="new-password" /></label>
+        </>
+      ) : null}
+      {provider === "paypal" ? (
+        <>
+          <p>From PayPal → Apps & Credentials. Practice only uses Sandbox. Real payments uses Live.</p>
+          <label>Client ID <input name="client_id" defaultValue={savedHere ? gateway?.config.client_id || "" : ""} autoComplete="off" /></label>
+          <label>Secret <input name="secret_key" type="password" placeholder={secretHint} autoComplete="new-password" /></label>
+        </>
+      ) : null}
+      {provider === "square" ? (
+        <>
+          <p>From the Square developer console. Practice only uses Sandbox. Real payments uses Production. The location ID is in the Square account.</p>
+          <label>Application ID <input name="application_id" defaultValue={savedHere ? gateway?.config.application_id || "" : ""} autoComplete="off" /></label>
+          <label>Location ID <input name="location_id" defaultValue={savedHere ? gateway?.config.location_id || "" : ""} autoComplete="off" /></label>
+          <label>Access token <input name="secret_key" type="password" placeholder={secretHint} autoComplete="new-password" /></label>
+        </>
+      ) : null}
+      <label className="check-option"><input type="checkbox" name="enabled" defaultChecked={gateway ? gateway.enabled === 1 : false} /> Customers can use this</label>
       <button className="btn btn-primary" type="submit">{gateway ? "Save gateway" : "Add gateway"}</button>
       {error ? <div className="form-feedback">{error}</div> : null}
     </form>

@@ -83,7 +83,7 @@ export const defaultFooter = {
     },
   ],
   legalLeft: "© 2026 SautiCall. Website design concept.",
-  legalRight: "Preview only · No purchases or phone provisioning occur here.",
+  legalRight: "Payments and phone orders run only after an administrator connects them.",
 };
 
 export const defaultServices: Service[] = [
@@ -108,7 +108,7 @@ export const defaultFaqs: Faq[] = [
   { q: "Can I keep my current phone number?", a: "Yes, you can request a number transfer. SautiCall will collect the information and authorization needed, display the status in your account, and coordinate activation after the carrier completes the port." },
   { q: "Do I have to buy office phones?", a: "No. You can use compatible desktop or mobile softphones. If your team prefers physical office phones, SautiCall can help you set up supported IP desk phones." },
   { q: "Will the AI change my phone system without asking?", a: "No. SautiCall presents a clear configuration for approval before applying it. Some changes may require additional verification or help from an administrator." },
-  { q: "Is this a real subscription offer?", a: "This website is a design prototype. Prices and included allowances are illustrative concepts, not a live offer. Final plans depend on provider licensing, usage limits, and regulatory requirements." },
+  { q: "Is this a real subscription offer?", a: "Yes. In your account, choose a plan and pay with a method an administrator has connected. The charge is that plan’s monthly price." },
   { q: "Can the AI understand a caller in any language?", a: "Yes, on every plan except the base plan. The AI receptionist can receive the call and understand the caller in the language they speak. The Solo plan is the base plan and does not include this." },
   { q: "What if none of the priced plans fit?", a: "Choose Custom. There is no public price. Describe the system you need and leave your contact details. A salesperson will reach out." },
   { q: "What happens if a setup step needs manual assistance?", a: "You will see the request status in your dashboard. A SautiCall administrator can complete the exceptional step while the rest of your setup remains tracked." },

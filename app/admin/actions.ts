@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireStaff } from "@/lib/auth";
 import { audit, getDb, writeDoc } from "@/lib/db";
+import { readGatewaySecret, stripePublishableMatches, stripeSecretMatches, writeGatewaySecret } from "@/lib/payment-keys";
 
 async function staff() {
   const user = await requireStaff();
@@ -27,28 +28,63 @@ export async function saveDocument(key: string, json: string) {
 export async function saveGateway(formData: FormData) {
   const user = await staff();
   const id = Number(formData.get("id") || 0);
+  const provider = String(formData.get("provider_key") || "").trim().toLowerCase();
   const payload = {
     name: String(formData.get("name") || "").trim(),
-    provider_key: String(formData.get("provider_key") || "").trim().toLowerCase(),
+    provider_key: provider,
     public_label: String(formData.get("public_label") || "").trim(),
     enabled: formData.get("enabled") === "on" ? 1 : 0,
     priority: Number(formData.get("priority") || 100),
     mode: String(formData.get("mode") || "test") === "live" ? "live" : "test",
-    currencies: String(formData.get("currencies") || "USD").trim(),
-    secret_ref: String(formData.get("secret_ref") || ""),
+    currencies: String(formData.get("currencies") || "USD").trim().toUpperCase(),
   };
-  if (!payload.name || !payload.provider_key || !payload.public_label) return { error: "Name, provider key, and public label are required." };
+  if (!payload.name || !payload.public_label) return { error: "Add a name for your team and the name customers see." };
+  if (provider !== "stripe" && provider !== "paypal" && provider !== "square") return { error: "Choose Stripe, PayPal, or Square." };
+  const existing = id
+    ? getDb().prepare("SELECT provider_key, secret, config_json FROM gateways WHERE id = ?").get(id) as { provider_key: string; secret: string; config_json: string } | undefined
+    : undefined;
+  if (id && !existing) return { error: "That way to pay was not found." };
+  const previous = readGatewaySecret(existing?.secret || "");
+  const sameProvider = existing?.provider_key === provider;
+  const postedKey = String(formData.get("secret_key") || "").trim();
+  const postedWebhook = String(formData.get("webhook_secret") || "").trim();
+  const key = postedKey || (sameProvider ? previous.key : "");
+  const webhook = provider === "stripe" ? postedWebhook || (sameProvider ? previous.webhook : "") : "";
+  const config = {
+    publishable_key: provider === "stripe" ? String(formData.get("publishable_key") || "").trim() : "",
+    client_id: provider === "paypal" ? String(formData.get("client_id") || "").trim() : "",
+    application_id: provider === "square" ? String(formData.get("application_id") || "").trim() : "",
+    location_id: provider === "square" ? String(formData.get("location_id") || "").trim() : "",
+  };
+  if (provider === "stripe") {
+    if (!config.publishable_key || !key) return { error: "Stripe needs the publishable key and the secret key." };
+    if (!stripePublishableMatches(payload.mode, config.publishable_key) || !stripeSecretMatches(payload.mode, key)) {
+      return { error: payload.mode === "live" ? "Real Stripe payments need keys that start with pk_live_ and sk_live_." : "Practice Stripe payments need keys that start with pk_test_ and sk_test_." };
+    }
+  }
+  if (provider === "paypal" && (!config.client_id || !key)) return { error: "PayPal needs the client ID and the secret." };
+  if (provider === "square" && (!config.application_id || !config.location_id || !key)) return { error: "Square needs the application ID, location ID, and access token." };
+  const secret = writeGatewaySecret({ key, webhook });
   if (id) {
     getDb()
-      .prepare("UPDATE gateways SET name=?, provider_key=?, public_label=?, enabled=?, priority=?, mode=?, currencies=?, secret_ref=? WHERE id=?")
-      .run(payload.name, payload.provider_key, payload.public_label, payload.enabled, payload.priority, payload.mode, payload.currencies, payload.secret_ref, id);
+      .prepare("UPDATE gateways SET name=?, provider_key=?, public_label=?, enabled=?, priority=?, mode=?, currencies=?, config_json=?, secret=? WHERE id=?")
+      .run(payload.name, payload.provider_key, payload.public_label, payload.enabled, payload.priority, payload.mode, payload.currencies, JSON.stringify(config), secret, id);
     audit(user.email, "gateway.update", String(id));
   } else {
     const info = getDb()
-      .prepare("INSERT INTO gateways (name, provider_key, public_label, enabled, priority, mode, currencies, config_json, secret_ref) VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?)")
-      .run(payload.name, payload.provider_key, payload.public_label, payload.enabled, payload.priority, payload.mode, payload.currencies, payload.secret_ref);
+      .prepare("INSERT INTO gateways (name, provider_key, public_label, enabled, priority, mode, currencies, config_json, secret_ref, secret) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?)")
+      .run(payload.name, payload.provider_key, payload.public_label, payload.enabled, payload.priority, payload.mode, payload.currencies, JSON.stringify(config), secret);
     audit(user.email, "gateway.create", String(info.lastInsertRowid));
   }
+  redirect("/admin/gateways");
+}
+
+export async function testGateway(formData: FormData) {
+  const user = await staff();
+  const id = Number(formData.get("id"));
+  const { testGateway: check } = await import("@/lib/payments");
+  const result = await check(id);
+  audit(user.email, "gateway.test", `${id}:${result.ok ? "ok" : "failed"}`);
   redirect("/admin/gateways");
 }
 

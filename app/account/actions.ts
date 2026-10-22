@@ -98,13 +98,25 @@ export async function startCheckout(formData: FormData) {
   if (!user) redirect("/account/login");
   if (!flagOn("billing.checkout")) return { error: "Checkout is turned off by an administrator." };
   const gatewayId = Number(formData.get("gatewayId"));
-  const gateway = getDb().prepare("SELECT * FROM gateways WHERE id = ? AND enabled = 1").get(gatewayId) as { id: number; mode: string } | undefined;
-  if (!gateway) return { error: "That payment gateway is not available." };
+  const planName = String(formData.get("plan") || "");
+  const plans = (await import("@/lib/db")).readDoc<{ name: string; price: number; custom?: boolean }[]>("plans");
+  const plan = plans.find((item) => item.name === planName && !item.custom && item.price > 0);
+  if (!plan) return { error: "Choose a priced plan." };
+  const gateway = getDb().prepare("SELECT id, currencies, secret FROM gateways WHERE id = ? AND enabled = 1").get(gatewayId) as { id: number; currencies: string; secret: string } | undefined;
+  if (!gateway) return { error: "That way to pay is not available." };
+  const { readGatewaySecret } = await import("@/lib/payment-keys");
+  if (!readGatewaySecret(gateway.secret).key) return { error: "That way to pay is missing its API secret." };
+  const amount = Math.round(plan.price * 100);
+  const currency = (gateway.currencies || "USD").split(",")[0].trim().toUpperCase() || "USD";
   const info = getDb()
-    .prepare("INSERT INTO payment_attempts (user_id, gateway_id, amount_cents, currency, description, status, created_at) VALUES (?, ?, ?, 'USD', ?, 'pending', ?)")
-    .run(user.id, gateway.id, 3900, "SautiCall subscription", new Date().toISOString());
-  audit(user.email, "billing.checkout", String(gateway.id));
-  redirect(`/pay/${info.lastInsertRowid}`);
+    .prepare("INSERT INTO payment_attempts (user_id, gateway_id, amount_cents, currency, description, status, plan_name, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)")
+    .run(user.id, gateway.id, amount, currency, `${plan.name} monthly`, plan.name, new Date().toISOString());
+  const attemptId = Number(info.lastInsertRowid);
+  audit(user.email, "billing.checkout", `${gateway.id}:${plan.name}`);
+  const { beginCheckout, requestOrigin } = await import("@/lib/payments");
+  const started = await beginCheckout(attemptId, await requestOrigin());
+  if (!started.ok) redirect(`/pay/${attemptId}?error=${encodeURIComponent(started.message)}`);
+  redirect(started.url);
 }
 
 export async function saveNumber(formData: FormData) {
