@@ -1,4 +1,5 @@
 import { orderSavedNumber, refreshPortStatus, setRequestStatus } from "../actions";
+import { formatAddress, parseEmergency } from "@/lib/e911";
 import { requestStatusLabel, requestStatuses } from "@/lib/admin-labels";
 import { flagOn, getDb } from "@/lib/db";
 
@@ -19,10 +20,12 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
       {params.error ? <p className="form-feedback">{params.error}</p> : null}
       {rows.length === 0 ? <p>No requests yet.</p> : null}
       {rows.map((row) => {
-        const payload = JSON.parse(row.payload) as { did?: string; detail?: string; numbers?: string };
+        const payload = JSON.parse(row.payload) as { did?: string; detail?: string; numbers?: string; emergency?: Record<string, string> };
+        const emergency = payload.emergency ? parseEmergency(payload.emergency) : null;
         return (
           <article key={row.id} className="feature-card" style={{ marginBottom: 16 }}>
             <h3>{row.kind === "number" ? "Number" : "Transfer"} · {payload.did || payload.numbers || payload.detail}</h3>
+            {emergency?.ok ? <p>Emergency address: {formatAddress(emergency.address)}</p> : row.kind === "number" ? <p>No emergency address on this request.</p> : null}
             <p>{row.email} · {requestStatusLabel(row.status)}{row.provider_ref ? ` · ${row.provider_ref}` : ""}</p>
             {row.staff_note ? <p>{row.staff_note}</p> : null}
             <form action={setRequestStatus} className="form-grid">

@@ -212,6 +212,26 @@ export async function retryTrunk(formData: FormData) {
   redirect("/admin/lines");
 }
 
+export async function sendEmergencyAddress(formData: FormData) {
+  const user = await staff();
+  const id = Number(formData.get("id"));
+  const { sendEmergency } = await import("@/lib/e911");
+  const result = await sendEmergency(id);
+  audit(user.email, "e911.send", `${id}:${result.ok ? "ok" : "failed"}`);
+  if (!result.ok) redirect(`/admin/lines?error=${encodeURIComponent(result.message)}`);
+  redirect("/admin/lines");
+}
+
+export async function completeEmergency(formData: FormData) {
+  const user = await staff();
+  const id = Number(formData.get("id"));
+  const { markEmergencyDone } = await import("@/lib/e911");
+  const result = markEmergencyDone(id, String(formData.get("note") || ""));
+  audit(user.email, "e911.done", String(id));
+  if (!result.ok) redirect(`/admin/lines?error=${encodeURIComponent(result.message)}`);
+  redirect("/admin/lines");
+}
+
 export async function completeTrunk(formData: FormData) {
   const user = await staff();
   const id = Number(formData.get("id"));

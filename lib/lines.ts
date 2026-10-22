@@ -152,7 +152,9 @@ export async function purchaseNumber(input: { requestId: number; userId: number;
   }
   const trunk = await attachTrunk(lineId);
   const limited = await enforceUser(input.userId);
+  const { sendEmergency } = await import("./e911");
+  const emergency = await sendEmergency(lineId);
   const subNote = sub.ok ? "" : ` ${sub.message}`;
-  const message = `${trunk.message}${subNote} ${limited.message}`.trim();
+  const message = `${trunk.message}${subNote} ${limited.message} ${emergency.message}`.trim();
   return { ok: true, message };
 }

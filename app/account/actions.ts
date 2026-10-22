@@ -158,12 +158,16 @@ export async function saveNumber(formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
   if (!flagOn("numbers.search")) redirect("/account/numbers?error=An%20administrator%20has%20turned%20this%20request%20off.");
+  const { getEmergency } = await import("@/lib/e911");
+  const emergency = getEmergency(user.id);
+  if (!emergency) redirect("/account/numbers?error=Add%20the%20emergency%20address%20first.");
   const payload = {
     did: String(formData.get("did") || "").replace(/\D/g, ""),
     country: String(formData.get("country") || "US").slice(0, 2).toUpperCase(),
     region: String(formData.get("region") || "").trim().toUpperCase(),
     ratecenter: String(formData.get("ratecenter") || "").trim().toUpperCase(),
     detail: String(formData.get("detail") || "").trim(),
+    emergency,
   };
   if (!payload.did && !payload.detail) redirect("/account/numbers?error=Choose%20a%20number%20or%20describe%20the%20one%20you%20want.");
   getDb()
@@ -171,6 +175,30 @@ export async function saveNumber(formData: FormData) {
     .run(user.id, JSON.stringify(payload), new Date().toISOString());
   audit(user.email, "request.number", payload.did || "described");
   redirect("/account/numbers?saved=1");
+}
+
+export async function saveEmergencyAddress(formData: FormData) {
+  const user = await currentUser();
+  if (!user) redirect("/account/login");
+  const { parseEmergency, saveEmergency, syncEmergency } = await import("@/lib/e911");
+  const parsed = parseEmergency({
+    full_name: String(formData.get("full_name") || ""),
+    street_number: String(formData.get("street_number") || ""),
+    street_name: String(formData.get("street_name") || ""),
+    address_type: String(formData.get("address_type") || ""),
+    address_number: String(formData.get("address_number") || ""),
+    city: String(formData.get("city") || ""),
+    state: String(formData.get("state") || ""),
+    country: String(formData.get("country") || ""),
+    zip: String(formData.get("zip") || ""),
+    language: String(formData.get("language") || ""),
+  });
+  if (!parsed.ok) redirect(`/account/numbers?error=${encodeURIComponent(parsed.message)}`);
+  saveEmergency(user.id, parsed.address);
+  const result = await syncEmergency(user.id);
+  audit(user.email, "e911.save", result.ok ? "ok" : "needs-person");
+  if (!result.ok) redirect(`/account/numbers?error=${encodeURIComponent(result.message)}`);
+  redirect("/account/numbers?address=1");
 }
 
 export async function savePort(formData: FormData) {

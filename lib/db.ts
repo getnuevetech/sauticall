@@ -135,6 +135,10 @@ function migrate(database: Database.Database) {
   if (!paymentCols.has("product_minutes")) database.exec("ALTER TABLE payment_attempts ADD COLUMN product_minutes INTEGER NOT NULL DEFAULT 0");
   if (!paymentCols.has("bundle_name")) database.exec("ALTER TABLE payment_attempts ADD COLUMN bundle_name TEXT NOT NULL DEFAULT ''");
   if (!paymentCols.has("paid_at")) database.exec("ALTER TABLE payment_attempts ADD COLUMN paid_at TEXT NOT NULL DEFAULT ''");
+  const lineCols = new Set((database.prepare("PRAGMA table_info(phone_lines)").all() as { name: string }[]).map((column) => column.name));
+  if (lineCols.size && !lineCols.has("e911_json")) database.exec("ALTER TABLE phone_lines ADD COLUMN e911_json TEXT NOT NULL DEFAULT ''");
+  if (lineCols.size && !lineCols.has("e911_status")) database.exec("ALTER TABLE phone_lines ADD COLUMN e911_status TEXT NOT NULL DEFAULT 'missing'");
+  if (lineCols.size && !lineCols.has("e911_message")) database.exec("ALTER TABLE phone_lines ADD COLUMN e911_message TEXT NOT NULL DEFAULT ''");
   database.exec(`
     CREATE TABLE IF NOT EXISTS pbx_departments (
       user_id INTEGER PRIMARY KEY,
@@ -206,7 +210,24 @@ function migrate(database: Database.Database) {
       status TEXT NOT NULL,
       trunk_id INTEGER NOT NULL DEFAULT 0,
       last_message TEXT NOT NULL DEFAULT '',
+      e911_json TEXT NOT NULL DEFAULT '',
+      e911_status TEXT NOT NULL DEFAULT 'missing',
+      e911_message TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS emergency_addresses (
+      user_id INTEGER PRIMARY KEY,
+      full_name TEXT NOT NULL,
+      street_number TEXT NOT NULL,
+      street_name TEXT NOT NULL,
+      address_type TEXT NOT NULL DEFAULT '',
+      address_number TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL,
+      state TEXT NOT NULL,
+      country TEXT NOT NULL,
+      zip TEXT NOT NULL,
+      language TEXT NOT NULL DEFAULT 'EN',
+      updated_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS trunk_tasks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

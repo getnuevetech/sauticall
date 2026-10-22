@@ -139,6 +139,8 @@ export function upgradeContent(database: Database.Database) {
         "Search available business numbers when live search is on. A request is saved either way, and an administrator places the carrier order.",
       "Start a transfer request. Carrier submission runs when the VoIP.ms connection is enabled; until then the request waits for the team.":
         "Tell us the number and the details on your current carrier bill. Live submission runs only when an administrator has enabled it.",
+      "Search available business numbers when live search is on. A request is saved either way, and an administrator places the carrier order.":
+        "Search available business numbers when live search is on. Add the address where emergency services should find you. It is sent to the phone company when the number is bought.",
     };
     let changed = false;
     for (const [from, to] of Object.entries(replacements)) {
