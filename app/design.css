@@ -32,3 +32,10 @@ body{background:#fff}
 .price-card.custom .price-line strong{font-size:2.1rem;letter-spacing:-.04em}
 @media(max-width:1100px){.price-grid,.persona-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:690px){.price-grid,.persona-grid{grid-template-columns:1fr}}
+.admin-page{padding:28px 0 72px}
+.admin-shell{width:calc(100% - 48px);margin:0 auto;display:grid;grid-template-columns:260px minmax(0,1fr);gap:28px;align-items:start}
+.admin-shell nav{position:sticky;top:92px;max-height:calc(100vh - 116px);overflow:auto}
+.admin-main{min-width:0;width:100%}
+.admin-main .contact-form,.admin-main .feature-card{width:100%;max-width:none}
+.admin-main fieldset{min-width:0;width:100%;margin:0;border:1px solid #e1e7f2;border-radius:16px;padding:16px 18px}
+@media(max-width:900px){.admin-shell{width:calc(100% - 32px);grid-template-columns:1fr}.admin-shell nav{position:static;max-height:none}}

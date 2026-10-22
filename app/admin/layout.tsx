@@ -8,13 +8,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!user) redirect("/account/login");
   return (
     <Frame pathname="/admin">
-      <main>
-        <section className="section">
-          <div className="wrap about-grid">
-            <AdminNav />
-            <div>{children}</div>
-          </div>
-        </section>
+      <main className="admin-page">
+        <div className="admin-shell">
+          <AdminNav />
+          <div className="admin-main">{children}</div>
+        </div>
       </main>
     </Frame>
   );
