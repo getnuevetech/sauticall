@@ -1,6 +1,8 @@
+import { requirePermission } from "@/lib/access";
 import { getDb } from "@/lib/db";
 
-export default function MessagesPage() {
+export default async function MessagesPage() {
+  await requirePermission("inbox.messages");
   const rows = getDb().prepare("SELECT name, email, phone, company, service, body, kind, created_at FROM messages ORDER BY id DESC LIMIT 50").all() as {
     name: string;
     email: string;

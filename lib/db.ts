@@ -3,6 +3,7 @@ import path from "path";
 import Database from "better-sqlite3";
 import { hashPassword } from "./auth";
 import { upgradeContent } from "./content-upgrade";
+import { seedDesk } from "./desk-seed";
 import { dataDir } from "./paths";
 import {
   defaultFaqs,
@@ -242,7 +243,117 @@ function migrate(database: Database.Database) {
       note TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS access_roles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT NOT NULL DEFAULT '',
+      permissions_json TEXT NOT NULL DEFAULT '[]'
+    );
+    CREATE TABLE IF NOT EXISTS call_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      name TEXT NOT NULL,
+      number TEXT NOT NULL,
+      strategy TEXT NOT NULL,
+      answers INTEGER NOT NULL DEFAULT 0,
+      xapi_id INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL,
+      last_message TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS call_group_members (
+      group_id INTEGER NOT NULL,
+      extension_id INTEGER NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (group_id, extension_id)
+    );
+    CREATE TABLE IF NOT EXISTS call_group_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER NOT NULL UNIQUE,
+      user_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      name TEXT NOT NULL,
+      number TEXT NOT NULL,
+      strategy TEXT NOT NULL,
+      members TEXT NOT NULL,
+      department_name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ticket_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS ticket_group_members (
+      group_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      PRIMARY KEY (group_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS ticket_topics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      group_id INTEGER NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS tickets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      requester_email TEXT NOT NULL,
+      requester_name TEXT NOT NULL,
+      topic_id INTEGER,
+      group_id INTEGER,
+      subject TEXT NOT NULL,
+      status TEXT NOT NULL,
+      priority TEXT NOT NULL DEFAULT 'normal',
+      assignee_id INTEGER,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ticket_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ticket_id INTEGER NOT NULL,
+      author_id INTEGER,
+      author_email TEXT NOT NULL,
+      author_name TEXT NOT NULL,
+      body TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      source TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ticket_mail (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id TEXT NOT NULL UNIQUE,
+      ticket_id INTEGER NOT NULL,
+      direction TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS mail_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      inbound_secret TEXT NOT NULL DEFAULT '',
+      smtp_host TEXT NOT NULL DEFAULT '',
+      smtp_port INTEGER NOT NULL DEFAULT 587,
+      smtp_user TEXT NOT NULL DEFAULT '',
+      smtp_pass TEXT NOT NULL DEFAULT '',
+      smtp_from TEXT NOT NULL DEFAULT '',
+      smtp_secure INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS faq_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      excerpt TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL,
+      published INTEGER NOT NULL DEFAULT 0,
+      author_name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
+  const userCols = new Set((database.prepare("PRAGMA table_info(users)").all() as { name: string }[]).map((column) => column.name));
+  if (!userCols.has("access_role_id")) database.exec("ALTER TABLE users ADD COLUMN access_role_id INTEGER NOT NULL DEFAULT 0");
 }
 
 function put(database: Database.Database, key: string, value: unknown) {
@@ -288,6 +399,7 @@ function seed(database: Database.Database) {
   const connection = database.prepare("INSERT INTO connections (provider, enabled, public_json, secret) VALUES (?, 0, ?, '') ON CONFLICT(provider) DO NOTHING");
   connection.run("voipms", JSON.stringify({ api_username: "", endpoint: "https://voip.ms/api/v1/rest.php", routing: "", pop: "", dialtime: "60", cnam: "0", billing_type: "1" }));
   connection.run("3cx", JSON.stringify({ base_url: "", client_id: "" }));
+  seedDesk(database);
 }
 
 export function readDoc<T>(key: string): T {

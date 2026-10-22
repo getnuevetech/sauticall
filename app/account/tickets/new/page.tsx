@@ -1,0 +1,47 @@
+import { Frame } from "@/components/site/Frame";
+import { AccountHero, AccountNav } from "@/components/account/Portal";
+import { openTicket } from "../../desk-actions";
+import { guardAccount } from "@/lib/guard";
+import { getDb } from "@/lib/db";
+import { loadSite } from "@/lib/site";
+
+export default async function NewTicketPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  await guardAccount();
+  const params = await searchParams;
+  const copy = loadSite().account;
+  const text = (key: string) => (typeof copy[key] === "string" ? String(copy[key]) : "");
+  const topics = getDb().prepare("SELECT id, name FROM ticket_topics WHERE enabled = 1 ORDER BY name").all() as { id: number; name: string }[];
+  return (
+    <Frame pathname="/account/tickets">
+      <main>
+        <AccountHero eyebrow="SUPPORT" title={text("ticketsNew")} body={text("ticketsBody")} />
+        <section className="section">
+          <div className="wrap">
+            <AccountNav pathname="/account/tickets" />
+            {params.error ? <p className="form-feedback">{params.error}</p> : null}
+            {topics.length === 0 ? <p>{text("ticketsClosed")}</p> : (
+              <form className="contact-form" action={openTicket}>
+                <label>{text("ticketsTopic")}
+                  <select name="topic_id" required defaultValue="">
+                    <option value="" disabled>Choose</option>
+                    {topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.name}</option>)}
+                  </select>
+                </label>
+                <label>{text("ticketsSubject")} <input name="subject" required /></label>
+                <label>{text("ticketsPriority")}
+                  <select name="priority" defaultValue="normal">
+                    <option value="low">Low</option>
+                    <option value="normal">Normal</option>
+                    <option value="high">High</option>
+                  </select>
+                </label>
+                <label>{text("ticketsMessage")} <textarea name="body" rows={6} required /></label>
+                <button className="btn btn-primary" type="submit">{text("ticketsSend")}</button>
+              </form>
+            )}
+          </div>
+        </section>
+      </main>
+    </Frame>
+  );
+}

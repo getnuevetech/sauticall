@@ -57,3 +57,13 @@ body{background:#fff}
 .admin-start{display:grid;gap:8px;max-width:420px}
 .admin-start a{font-weight:700;color:#334ad0}
 @media(max-width:900px){.admin-shell{width:calc(100% - 32px);grid-template-columns:1fr}.admin-shell nav{position:static;max-height:none}}
+.check-list{display:grid;gap:8px;margin:8px 0 14px}
+.check-list label{display:flex;gap:10px;align-items:flex-start;color:#202b42}
+.check-list input{width:auto;margin-top:4px}
+.ticket-thread{display:grid;gap:12px;margin:18px 0}
+.ticket-thread article{border:1px solid #e1e7f2;border-radius:16px;padding:16px 18px;background:#fff}
+.ticket-thread article.note{background:#f6f7fb}
+.faq-article{max-width:760px}
+.faq-article h2{font-size:1.6rem}
+.faq-article h3{font-size:1.25rem}
+.faq-article li{color:#64697a}

@@ -38,6 +38,11 @@ export default async function AccountHome() {
                 <h3>Account</h3>
                 <p>{user.email}</p>
               </article>
+              <article className="feature-card">
+                <h3>Support</h3>
+                <p>{(getDb().prepare("SELECT COUNT(*) AS n FROM tickets WHERE user_id = ? AND status NOT IN ('resolved', 'closed')").get(user.id) as { n: number }).n} open tickets.</p>
+                <p><Link className="text-link" href="/account/tickets">Open a ticket</Link></p>
+              </article>
             </div>
           </div>
         </section>

@@ -2,18 +2,19 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireStaff } from "@/lib/auth";
+import { requirePermission } from "@/lib/access";
+import { permissionForDocument } from "@/lib/access-catalog";
 import { audit, getDb, writeDoc } from "@/lib/db";
 import { readGatewaySecret, stripePublishableMatches, stripeSecretMatches, writeGatewaySecret } from "@/lib/payment-keys";
 
-async function staff() {
-  const user = await requireStaff();
-  if (!user) redirect("/account/login");
-  return user;
+async function staff(permission: string) {
+  return requirePermission(permission);
 }
 
 export async function saveDocument(key: string, json: string) {
-  const user = await staff();
+  const permission = permissionForDocument(key);
+  if (!permission) redirect("/admin/denied");
+  const user = await staff(permission);
   const value = JSON.parse(json) as unknown;
   const exists = getDb().prepare("SELECT key FROM documents WHERE key = ?").get(key);
   if (!exists) {
@@ -26,7 +27,7 @@ export async function saveDocument(key: string, json: string) {
 }
 
 export async function saveGateway(formData: FormData) {
-  const user = await staff();
+  const user = await staff("settings.payments");
   const id = Number(formData.get("id") || 0);
   const provider = String(formData.get("provider_key") || "").trim().toLowerCase();
   const payload = {
@@ -80,7 +81,7 @@ export async function saveGateway(formData: FormData) {
 }
 
 export async function testGateway(formData: FormData) {
-  const user = await staff();
+  const user = await staff("settings.payments");
   const id = Number(formData.get("id"));
   const { testGateway: check } = await import("@/lib/payments");
   const result = await check(id);
@@ -89,7 +90,7 @@ export async function testGateway(formData: FormData) {
 }
 
 export async function setGatewayEnabled(formData: FormData) {
-  const user = await staff();
+  const user = await staff("settings.payments");
   const id = Number(formData.get("id"));
   const enabled = Number(formData.get("enabled"));
   getDb().prepare("UPDATE gateways SET enabled = ? WHERE id = ?").run(enabled ? 1 : 0, id);
@@ -98,7 +99,7 @@ export async function setGatewayEnabled(formData: FormData) {
 }
 
 export async function saveConnection(formData: FormData) {
-  const user = await staff();
+  const user = await staff("settings.connections");
   const provider = String(formData.get("provider") || "");
   if (provider !== "voipms" && provider !== "3cx") redirect("/admin/connections");
   const { saveConnection: persist } = await import("@/lib/carriers");
@@ -133,7 +134,7 @@ export async function saveConnection(formData: FormData) {
 }
 
 export async function testConnection(formData: FormData) {
-  const user = await staff();
+  const user = await staff("settings.connections");
   const provider = String(formData.get("provider") || "");
   const { test3cx, testVoipms } = await import("@/lib/carriers");
   const result = provider === "3cx" ? await test3cx() : await testVoipms();
@@ -142,7 +143,7 @@ export async function testConnection(formData: FormData) {
 }
 
 export async function orderSavedNumber(formData: FormData) {
-  const user = await staff();
+  const user = await staff("inbox.requests");
   const { flagOn, getDb: database } = await import("@/lib/db");
   if (!flagOn("numbers.live_order")) redirect("/admin/requests?error=Live%20number%20ordering%20is%20turned%20off.");
   const id = Number(formData.get("id"));
@@ -159,7 +160,7 @@ export async function orderSavedNumber(formData: FormData) {
 }
 
 export async function refreshPortStatus(formData: FormData) {
-  const user = await staff();
+  const user = await staff("inbox.requests");
   const id = Number(formData.get("id"));
   const { getDb: database } = await import("@/lib/db");
   const row = database().prepare("SELECT provider_ref, kind FROM account_requests WHERE id = ?").get(id) as { provider_ref: string; kind: string } | undefined;
@@ -172,7 +173,7 @@ export async function refreshPortStatus(formData: FormData) {
 }
 
 export async function setRequestStatus(formData: FormData) {
-  const user = await staff();
+  const user = await staff("inbox.requests");
   const id = Number(formData.get("id"));
   const status = String(formData.get("status") || "requested");
   const note = String(formData.get("staff_note") || "").slice(0, 400);
@@ -184,7 +185,7 @@ export async function setRequestStatus(formData: FormData) {
 }
 
 export async function provisionPerson(formData: FormData) {
-  const user = await staff();
+  const user = await staff("settings.phone");
   const id = Number(formData.get("id"));
   const { provisionExtension } = await import("@/lib/pbx");
   const result = await provisionExtension(id);
@@ -194,7 +195,7 @@ export async function provisionPerson(formData: FormData) {
 }
 
 export async function syncMinutes() {
-  const user = await staff();
+  const user = await staff("settings.lines");
   const { syncAllMinutes } = await import("@/lib/minutes");
   const result = await syncAllMinutes();
   audit(user.email, "minutes.sync", result.ok ? "ok" : "failed");
@@ -203,7 +204,7 @@ export async function syncMinutes() {
 }
 
 export async function retryTrunk(formData: FormData) {
-  const user = await staff();
+  const user = await staff("settings.lines");
   const id = Number(formData.get("id"));
   const { attachTrunk } = await import("@/lib/lines");
   const result = await attachTrunk(id);
@@ -213,7 +214,7 @@ export async function retryTrunk(formData: FormData) {
 }
 
 export async function sendEmergencyAddress(formData: FormData) {
-  const user = await staff();
+  const user = await staff("settings.lines");
   const id = Number(formData.get("id"));
   const { sendEmergency } = await import("@/lib/e911");
   const result = await sendEmergency(id);
@@ -223,7 +224,7 @@ export async function sendEmergencyAddress(formData: FormData) {
 }
 
 export async function completeEmergency(formData: FormData) {
-  const user = await staff();
+  const user = await staff("settings.lines");
   const id = Number(formData.get("id"));
   const { markEmergencyDone } = await import("@/lib/e911");
   const result = markEmergencyDone(id, String(formData.get("note") || ""));
@@ -233,7 +234,7 @@ export async function completeEmergency(formData: FormData) {
 }
 
 export async function completeTrunk(formData: FormData) {
-  const user = await staff();
+  const user = await staff("settings.lines");
   const id = Number(formData.get("id"));
   const note = String(formData.get("note") || "");
   const { markTrunkDone } = await import("@/lib/lines");
@@ -241,4 +242,24 @@ export async function completeTrunk(formData: FormData) {
   audit(user.email, "trunk.done", String(id));
   if (!result.ok) redirect(`/admin/lines?error=${encodeURIComponent(result.message)}`);
   redirect("/admin/lines");
+}
+
+export async function retryGroup(formData: FormData) {
+  const user = await staff("settings.phone");
+  const id = Number(formData.get("id"));
+  const { provisionCallGroup } = await import("@/lib/call-groups");
+  const result = await provisionCallGroup(id);
+  audit(user.email, "pbx.group", `${id}:${result.ok ? "ok" : "failed"}`);
+  if (!result.ok) redirect(`/admin/phone?error=${encodeURIComponent(result.message)}`);
+  redirect("/admin/phone");
+}
+
+export async function completeGroup(formData: FormData) {
+  const user = await staff("settings.phone");
+  const id = Number(formData.get("id"));
+  const { markGroupDone } = await import("@/lib/call-groups");
+  const result = await markGroupDone(id, String(formData.get("note") || ""));
+  audit(user.email, "pbx.group.done", String(id));
+  if (!result.ok) redirect(`/admin/phone?error=${encodeURIComponent(result.message)}`);
+  redirect("/admin/phone");
 }

@@ -1,4 +1,5 @@
 import { completeEmergency, completeTrunk, retryTrunk, sendEmergencyAddress, syncMinutes } from "../actions";
+import { requirePermission } from "@/lib/access";
 import { flagOn, getDb } from "@/lib/db";
 import { formatAddress, parseEmergency, type EmergencyAddress } from "@/lib/e911";
 
@@ -46,6 +47,7 @@ function addressText(raw: string) {
 }
 
 export default async function LinesPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string }> }) {
+  await requirePermission("settings.lines");
   const params = await searchParams;
   const rows = getDb().prepare(
     `SELECT l.id, u.email, l.did, l.status, l.last_message,

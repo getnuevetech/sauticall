@@ -86,22 +86,41 @@ async function ensureDepartment(userId: number) {
   return database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department;
 }
 
-function route(number: string, to: "Extension" | "VoiceMail") {
+function route(number: string, to: "Extension" | "VoiceMail" | "RingGroup" | "Queue") {
   return { IsPromptEnabled: false, Route: { External: "", Number: number, To: to } };
 }
 
-async function routeDepartment(department: Department, number: string) {
+function daytimeDestination(userId: number) {
+  const group = getDb()
+    .prepare("SELECT kind, number FROM call_groups WHERE user_id = ? AND answers = 1 AND status IN ('created', 'manual') ORDER BY id DESC LIMIT 1")
+    .get(userId) as { kind: string; number: string } | undefined;
+  if (group?.number) return { number: group.number, to: group.kind === "queue" ? "Queue" as const : "RingGroup" as const };
+  const first = getDb().prepare("SELECT number FROM pbx_extensions WHERE user_id = ? AND xapi_id != 0 ORDER BY id LIMIT 1").get(userId) as { number: string } | undefined;
+  if (!first) return null;
+  return { number: first.number, to: "Extension" as const };
+}
+
+function daytimeLabel(to: string, number: string) {
+  if (to === "Queue") return `queue ${number}`;
+  if (to === "RingGroup") return `ring group ${number}`;
+  return number;
+}
+
+async function routeDepartment(department: Department) {
+  const destination = daytimeDestination(department.user_id);
+  if (!department.xapi_id || !destination) return { ok: true, message: "Hours saved." };
   const result = await pbxRequest(`Groups(${department.xapi_id})`, {
     method: "PATCH",
     body: {
       Id: department.xapi_id,
-      OfficeRoute: route(number, "Extension"),
-      BreakRoute: route(number, "VoiceMail"),
-      OutOfOfficeRoute: route(number, "VoiceMail"),
-      HolidaysRoute: route(number, "VoiceMail"),
+      OfficeRoute: route(destination.number, destination.to),
+      BreakRoute: route(destination.number, "VoiceMail"),
+      OutOfOfficeRoute: route(destination.number, "VoiceMail"),
+      HolidaysRoute: route(destination.number, "VoiceMail"),
     },
   });
-  getDb().prepare("UPDATE pbx_departments SET last_message = ? WHERE user_id = ?").run(result.ok ? `Calls go to ${number} during the day and voicemail after hours.` : result.message, department.user_id);
+  const label = daytimeLabel(destination.to, destination.number);
+  getDb().prepare("UPDATE pbx_departments SET last_message = ? WHERE user_id = ?").run(result.ok ? `Calls go to ${label} during the day and voicemail after hours.` : result.message, department.user_id);
   return result;
 }
 
@@ -140,8 +159,7 @@ export async function provisionExtension(id: number) {
     }
     if (!xapiId) throw new Error(created.message);
     database.prepare("UPDATE pbx_extensions SET xapi_id = ?, status = 'created', last_message = ? WHERE id = ?").run(xapiId, "Created on the phone system.", id);
-    const first = database.prepare("SELECT number FROM pbx_extensions WHERE user_id = ? AND xapi_id != 0 ORDER BY id LIMIT 1").get(row.user_id) as { number: string };
-    await routeDepartment(department, first.number);
+    await routeDepartment(department);
     return { ok: true, message: "Created on the phone system." };
   } catch (error) {
     const message = error instanceof Error ? error.message : "The phone system did not create this person.";
@@ -152,9 +170,9 @@ export async function provisionExtension(id: number) {
 
 export async function updateRouting(userId: number) {
   const department = getDb().prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department | undefined;
-  const first = getDb().prepare("SELECT number FROM pbx_extensions WHERE user_id = ? AND xapi_id != 0 ORDER BY id LIMIT 1").get(userId) as { number: string } | undefined;
-  if (!department?.xapi_id || !first) return { ok: true, message: "Hours saved." };
+  const destination = daytimeDestination(userId);
+  if (!department?.xapi_id || !destination) return { ok: true, message: "Hours saved." };
   if (!flagOn("pbx.live_provision")) return { ok: false, message: "Creating people on the phone system is turned off." };
-  const result = await routeDepartment(department, first.number);
+  const result = await routeDepartment(department);
   return { ok: result.ok, message: result.ok ? "Call routing updated." : result.message };
 }
