@@ -1,4 +1,12 @@
+import Link from "next/link";
 import { getDb } from "@/lib/db";
+
+const START = [
+  ["Change the home page", "/admin/content/page.home"],
+  ["Change plans and prices", "/admin/content/plans"],
+  ["Turn features on or off", "/admin/flags"],
+  ["Read messages", "/admin/messages"],
+];
 
 export default function AdminHome() {
   const counts = {
@@ -8,13 +16,17 @@ export default function AdminHome() {
   };
   return (
     <>
-      <span className="eyebrow">ADMIN</span>
-      <h1>Control the site</h1>
-      <p>Copy, navigation, plans, fonts, colors, images, feature switches, and payment gateways are stored here. Changing them does not require a code deploy.</p>
+      <span className="eyebrow">Admin</span>
+      <h1>Welcome</h1>
+      <p>Change the words, prices, colors, and what customers can do. You do not need a developer for any of this.</p>
       <div className="dash-metrics">
         <div><small>People</small><b>{counts.users}</b><span>accounts</span></div>
-        <div><small>Enabled gateways</small><b>{counts.gateways}</b><span>ready for checkout</span></div>
-        <div><small>Messages</small><b>{counts.messages}</b><span>from the contact form</span></div>
+        <div><small>Ways to pay</small><b>{counts.gateways}</b><span>turned on</span></div>
+        <div><small>Messages</small><b>{counts.messages}</b><span>from the site</span></div>
+      </div>
+      <h3 style={{ marginTop: 28 }}>Start here</h3>
+      <div className="admin-start">
+        {START.map(([label, href]) => <Link key={href} href={href}>{label}</Link>)}
       </div>
     </>
   );

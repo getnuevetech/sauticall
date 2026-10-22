@@ -1,0 +1,275 @@
+const WORDS: Record<string, string> = {
+  phones: "Desk phones",
+  numbers: "Numbers",
+  porting: "Number transfer",
+  story: "Story",
+  language: "Any language",
+  control: "Your control",
+  end: "Bottom banner",
+  section: "Section",
+  detail: "Details",
+  estimate: "Estimate",
+  faq: "Questions",
+  vision: "Vision",
+  device: "Sample screen",
+  chat: "Setup assistant",
+  primary: "Main",
+  secondary: "Second",
+  easy: "Setup",
+  explore: "Explore",
+  side: "Beside the form",
+  welcome: "Greeting",
+  login: "Sign-in",
+  register: "Create-account",
+  mfa: "Verification",
+  billing: "Billing",
+  meta: "Search",
+  ai: "AI",
+  cta: "Button",
+};
+
+export function fieldLabel(key: string, docKey = "") {
+  if (docKey === "flags") {
+    if (key === "key") return "Which feature";
+    if (key === "label") return "Name of this switch";
+    if (key === "enabled") return "Turned on";
+    if (key === "description") return "What this does";
+  }
+  if (LABELS[key]) return LABELS[key];
+  const suffixes: { end: string; text: (head: string) => string }[] = [
+    { end: "TitleEm", text: (head) => join(head, "heading, italic words") },
+    { end: "Eyebrow", text: (head) => join(head, "small label") },
+    { end: "Placeholder", text: (head) => (head ? `Hint inside ${head.toLowerCase()}` : "Hint inside the box") },
+    { end: "Href", text: (head) => join(head, "goes to") },
+    { end: "Cta", text: (head) => join(head, "button") },
+    { end: "Title", text: (head) => join(head, "heading") },
+    { end: "Body", text: (head) => join(head, "text") },
+    { end: "Points", text: (head) => join(head, "bullet points") },
+    { end: "Label", text: (head) => head || "Name" },
+  ];
+  for (const suffix of suffixes) {
+    if (key.endsWith(suffix.end) && key.length > suffix.end.length) return suffix.text(words(key.slice(0, -suffix.end.length)));
+  }
+  return words(key);
+}
+
+function join(head: string, tail: string) {
+  if (!head) return tail.charAt(0).toUpperCase() + tail.slice(1);
+  return `${head} ${tail}`;
+}
+
+function words(key: string) {
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => WORDS[word.toLowerCase()] || word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function plain(key: string) {
+  return words(key);
+}
+
+const LABELS: Record<string, string> = {
+  metaTitle: "Title in the browser tab",
+  metaDescription: "Short description for search",
+  eyebrow: "Small label above the heading",
+  title: "Heading",
+  titleLead: "Main headline, first words",
+  titleAccent: "Main headline, highlighted words",
+  titleEm: "Heading, italic words",
+  lead: "Opening paragraph",
+  body: "Text",
+  label: "Name on the site",
+  name: "Name",
+  href: "Goes to this page",
+  location: "Show this link in",
+  group: "Group",
+  blurb: "Footer introduction",
+  mini: "Short line under the introduction",
+  legalLeft: "Footer note on the left",
+  legalRight: "Footer note on the right",
+  groups: "Link groups",
+  links: "Links",
+  icon: "Icon",
+  tag: "Small label",
+  desc: "Short description",
+  short: "Short name",
+  cardColor: "Card color",
+  price: "Monthly price",
+  priceLabel: "Words shown instead of a price",
+  custom: "No public price",
+  base: "This is the base plan",
+  multilingual: "Understands callers in any language",
+  units: "Who it is for",
+  features: "What is included",
+  note: "Small note",
+  popular: "Mark as the popular plan",
+  ctaLabel: "Button text",
+  ctaHref: "Button goes to",
+  q: "Question",
+  a: "Answer",
+  index: "Number",
+  cta: "Link text",
+  key: "Switch",
+  enabled: "On",
+  description: "What this does",
+  fontFamily: "Font",
+  fontStylesheetUrl: "Web address of the font file",
+  logoUrl: "Logo image address",
+  primary: "Main color",
+  primaryHover: "Main color when the pointer is over it",
+  ink: "Text color",
+  muted: "Soft text color",
+  canvas: "Page background",
+  coral: "Warm highlight",
+  ctaBand: "Bottom banner color",
+  ctaButton: "Bottom banner button color",
+  footer: "Footer background",
+  headerTalk: "Top link text",
+  headerCta: "Top button text",
+  faces: "Small portrait initials",
+  faceCaption: "Words beside the portraits",
+  phoneBrand: "Name on the sample phone",
+  phoneTitle: "Sample phone heading",
+  phoneSub: "Sample phone subheading",
+  phoneBadge1: "First phone badge",
+  phoneBadge2: "Second phone badge",
+  chipAnswered: "First phone chip",
+  chipRoute: "Second phone chip",
+  chipAppointment: "Third phone chip",
+  visualLabel: "Caption under the phone",
+  checks: "Short promises under the banner",
+  ribbon: "Popular-plan badge",
+  disclaimer: "Small print",
+  points: "Bullet points",
+  cards: "Cards",
+  steps: "Steps",
+  values: "Values",
+  services: "Choices in the form",
+  thanks: "Message after the form is sent",
+  closed: "Message when this is turned off",
+  n: "Step number",
+  chatTitle: "Setup assistant title",
+  chatSub: "Setup assistant subtitle",
+  chatStatus: "Setup assistant status",
+  chatHello: "Assistant greeting",
+  chatSampleUser: "Sample customer message",
+  chatProposal: "Sample recommendation heading",
+  chatPoints: "Sample recommendation points",
+  chatFoot: "Note under the sample recommendation",
+  chatPlaceholder: "Hint in the sample box",
+  chatResultTitle: "Sample result heading",
+  chatResultNote: "Sample result note",
+  aiAddonPrice: "Sample price for adding AI",
+  estimatePlanLabel: "Plan choice label",
+  estimateAiLabel: "AI add-on label",
+  estimateTotalLabel: "Total label",
+  estimateCta: "Estimate button",
+  primaryCta: "Main button",
+  secondaryCta: "Second button",
+  endCta: "Bottom button",
+  easyCta: "Setup button",
+  exploreLabel: "Link text on each service",
+  formTitle: "Form heading",
+  submitLabel: "Submit button",
+  messageLabel: "Message field",
+  messagePlaceholder: "Hint in the message field",
+  sideTitle: "Heading beside the form",
+  sideBody: "Text beside the form",
+  welcomeTitle: "Greeting",
+  welcomeBody: "Text under the greeting",
+  emptyServices: "Message when nothing is active yet",
+  loginTitle: "Sign-in heading",
+  loginBody: "Sign-in text",
+  loginSubmit: "Sign-in button",
+  loginClosed: "Message when sign-in is off",
+  registerTitle: "Create-account heading",
+  registerBody: "Create-account text",
+  registerSubmit: "Create-account button",
+  registerClosed: "Message when new accounts are off",
+  mfaTitle: "Verification heading",
+  mfaBody: "Verification text",
+  mfaOff: "Message when verification is off",
+  mfaOnHint: "Note when verification is required",
+  billingTitle: "Billing heading",
+  billingBody: "Billing text",
+  billingEmpty: "Message when no way to pay is on",
+  billingClosed: "Message when checkout is off",
+  numbersTitle: "Numbers heading",
+  numbersBody: "Numbers text",
+  numbersClosed: "Message when number requests are off",
+  portingTitle: "Transfer heading",
+  portingBody: "Transfer text",
+  portingClosed: "Message when transfers are off",
+  numbersSearchLabel: "Search button",
+  numbersCountryLabel: "Country",
+  numbersStateLabel: "State or province",
+  numbersRateLabel: "City or rate center",
+  numbersRatePlaceholder: "Example city",
+  numbersDetailLabel: "Or describe the number",
+  numbersDetailPlaceholder: "Example of what to type",
+  numbersRequest: "Request button",
+  numbersSaved: "Message after a request is saved",
+  numbersLiveOff: "Message when live search is off",
+  numbersEmpty: "Message when no numbers are found",
+  portingSaved: "Message after a transfer is saved",
+  portNumberLabel: "Number to transfer",
+  portCountryLabel: "Country",
+  portFirstLabel: "First name on the bill",
+  portLastLabel: "Last name on the bill",
+  portBusinessLabel: "Business name on the bill",
+  portAddressLabel: "Service address",
+  portCityLabel: "City",
+  portStateLabel: "State or province",
+  portZipLabel: "ZIP or postal code",
+  portCarrierLabel: "Current phone company",
+  portAccountLabel: "Account number with that company",
+  portPinLabel: "PIN, if they use one",
+  portSubmit: "Save transfer button",
+  languageBadge: "Any-language badge",
+  languageException: "Which plan does not include any language",
+  deviceHeader: "Sample screen title",
+  deviceReady: "Sample screen status",
+  deviceExt: "Sample extension",
+  deviceState: "Sample connection word",
+};
+
+export const requestStatuses = [
+  { value: "requested", label: "Waiting for us" },
+  { value: "submitted", label: "Sent to the phone company" },
+  { value: "ordered", label: "Number ordered" },
+  { value: "completed", label: "Done" },
+  { value: "exception", label: "Needs a person" },
+  { value: "cancelled", label: "Cancelled" },
+];
+
+export function requestStatusLabel(value: string) {
+  return requestStatuses.find((status) => status.value === value)?.label || value;
+}
+
+export const documentScreens: Record<string, { title: string; intro: string }> = {
+  "page.home": { title: "Home page", intro: "Edit the words on the first page people see." },
+  "page.solutions": { title: "Solutions page", intro: "Edit the services page." },
+  "page.ai": { title: "AI receptionist page", intro: "Edit the page about the AI receptionist." },
+  "page.how": { title: "How it works", intro: "Edit the page that explains setup." },
+  "page.pricing": { title: "Pricing page", intro: "Edit the words around the plans. Plan prices are under Plans." },
+  "page.about": { title: "About page", intro: "Edit the story of SautiCall." },
+  "page.contact": { title: "Contact page", intro: "Edit the contact page and its form." },
+  "page.custom": { title: "Custom plan page", intro: "Edit the form businesses use when they need something specific." },
+  "page.account": { title: "Account pages", intro: "Edit the words inside a signed-in account." },
+  nav: { title: "Menu", intro: "Choose the links people see at the top, on a phone, and inside an account." },
+  footer: { title: "Footer", intro: "Edit the links and notes at the bottom of every page." },
+  services: { title: "Services", intro: "Edit the service cards." },
+  plans: { title: "Plans", intro: "Edit prices, what is included, and which plan is the base plan." },
+  faqs: { title: "Questions", intro: "Edit the questions and answers." },
+  personas: { title: "Who it is for", intro: "Edit the four short stories on the home page." },
+  theme: { title: "Colors and font", intro: "Leave these as they are to keep the approved look. Change a color only when you mean to." },
+  flags: { title: "What customers can do", intro: "Turn features on or off. The name of each switch is chosen from a list." },
+};
+
+export function screenFor(key: string) {
+  return documentScreens[key] || { title: plain(key.replace(/^page\./, "")), intro: "Edit this part of the site, then save." };
+}

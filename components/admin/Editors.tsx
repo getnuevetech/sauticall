@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { saveDocument, saveGateway } from "@/app/admin/actions";
 import { choicesFor, currencyChoices, providerChoices, withCurrent } from "@/lib/admin-choices";
+import { fieldLabel } from "@/lib/admin-labels";
 
 type Json = null | string | number | boolean | Json[] | { [key: string]: Json };
 
@@ -18,11 +19,37 @@ function setPath(root: Json, path: (string | number)[], next: Json): Json {
   return next;
 }
 
+function itemTitle(value: Json, index: number) {
+  if (typeof value === "string" && value.trim()) return value.length > 42 ? `${value.slice(0, 42)}…` : value;
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as { [key: string]: Json };
+    for (const key of ["label", "name", "title", "q"]) {
+      if (typeof record[key] === "string" && record[key]) return String(record[key]);
+    }
+  }
+  return `Item ${index + 1}`;
+}
+
+function blankLike(sample: Json): Json {
+  if (Array.isArray(sample)) return [];
+  if (sample && typeof sample === "object") {
+    const next: { [key: string]: Json } = {};
+    for (const [key, child] of Object.entries(sample)) next[key] = blankLike(child);
+    return next;
+  }
+  if (typeof sample === "number") return 0;
+  if (typeof sample === "boolean") return false;
+  return "";
+}
+
 function Field({ docKey, value, path, onChange }: { docKey: string; value: Json; path: (string | number)[]; onChange: (path: (string | number)[], next: Json) => void }) {
-  const label = path.length ? String(path[path.length - 1]) : "value";
+  const last = path.length ? path[path.length - 1] : "";
+  const indexed = typeof last === "number";
+  const raw = indexed ? "" : String(last);
+  const label = raw ? fieldLabel(raw, docKey) : "";
   if (typeof value === "string" || typeof value === "number") {
     const text = String(value);
-    const options = typeof value === "string" ? choicesFor(docKey, label) : null;
+    const options = typeof value === "string" ? choicesFor(docKey, raw) : null;
     if (options) {
       const list = withCurrent(options, text);
       return (
@@ -64,26 +91,31 @@ function Field({ docKey, value, path, onChange }: { docKey: string; value: Json;
   if (Array.isArray(value)) {
     return (
       <fieldset>
-        <legend>{label}</legend>
-        {value.map((item, index) => <Field key={`${label}-${index}`} docKey={docKey} value={item} path={[...path, index]} onChange={onChange} />)}
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={() => {
-            const blank = value[0] && typeof value[0] === "object" ? JSON.parse(JSON.stringify(value[0])) : "";
-            onChange(path, [...value, blank]);
-          }}
-        >
-          Add item
+        {label ? <legend>{label}</legend> : null}
+        {value.map((item, index) => (
+          <fieldset key={`${raw}-${index}`}>
+            <legend>{itemTitle(item, index)}</legend>
+            <Field docKey={docKey} value={item} path={[...path, index]} onChange={onChange} />
+            {value.length > 1 ? (
+              <button type="button" className="btn btn-secondary" onClick={() => onChange(path, value.filter((_, itemIndex) => itemIndex !== index))}>
+                Remove
+              </button>
+            ) : null}
+          </fieldset>
+        ))}
+        <button type="button" className="btn btn-secondary" onClick={() => onChange(path, [...value, value.length ? blankLike(value[0]) : ""])}>
+          Add another
         </button>
       </fieldset>
     );
   }
   if (value && typeof value === "object") {
+    const children = Object.entries(value).map(([key, child]) => <Field key={key} docKey={docKey} value={child as Json} path={[...path, key]} onChange={onChange} />);
+    if (indexed || path.length === 0) return <>{children}</>;
     return (
       <fieldset>
-        {path.length ? <legend>{label}</legend> : null}
-        {Object.entries(value).map(([key, child]) => <Field key={key} docKey={docKey} value={child as Json} path={[...path, key]} onChange={onChange} />)}
+        <legend>{label}</legend>
+        {children}
       </fieldset>
     );
   }
@@ -109,7 +141,7 @@ export function DocumentEditor({ docKey, initial }: { docKey: string; initial: u
       }}
     >
       <Field docKey={docKey} value={value} path={[]} onChange={(path, next) => setValue((current) => setPath(current, path, next))} />
-      <button className="btn btn-primary" type="submit">Save</button>
+      <button className="btn btn-primary" type="submit">Save changes</button>
       {saved ? <div className="form-feedback">Saved.</div> : null}
       {error ? <div className="form-feedback">{error}</div> : null}
     </form>
@@ -127,28 +159,28 @@ export function GatewayForm({ gateway }: { gateway?: { id: number; name: string;
       }}
     >
       {gateway ? <input type="hidden" name="id" value={gateway.id} /> : null}
-      <label>Name <input name="name" defaultValue={gateway?.name || ""} required /></label>
-      <label>Provider
+      <label>Name for your team <input name="name" defaultValue={gateway?.name || ""} required /></label>
+      <label>Payment company
         <select name="provider_key" defaultValue={gateway?.provider_key || "stripe"} required>
           {withCurrent(providerChoices, gateway?.provider_key || "").map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       </label>
-      <label>Public label <input name="public_label" defaultValue={gateway?.public_label || ""} required /></label>
-      <label>Priority <input name="priority" type="number" defaultValue={gateway?.priority ?? 100} /></label>
-      <label>Currency
+      <label>Name customers see <input name="public_label" defaultValue={gateway?.public_label || ""} required /></label>
+      <label>Order on the page, 1 shows first <input name="priority" type="number" defaultValue={gateway?.priority ?? 100} /></label>
+      <label>Money
         <select name="currencies" defaultValue={gateway?.currencies || "USD"}>
           {withCurrent(currencyChoices, gateway?.currencies || "USD").map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       </label>
-      <label>Secret reference <input name="secret_ref" defaultValue={gateway?.secret_ref || ""} placeholder="vault key, not the secret itself" /></label>
-      <label>Mode
+      <label>Nickname for the secret <input name="secret_ref" defaultValue={gateway?.secret_ref || ""} placeholder="A name only. Do not paste the secret itself." /></label>
+      <label>Payments
         <select name="mode" defaultValue={gateway?.mode || "test"}>
-          <option value="test">test</option>
-          <option value="live">live</option>
+          <option value="test">Practice only</option>
+          <option value="live">Real payments</option>
         </select>
       </label>
-      <label className="check-option"><input type="checkbox" name="enabled" defaultChecked={gateway ? gateway.enabled === 1 : true} /> Enabled</label>
-      <button className="btn btn-primary" type="submit">{gateway ? "Update gateway" : "Add gateway"}</button>
+      <label className="check-option"><input type="checkbox" name="enabled" defaultChecked={gateway ? gateway.enabled === 1 : true} /> Customers can use this</label>
+      <button className="btn btn-primary" type="submit">{gateway ? "Save gateway" : "Add gateway"}</button>
       {error ? <div className="form-feedback">{error}</div> : null}
     </form>
   );

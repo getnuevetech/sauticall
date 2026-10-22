@@ -33,9 +33,27 @@ body{background:#fff}
 @media(max-width:1100px){.price-grid,.persona-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:690px){.price-grid,.persona-grid{grid-template-columns:1fr}}
 .admin-page{padding:28px 0 72px}
-.admin-shell{width:calc(100% - 48px);margin:0 auto;display:grid;grid-template-columns:260px minmax(0,1fr);gap:28px;align-items:start}
+.admin-shell{width:calc(100% - 48px);margin:0 auto;display:grid;grid-template-columns:280px minmax(0,1fr);gap:28px;align-items:start}
 .admin-shell nav{position:sticky;top:92px;max-height:calc(100vh - 116px);overflow:auto}
+.admin-nav-group{margin:0 0 18px}
+.admin-nav-group h4{margin:0 0 4px;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:#4852b6}
+.admin-nav-group a{display:block;padding:6px 0;font-size:.92rem;font-weight:650;line-height:1.35;color:#3a4354}
+.admin-nav-group a:hover,.admin-nav-group a[data-current="true"]{color:#334ad0}
 .admin-main{min-width:0;width:100%}
+.admin-main h1{font-size:2.2rem;letter-spacing:-.04em}
+.admin-main h2{font-size:1.85rem;letter-spacing:-.04em}
+.admin-main h3{font-size:1.15rem}
 .admin-main .contact-form,.admin-main .feature-card{width:100%;max-width:none}
-.admin-main fieldset{min-width:0;width:100%;margin:0;border:1px solid #e1e7f2;border-radius:16px;padding:16px 18px}
+.admin-main .check-option{display:flex;align-items:center;gap:8px}
+.admin-main .check-option input{width:auto}
+.admin-main .dash-metrics>div{background:#f7f9fc;border-color:#e1e7f2;color:#202b42}
+.admin-main .dash-metrics small,.admin-main .dash-metrics span{color:#5c6271}
+.admin-main fieldset{min-width:0;width:100%;margin:0;border:1px solid #e1e7f2;border-radius:16px;padding:16px 18px;display:grid;gap:14px;background:#fff}
+.admin-main fieldset>legend{font-weight:750;padding:0 6px}
+.admin-main fieldset fieldset{background:#f8fafc}
+.admin-more{border:1px solid #e1e7f2;border-radius:14px;padding:12px 14px;background:#f8fafc}
+.admin-more summary{cursor:pointer;font-weight:750}
+.admin-more-body{display:grid;gap:14px;padding-top:12px}
+.admin-start{display:grid;gap:8px;max-width:420px}
+.admin-start a{font-weight:700;color:#334ad0}
 @media(max-width:900px){.admin-shell{width:calc(100% - 32px);grid-template-columns:1fr}.admin-shell nav{position:static;max-height:none}}

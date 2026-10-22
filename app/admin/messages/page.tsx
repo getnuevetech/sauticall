@@ -13,13 +13,14 @@ export default function MessagesPage() {
   }[];
   return (
     <>
-      <span className="eyebrow">INBOX</span>
-      <h2>Contact and custom-plan requests</h2>
+      <span className="eyebrow">Inbox</span>
+      <h2>Messages</h2>
+      <p>People who wrote in from the contact page or the custom-plan form.</p>
       {rows.length === 0 ? <p>No messages yet.</p> : null}
       {rows.map((row) => (
         <article key={row.created_at + row.email + row.kind} className="feature-card" style={{ marginBottom: 12 }}>
           <h3>{row.name}</h3>
-          <p>{row.kind === "custom_plan" ? "Custom plan request" : "Contact"} · {row.email}{row.phone ? ` · ${row.phone}` : ""}{row.company ? ` · ${row.company}` : ""}</p>
+          <p>{row.kind === "custom_plan" ? "Custom plan" : "Contact"} · {row.email}{row.phone ? ` · ${row.phone}` : ""}{row.company ? ` · ${row.company}` : ""}</p>
           <p>{row.service}</p>
           <p>{row.body}</p>
         </article>

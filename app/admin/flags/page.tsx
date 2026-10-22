@@ -1,12 +1,14 @@
 import { DocumentEditor } from "@/components/admin/Editors";
+import { screenFor } from "@/lib/admin-labels";
 import { readDoc } from "@/lib/db";
 
 export default function FlagsPage() {
+  const screen = screenFor("flags");
   return (
     <>
-      <span className="eyebrow">SWITCHES</span>
-      <h2>Enable or disable actions</h2>
-      <p>Turn a switch on or off. The switch name is chosen from the list the site already understands, so a mistyped name cannot turn the wrong thing off.</p>
+      <span className="eyebrow">Settings</span>
+      <h2>{screen.title}</h2>
+      <p>{screen.intro} Buying numbers and sending transfers spend money at the phone company, so those stay off until you mean to use them.</p>
       <DocumentEditor docKey="flags" initial={readDoc("flags")} />
     </>
   );

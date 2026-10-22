@@ -1,4 +1,5 @@
 import { orderSavedNumber, refreshPortStatus, setRequestStatus } from "../actions";
+import { requestStatusLabel, requestStatuses } from "@/lib/admin-labels";
 import { flagOn, getDb } from "@/lib/db";
 
 type Row = { id: number; email: string; kind: string; payload: string; status: string; provider_ref: string; staff_note: string; created_at: string };
@@ -12,8 +13,9 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
   const ordering = flagOn("numbers.live_order");
   return (
     <>
-      <span className="eyebrow">REQUESTS</span>
-      <h2>Numbers and transfers</h2>
+      <span className="eyebrow">Inbox</span>
+      <h2>Number and transfer requests</h2>
+      <p>These are requests from customers. Buying a number only happens when you press the button, and only if buying is turned on.</p>
       {params.error ? <p className="form-feedback">{params.error}</p> : null}
       {rows.length === 0 ? <p>No requests yet.</p> : null}
       {rows.map((row) => {
@@ -21,28 +23,28 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
         return (
           <article key={row.id} className="feature-card" style={{ marginBottom: 16 }}>
             <h3>{row.kind === "number" ? "Number" : "Transfer"} · {payload.did || payload.numbers || payload.detail}</h3>
-            <p>{row.email} · {row.status}{row.provider_ref ? ` · ${row.provider_ref}` : ""}</p>
-            <p>{row.staff_note}</p>
+            <p>{row.email} · {requestStatusLabel(row.status)}{row.provider_ref ? ` · ${row.provider_ref}` : ""}</p>
+            {row.staff_note ? <p>{row.staff_note}</p> : null}
             <form action={setRequestStatus} className="form-grid">
               <input type="hidden" name="id" value={row.id} />
               <label>Status
                 <select name="status" defaultValue={row.status}>
-                  {["requested", "submitted", "ordered", "completed", "exception", "cancelled"].map((status) => <option key={status}>{status}</option>)}
+                  {requestStatuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
                 </select>
               </label>
-              <label>Note <input name="staff_note" defaultValue={row.staff_note} /></label>
-              <button className="btn btn-secondary" type="submit">Update</button>
+              <label>Note for the team <input name="staff_note" defaultValue={row.staff_note} /></label>
+              <button className="btn btn-secondary" type="submit">Save</button>
             </form>
             {row.kind === "number" && payload.did ? (
               <form action={orderSavedNumber}>
                 <input type="hidden" name="id" value={row.id} />
-                <button className="btn btn-primary" type="submit" disabled={!ordering}>{ordering ? "Order from VoIP.ms" : "Live ordering is off"}</button>
+                <button className="btn btn-primary" type="submit" disabled={!ordering}>{ordering ? "Buy this number" : "Buying numbers is turned off"}</button>
               </form>
             ) : null}
             {row.kind === "port" && row.provider_ref ? (
               <form action={refreshPortStatus}>
                 <input type="hidden" name="id" value={row.id} />
-                <button className="btn btn-secondary" type="submit">Refresh carrier status</button>
+                <button className="btn btn-secondary" type="submit">Check transfer progress</button>
               </form>
             ) : null}
           </article>

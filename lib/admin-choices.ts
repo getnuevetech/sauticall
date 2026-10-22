@@ -25,13 +25,36 @@ export const pageChoices: Choice[] = [
 ];
 
 export const locationChoices: Choice[] = [
-  { value: "header", label: "Header" },
-  { value: "mobile", label: "Mobile menu" },
-  { value: "footer", label: "Footer" },
-  { value: "account", label: "Account menu" },
+  { value: "header", label: "Top of the page" },
+  { value: "mobile", label: "Phone menu" },
+  { value: "footer", label: "Bottom of the page" },
+  { value: "account", label: "Inside an account" },
 ];
 
-export const iconChoices: Choice[] = iconNames.map((name) => ({ value: name, label: name }));
+const iconLabels: Record<string, string> = {
+  phone: "Phone",
+  mic: "Microphone",
+  bot: "Assistant",
+  arrow: "Arrow",
+  check: "Check mark",
+  checkcircle: "Check in a circle",
+  calendar: "Calendar",
+  message: "Message",
+  headset: "Headset",
+  globe: "Globe",
+  settings: "Settings",
+  users: "People",
+  smartphone: "Mobile phone",
+  arrowdown: "Arrow down",
+  zap: "Lightning",
+  shield: "Shield",
+  server: "Server",
+  spark: "Spark",
+  menu: "Menu",
+  close: "Close",
+};
+
+export const iconChoices: Choice[] = iconNames.map((name) => ({ value: name, label: iconLabels[name] || name }));
 
 export const cardColorChoices: Choice[] = [
   { value: "#eef3fa", label: "Soft blue" },
@@ -40,10 +63,10 @@ export const cardColorChoices: Choice[] = [
 ];
 
 export const currencyChoices: Choice[] = [
-  { value: "USD", label: "USD" },
-  { value: "CAD", label: "CAD" },
-  { value: "EUR", label: "EUR" },
-  { value: "GBP", label: "GBP" },
+  { value: "USD", label: "US dollars" },
+  { value: "CAD", label: "Canadian dollars" },
+  { value: "EUR", label: "Euros" },
+  { value: "GBP", label: "British pounds" },
 ];
 
 export const providerChoices: Choice[] = [

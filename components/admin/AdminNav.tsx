@@ -1,36 +1,65 @@
-import Link from "next/link";
+"use client";
 
-const LINKS = [
-  ["Overview", "/admin"],
-  ["Home copy", "/admin/content/page.home"],
-  ["Solutions", "/admin/content/page.solutions"],
-  ["AI page", "/admin/content/page.ai"],
-  ["How it works", "/admin/content/page.how"],
-  ["Pricing copy", "/admin/content/page.pricing"],
-  ["About", "/admin/content/page.about"],
-  ["Contact", "/admin/content/page.contact"],
-  ["Custom plan", "/admin/content/page.custom"],
-  ["Account copy", "/admin/content/page.account"],
-  ["Navigation", "/admin/content/nav"],
-  ["Footer", "/admin/content/footer"],
-  ["Services", "/admin/content/services"],
-  ["Plans", "/admin/content/plans"],
-  ["FAQs", "/admin/content/faqs"],
-  ["Personas", "/admin/content/personas"],
-  ["Theme and fonts", "/admin/theme"],
-  ["Feature switches", "/admin/flags"],
-  ["Payment gateways", "/admin/gateways"],
-  ["Connections", "/admin/connections"],
-  ["Number requests", "/admin/requests"],
-  ["Images", "/admin/media"],
-  ["Messages", "/admin/messages"],
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+const GROUPS = [
+  {
+    title: "Website",
+    links: [
+      ["Home", "/admin/content/page.home"],
+      ["Solutions", "/admin/content/page.solutions"],
+      ["AI receptionist", "/admin/content/page.ai"],
+      ["How it works", "/admin/content/page.how"],
+      ["Pricing", "/admin/content/page.pricing"],
+      ["About", "/admin/content/page.about"],
+      ["Contact", "/admin/content/page.contact"],
+      ["Custom plan", "/admin/content/page.custom"],
+      ["Menu", "/admin/content/nav"],
+      ["Footer", "/admin/content/footer"],
+      ["Services", "/admin/content/services"],
+      ["Plans", "/admin/content/plans"],
+      ["Questions", "/admin/content/faqs"],
+      ["Who it's for", "/admin/content/personas"],
+    ],
+  },
+  {
+    title: "Account",
+    links: [["Account wording", "/admin/content/page.account"]],
+  },
+  {
+    title: "Settings",
+    links: [
+      ["Colors and font", "/admin/theme"],
+      ["What customers can do", "/admin/flags"],
+      ["Payments", "/admin/gateways"],
+      ["Phone connections", "/admin/connections"],
+    ],
+  },
+  {
+    title: "Inbox",
+    links: [
+      ["Messages", "/admin/messages"],
+      ["Number and transfer requests", "/admin/requests"],
+      ["Images", "/admin/media"],
+    ],
+  },
 ];
 
 export function AdminNav() {
+  const path = usePathname();
   return (
-    <nav className="faq-list" aria-label="Admin">
-      {LINKS.map(([label, href]) => (
-        <Link key={href} href={href} style={{ display: "block", padding: "8px 0" }}>{label}</Link>
+    <nav aria-label="Admin">
+      <div className="admin-nav-group">
+        <Link href="/admin" data-current={path === "/admin" ? "true" : undefined}>Overview</Link>
+      </div>
+      {GROUPS.map((group) => (
+        <div key={group.title} className="admin-nav-group">
+          <h4>{group.title}</h4>
+          {group.links.map(([label, href]) => (
+            <Link key={href} href={href} data-current={path === href ? "true" : undefined}>{label}</Link>
+          ))}
+        </div>
       ))}
     </nav>
   );
