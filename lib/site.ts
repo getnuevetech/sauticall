@@ -24,6 +24,7 @@ export function loadSite() {
     pricing: readDoc<Record<string, unknown>>("page.pricing"),
     about: readDoc<Record<string, unknown>>("page.about"),
     contact: readDoc<Record<string, unknown>>("page.contact"),
+    custom: readDoc<Record<string, unknown>>("page.custom"),
     account: readDoc<Record<string, unknown>>("page.account"),
   };
 }

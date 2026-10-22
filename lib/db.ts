@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
 import { hashPassword } from "./auth";
+import { upgradeContent } from "./content-upgrade";
 import { dataDir } from "./paths";
 import {
   defaultFaqs,
@@ -102,6 +103,11 @@ function migrate(database: Database.Database) {
       created_at TEXT NOT NULL
     );
   `);
+  const cols = database.prepare("PRAGMA table_info(messages)").all() as { name: string }[];
+  const names = new Set(cols.map((column) => column.name));
+  if (!names.has("phone")) database.exec("ALTER TABLE messages ADD COLUMN phone TEXT NOT NULL DEFAULT ''");
+  if (!names.has("company")) database.exec("ALTER TABLE messages ADD COLUMN company TEXT NOT NULL DEFAULT ''");
+  if (!names.has("kind")) database.exec("ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'contact'");
 }
 
 function put(database: Database.Database, key: string, value: unknown) {
@@ -123,6 +129,7 @@ function seed(database: Database.Database) {
   put(database, "faqs", defaultFaqs);
   put(database, "personas", defaultPersonas);
   for (const [key, value] of Object.entries(defaultPages)) put(database, `page.${key}`, value);
+  upgradeContent(database);
 
   const admin = database.prepare("SELECT id FROM users WHERE role = 'super_admin' LIMIT 1").get();
   if (!admin) {

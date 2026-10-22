@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   const service = String(body.service || "").trim();
   const message = String(body.message || "").trim();
   if (!name || !email || !message) return NextResponse.json({ message: "Name, email, and a note are required." }, { status: 400 });
-  getDb().prepare("INSERT INTO messages (name, email, service, body, created_at) VALUES (?, ?, ?, ?, ?)").run(name, email, service, message, new Date().toISOString());
+  getDb().prepare("INSERT INTO messages (name, email, service, body, phone, company, kind, created_at) VALUES (?, ?, ?, ?, '', '', 'contact', ?)").run(name, email, service, message, new Date().toISOString());
   const page = readDoc<Record<string, string>>("page.contact");
   return NextResponse.json({ message: (page.thanks || "Thanks, {name}.").replace("{name}", name) });
 }

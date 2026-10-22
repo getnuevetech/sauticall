@@ -90,7 +90,7 @@ export function Estimator({
   cta,
   href,
 }: {
-  plans: { name: string; price: number }[];
+  plans: { name: string; price: number; custom?: boolean }[];
   aiPrice: number;
   aiLabel: string;
   planLabel: string;
@@ -98,14 +98,15 @@ export function Estimator({
   cta: string;
   href: string;
 }) {
-  const [plan, setPlan] = useState(String(plans[1]?.price ?? plans[0]?.price ?? 0));
+  const priced = plans.filter((item) => !item.custom);
+  const [plan, setPlan] = useState(String(priced[1]?.price ?? priced[0]?.price ?? 0));
   const [ai, setAi] = useState(false);
   const total = Number(plan) + (ai ? aiPrice : 0);
   return (
     <form id="estimate-form">
       <label htmlFor="base-plan">{planLabel}</label>
       <select id="base-plan" value={plan} onChange={(event) => setPlan(event.target.value)}>
-        {plans.map((item) => (
+        {priced.map((item) => (
           <option key={item.name} value={item.price}>{item.name} · ${item.price}</option>
         ))}
       </select>
@@ -160,6 +161,57 @@ export function ContactForm({
         <select name="service">{copy.services.map((service) => <option key={service}>{service}</option>)}</select>
       </label>
       <label>{copy.messageLabel} <textarea required name="message" rows={5} placeholder={copy.messagePlaceholder} /></label>
+      <button type="submit" className="btn btn-primary">{copy.submitLabel} <Icon name="arrow" size={17} /></button>
+      <div className="form-feedback" role="status" aria-live="polite">{feedback}</div>
+    </form>
+  );
+}
+
+export function CustomRequestForm({
+  copy,
+  enabled,
+}: {
+  enabled: boolean;
+  copy: {
+    formTitle: string;
+    nameLabel: string;
+    namePlaceholder: string;
+    companyLabel: string;
+    companyPlaceholder: string;
+    emailLabel: string;
+    emailPlaceholder: string;
+    phoneLabel: string;
+    phonePlaceholder: string;
+    needsLabel: string;
+    needsPlaceholder: string;
+    submitLabel: string;
+    thanks: string;
+    closed: string;
+  };
+}) {
+  const [feedback, setFeedback] = useState("");
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form).entries());
+    const response = await fetch("/api/custom-request", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(data) });
+    const payload = (await response.json()) as { message?: string };
+    setFeedback(payload.message || copy.thanks.replace("{name}", String(data.name || "")));
+    if (response.ok) form.reset();
+  }
+  if (!enabled) return <div className="contact-form"><p>{copy.closed}</p></div>;
+  return (
+    <form className="contact-form" onSubmit={onSubmit}>
+      <h3>{copy.formTitle}</h3>
+      <div className="form-grid">
+        <label>{copy.nameLabel} <input required name="name" placeholder={copy.namePlaceholder} /></label>
+        <label>{copy.companyLabel} <input required name="company" placeholder={copy.companyPlaceholder} /></label>
+      </div>
+      <div className="form-grid">
+        <label>{copy.emailLabel} <input required name="email" type="email" placeholder={copy.emailPlaceholder} /></label>
+        <label>{copy.phoneLabel} <input required name="phone" type="tel" placeholder={copy.phonePlaceholder} /></label>
+      </div>
+      <label>{copy.needsLabel} <textarea required name="needs" rows={6} placeholder={copy.needsPlaceholder} /></label>
       <button type="submit" className="btn btn-primary">{copy.submitLabel} <Icon name="arrow" size={17} /></button>
       <div className="form-feedback" role="status" aria-live="polite">{feedback}</div>
     </form>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Icon } from "../Icon";
-import { ChatDemo, ContactForm, Estimator } from "./Interactive";
+import { ChatDemo, ContactForm, CustomRequestForm, Estimator } from "./Interactive";
 import { EndCta, PhoneArt } from "./Chrome";
 import type { Faq, Persona, Plan, Service } from "@/lib/types";
 
@@ -17,15 +17,18 @@ function list(page: Record<string, unknown>, key: string) {
   return Array.isArray(value) ? value : [];
 }
 
-function PricingCards({ plans, ribbon }: { plans: Plan[]; ribbon: string }) {
+function PricingCards({ plans, ribbon, languageBadge }: { plans: Plan[]; ribbon: string; languageBadge: string }) {
   return (
     <div className="price-grid">
       {plans.map((plan) => (
-        <article key={plan.name} className={`price-card ${plan.popular ? "popular" : ""}`}>
+        <article key={plan.name} className={`price-card ${plan.popular ? "popular" : ""} ${plan.custom ? "custom" : ""}`}>
           {plan.popular ? <div className="price-ribbon">{ribbon}</div> : null}
           <div className="plan-name">{plan.name}</div>
           <p>{plan.desc}</p>
-          <div className="price-line"><sup>$</sup><strong>{plan.price}</strong><span>/month*</span></div>
+          <div className="price-line">
+            {plan.custom ? <strong>{plan.priceLabel || "Custom"}</strong> : (<><sup>$</sup><strong>{plan.price}</strong><span>/month*</span></>)}
+          </div>
+          {plan.multilingual && languageBadge ? <div className="lang-pill">{languageBadge}</div> : null}
           <div className="unit-line"><Icon name="users" size={16} /> {plan.units}</div>
           <div className="plan-rule" />
           <ul>
@@ -36,6 +39,22 @@ function PricingCards({ plans, ribbon }: { plans: Plan[]; ribbon: string }) {
         </article>
       ))}
     </div>
+  );
+}
+
+function LanguageBand({ page }: { page: Record<string, unknown> }) {
+  if (!str(page, "languageTitle")) return null;
+  return (
+    <section className="section detail-band">
+      <div className="wrap">
+        <div className="section-heading">
+          <span className="eyebrow">{str(page, "languageEyebrow")}</span>
+          <h2>{str(page, "languageTitle")}</h2>
+          <p>{str(page, "languageBody")}</p>
+          <p>{str(page, "languageException")}</p>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -173,6 +192,7 @@ export function HomePage({
           </div>
         </div>
       </section>
+      <LanguageBand page={page} />
       <section className="section b-price">
         <div className="wrap">
           <div className="section-heading">
@@ -180,7 +200,7 @@ export function HomePage({
             <h2>{str(page, "priceTitle")}</h2>
             <p>{str(page, "priceBody")}</p>
           </div>
-          <PricingCards plans={plans} ribbon={str(page, "ribbon")} />
+          <PricingCards plans={plans} ribbon={str(page, "ribbon")} languageBadge={str(page, "languageBadge")} />
           <p className="disclaimer">{str(page, "disclaimer")}</p>
         </div>
       </section>
@@ -292,6 +312,7 @@ export function AiPage({ page, home }: { page: Record<string, unknown>; home: Re
           <PhoneArt brand={str(home, "phoneBrand")} title={str(home, "phoneTitle")} sub={str(home, "phoneSub")} badge1={str(home, "phoneBadge1")} badge2={str(home, "phoneBadge2")} chip1={str(home, "chipAnswered")} chip2={str(home, "chipRoute")} chip3={str(home, "chipAppointment")} />
         </div>
       </section>
+      <LanguageBand page={page} />
       <section className="section setup-band">
         <div className="wrap">
           <div className="section-heading">
@@ -351,7 +372,7 @@ export function PricingPage({ page, plans, faqs, showEstimator }: { page: Record
       <InnerHero eyebrow={str(page, "eyebrow")} title={str(page, "title")} titleEm={str(page, "titleEm")} lead={str(page, "lead")} />
       <section className="section">
         <div className="wrap">
-          <PricingCards plans={plans} ribbon={str(page, "ribbon")} />
+          <PricingCards plans={plans} ribbon={str(page, "ribbon")} languageBadge={str(page, "languageBadge")} />
           <p className="disclaimer">{str(page, "disclaimer")}</p>
           {showEstimator ? (
             <div className="calculator" id="estimate">
@@ -361,7 +382,7 @@ export function PricingPage({ page, plans, faqs, showEstimator }: { page: Record
                 <p>{str(page, "estimateBody")}</p>
               </div>
               <Estimator
-                plans={plans}
+                plans={plans.filter((plan) => !plan.custom)}
                 aiPrice={num(page, "aiAddonPrice")}
                 aiLabel={str(page, "estimateAiLabel")}
                 planLabel={str(page, "estimatePlanLabel")}
@@ -475,6 +496,48 @@ export function ContactPage({ page, faqs, formEnabled }: { page: Record<string, 
           <FaqList faqs={faqs} />
         </div>
       </section>
+    </main>
+  );
+}
+
+export function CustomPlanPage({ page, formEnabled }: { page: Record<string, unknown>; formEnabled: boolean }) {
+  const steps = list(page, "steps") as { icon?: string; label?: string }[];
+  return (
+    <main>
+      <InnerHero eyebrow={str(page, "eyebrow")} title={str(page, "title")} titleEm={str(page, "titleEm")} lead={str(page, "lead")} />
+      <section className="section">
+        <div className="wrap contact-grid">
+          <div className="contact-left">
+            <span className="eyebrow">{str(page, "sideEyebrow")}</span>
+            <h2>{str(page, "sideTitle")}</h2>
+            <p>{str(page, "sideBody")}</p>
+            <div className="contact-steps">
+              {steps.map((step) => <div key={step.label}><Icon name={step.icon || "message"} size={20} /> <span>{step.label}</span></div>)}
+            </div>
+            <div className="contact-note"><Icon name="shield" size={22} /> <span>{str(page, "note")}</span></div>
+          </div>
+          <CustomRequestForm
+            enabled={formEnabled}
+            copy={{
+              formTitle: str(page, "formTitle"),
+              nameLabel: str(page, "nameLabel"),
+              namePlaceholder: str(page, "namePlaceholder"),
+              companyLabel: str(page, "companyLabel"),
+              companyPlaceholder: str(page, "companyPlaceholder"),
+              emailLabel: str(page, "emailLabel"),
+              emailPlaceholder: str(page, "emailPlaceholder"),
+              phoneLabel: str(page, "phoneLabel"),
+              phonePlaceholder: str(page, "phonePlaceholder"),
+              needsLabel: str(page, "needsLabel"),
+              needsPlaceholder: str(page, "needsPlaceholder"),
+              submitLabel: str(page, "submitLabel"),
+              thanks: str(page, "thanks"),
+              closed: str(page, "closed"),
+            }}
+          />
+        </div>
+      </section>
+      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={str(page, "endHref")} />
     </main>
   );
 }

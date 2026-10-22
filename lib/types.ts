@@ -13,6 +13,10 @@ export type Service = {
 export type Plan = {
   name: string;
   price: number;
+  custom: boolean;
+  base: boolean;
+  multilingual: boolean;
+  priceLabel: string;
   desc: string;
   units: string;
   features: string[];

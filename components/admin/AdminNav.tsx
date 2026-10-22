@@ -9,6 +9,7 @@ const LINKS = [
   ["Pricing copy", "/admin/content/page.pricing"],
   ["About", "/admin/content/page.about"],
   ["Contact", "/admin/content/page.contact"],
+  ["Custom plan", "/admin/content/page.custom"],
   ["Account copy", "/admin/content/page.account"],
   ["Navigation", "/admin/content/nav"],
   ["Footer", "/admin/content/footer"],
