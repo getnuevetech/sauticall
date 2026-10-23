@@ -26,7 +26,7 @@ export default async function GatewaysPage() {
   }[];
   return (
     <>
-      <span className="eyebrow">Payments</span>
+      <span className="eyebrow">Integrations</span>
       <h2>Ways to pay</h2>
       <p>Paste the API key and secret from Stripe, PayPal, or Square. Practice only uses that company’s test account. Real payments charges the customer. The secret stays on this server and is never shown again.</p>
       <div className="faq-list">

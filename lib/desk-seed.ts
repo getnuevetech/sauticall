@@ -7,6 +7,22 @@ export function seedDesk(database: Database.Database) {
     "INSERT INTO access_roles (name, description, permissions_json) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM access_roles WHERE name = ?)",
   );
   for (const role of DEFAULT_ROLES) insertRole.run(role.name, role.description, JSON.stringify(role.permissions), role.name);
+  const grant = database.prepare("SELECT id, permissions_json FROM access_roles WHERE name = ?");
+  const updatePermissions = database.prepare("UPDATE access_roles SET permissions_json = ? WHERE id = ?");
+  for (const role of DEFAULT_ROLES) {
+    if (role.name !== "Customer support" && role.name !== "Accounts") continue;
+    const row = grant.get(role.name) as { id: number; permissions_json: string } | undefined;
+    if (!row) continue;
+    let current: string[] = [];
+    try {
+      const parsed = JSON.parse(row.permissions_json) as unknown;
+      if (Array.isArray(parsed)) current = parsed.filter((item) => typeof item === "string");
+    } catch {
+      current = [];
+    }
+    if (current.includes("users.customers")) continue;
+    updatePermissions.run(JSON.stringify([...current, "users.customers"]), row.id);
+  }
 
   const insertGroup = database.prepare("INSERT INTO ticket_groups (name, description) SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM ticket_groups WHERE name = ?)");
   insertGroup.run("Customer support", "Website, account access, and general help.", "Customer support");

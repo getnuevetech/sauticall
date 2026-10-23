@@ -97,7 +97,7 @@ export function listStaffTickets(user: { id: number; role: string }) {
 export function staffTicket(user: { id: number; role: string }, id: number) {
   const ticket = getDb().prepare("SELECT * FROM tickets WHERE id = ?").get(id) as TicketRow | undefined;
   if (!ticket || !staffCanSee(user, ticket)) return null;
-  const messages = getDb().prepare("SELECT * FROM ticket_messages WHERE ticket_id = ? ORDER BY id").all(id) as TicketMessage[];
+  const messages = getDb().prepare("SELECT * FROM ticket_messages WHERE ticket_id = ? ORDER BY created_at, id").all(id) as TicketMessage[];
   return { ticket, messages };
 }
 
@@ -181,7 +181,7 @@ export function customerTickets(userId: number) {
 export function customerTicket(userId: number, id: number) {
   const ticket = getDb().prepare("SELECT * FROM tickets WHERE id = ? AND user_id = ?").get(id, userId) as TicketRow | undefined;
   if (!ticket) return null;
-  const messages = getDb().prepare("SELECT * FROM ticket_messages WHERE ticket_id = ? AND kind = 'public' ORDER BY id").all(id) as TicketMessage[];
+  const messages = getDb().prepare("SELECT * FROM ticket_messages WHERE ticket_id = ? AND kind = 'public' ORDER BY created_at, id").all(id) as TicketMessage[];
   return { ticket, messages };
 }
 
@@ -213,9 +213,14 @@ export async function staffReply(user: { id: number; email: string; name: string
   return { ok: true, message: notice };
 }
 
-export function setTicketFields(user: { id: number; role: string }, ticketId: number, input: { status?: string; groupId?: number; assigneeId?: number }) {
+export function setTicketFields(user: { id: number; role: string }, ticketId: number, input: { status?: string; priority?: string; groupId?: number; assigneeId?: number }) {
   const found = staffTicket(user, ticketId);
   if (!found) return { ok: false, message: "That ticket was not found." };
+  if (input.priority) {
+    if (input.priority !== "low" && input.priority !== "normal" && input.priority !== "high") return { ok: false, message: "Unknown priority." };
+    if (user.role !== "super_admin" && !userCan(user, "tickets.reply") && !userCan(user, "tickets.view_all")) return { ok: false, message: "You cannot change this ticket." };
+    getDb().prepare("UPDATE tickets SET priority = ?, updated_at = ? WHERE id = ?").run(input.priority, new Date().toISOString(), ticketId);
+  }
   if (input.status) {
     if (!TICKET_STATUSES.some((item) => item[0] === input.status)) return { ok: false, message: "Unknown status." };
     if (user.role !== "super_admin" && !userCan(user, "tickets.reply") && !userCan(user, "tickets.view_all")) return { ok: false, message: "You cannot change this ticket." };

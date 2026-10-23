@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_ROLES, PERMISSIONS, permissionForDocument } from "../lib/access-catalog.ts";
+import { ADMIN_NAV, DEFAULT_ROLES, PERMISSIONS, permissionForDocument } from "../lib/access-catalog.ts";
 import { renderFaq, slugify } from "../lib/faq-markdown.ts";
 import { nextFreeNumber } from "../lib/group-numbers.ts";
 import { parseMailPayload, ticketIdFromText } from "../lib/mail-parse.ts";
@@ -14,6 +14,15 @@ test("seeded access levels only use known permissions", () => {
   assert.equal(permissionForDocument("page.home"), "content.home");
   assert.equal(permissionForDocument("minute_bundles"), "content.bundles");
   assert.equal(permissionForDocument("unknown"), "");
+  assert.deepEqual(ADMIN_NAV.map((group) => group.title), ["Website", "Integrations", "Phone", "Customers", "Support", "Team"]);
+  const website = ADMIN_NAV[0].links.map((link) => link.href);
+  assert.ok(website.includes("/admin/theme"));
+  assert.ok(website.includes("/admin/content/page.home"));
+  assert.equal(website.includes("/admin/gateways"), false);
+  assert.ok(ADMIN_NAV.find((group) => group.title === "Integrations")?.links.some((link) => link.href === "/admin/gateways"));
+  assert.ok(ADMIN_NAV.find((group) => group.title === "Customers")?.links.some((link) => link.href === "/admin/customers"));
+  assert.ok(ADMIN_NAV.find((group) => group.title === "Team")?.links.some((link) => link.href === "/admin/team"));
+  assert.ok(ADMIN_NAV.find((group) => group.title === "Team")?.links.some((link) => link.href === "/admin/access"));
 });
 
 test("group numbers skip extensions and other groups", () => {
