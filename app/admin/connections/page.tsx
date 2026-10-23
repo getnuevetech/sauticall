@@ -10,7 +10,7 @@ function VoipForm() {
   return (
     <form className="contact-form" action={saveConnection}>
       <h3>VoIP.ms</h3>
-      <p>This login is the VoIP.ms reseller account. The check reads the balance and the reseller client list. Every SautiCall customer gets a client under this account, and a number is bought only after that client and its line account exist. Ordering also needs the routing and POP from this account.</p>
+      <p>This login is the VoIP.ms reseller account. The check reads the balance and the reseller client list. Signing up creates a client and a line account under this login, so the customer can buy a number without waiting. Ordering also needs the routing and POP from this account.</p>
       <input type="hidden" name="provider" value="voipms" />
       <label className="check-option"><input type="checkbox" name="enabled" defaultChecked={connection.enabled === 1} /> Use this connection</label>
       <label>API username <input name="api_username" defaultValue={config.api_username || ""} placeholder="you@company.com" autoComplete="off" /></label>
@@ -39,7 +39,7 @@ function VoipForm() {
           <label>Codecs <input name="allowed_codecs" defaultValue={config.allowed_codecs || "ulaw;alaw;g729"} /></label>
           <label>DTMF <input name="dtmf_mode" defaultValue={config.dtmf_mode || "auto"} /></label>
           <label>NAT <input name="nat" defaultValue={config.nat || "yes"} /></label>
-          <p>Each customer gets a client under this reseller login. Customers never see it. Use an email domain you control so VoIP.ms does not mail the customer. The address below is used until that customer saves an emergency address. The phone number is always taken from here.</p>
+          <p>Customers never see this client. Use an email domain you control so VoIP.ms does not mail the customer. The address and phone below are sent when the customer signs up. If they are blank, signup still creates the client with a placeholder, and the customer's emergency address replaces the street address when they save it.</p>
           <label>Client email domain <input name="client_email_domain" defaultValue={config.client_email_domain || ""} placeholder="clients.example.com" autoComplete="off" /></label>
           <label>Client phone <input name="client_phone" defaultValue={config.client_phone || ""} placeholder="7135550100" autoComplete="off" /></label>
           <label>Street <input name="client_address" defaultValue={config.client_address || ""} autoComplete="off" /></label>

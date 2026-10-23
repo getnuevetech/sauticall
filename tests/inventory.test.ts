@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clientEmail, personName, readVoipClientId } from "../lib/client-profile.ts";
+import { clientEmail, clientPlace, personName, readVoipClientId } from "../lib/client-profile.ts";
 import { didMatches, parseDigitSearch } from "../lib/did-search.ts";
 import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
 import { numberPurchaseMode } from "../lib/number-order.ts";
@@ -46,6 +46,9 @@ test("a VoIP.ms client stays tied to the SautiCall customer", () => {
   assert.deepEqual(personName("Ada Customer"), { first: "Ada", last: "Customer" });
   assert.equal(clientEmail(12, "ada@example.com", "clients.example.com"), "customer-12@clients.example.com");
   assert.equal(clientEmail(12, "ada@example.com", ""), "ada@example.com");
+  assert.equal(clientPlace({}).state, "TX");
+  assert.equal(clientPlace({}).phone, "7135550100");
+  assert.equal(clientPlace({ emergency: { country: "US", state: "TX", city: "HOUSTON", address: "1200 Main", zip: "77002" } }).city, "HOUSTON");
   assert.equal(readVoipClientId({ client: 561115 }), "561115");
   assert.equal(readVoipClientId({ clients: [{ client: 42, email: "a@b.c" }] }), "42");
 });

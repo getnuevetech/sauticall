@@ -1,10 +1,10 @@
 import crypto from "crypto";
-import { clientEmail, personName, readVoipClientId } from "./client-profile";
+import { clientEmail, clientPlace, personName, readVoipClientId } from "./client-profile";
 import { callVoipms, getConnection } from "./carriers";
 import { getDb } from "./db";
 import { getEmergency } from "./e911";
 import { regionAllowed } from "./places";
-import { getSubaccount, linkSubaccountClient } from "./voip-account";
+import { ensureSubaccount, getSubaccount, linkSubaccountClient } from "./voip-account";
 
 type ClientRow = { user_id: number; client_id: string; email: string; password: string; last_message: string; updated_at: string };
 
@@ -35,21 +35,14 @@ function profileFor(userId: number) {
   if (!user) return { ok: false as const, message: "That customer was not found." };
   const emergency = getEmergency(userId);
   const config = getConnection("voipms").public;
-  const country = emergency?.country || (config.client_country === "CA" ? "CA" : config.client_country === "US" ? "US" : "");
-  const state = (emergency?.state || config.client_state || "").toUpperCase();
-  const city = emergency?.city || config.client_city || "";
-  const address = emergency ? `${emergency.street_number} ${emergency.street_name}`.trim() : config.client_address || "";
-  const zip = emergency?.zip || config.client_zip || "";
-  const phone = (config.client_phone || "").replace(/\D/g, "").slice(0, 10);
+  const place = clientPlace({
+    emergency: emergency ? { country: emergency.country, state: emergency.state, city: emergency.city, address: `${emergency.street_number} ${emergency.street_name}`.trim(), zip: emergency.zip } : null,
+    fallback: { country: config.client_country, state: config.client_state, city: config.client_city, address: config.client_address, zip: config.client_zip, phone: config.client_phone },
+  });
+  if (!regionAllowed(place.country, place.state)) place.state = place.country === "CA" ? "ON" : "TX";
   const email = clientEmail(userId, user.email, config.client_email_domain || "");
-  if (!country || !regionAllowed(country, state) || !city || !address || !zip || phone.length < 10) {
-    return { ok: false as const, message: "Add a fallback phone and address under VoIP.ms connections, or save this customer's emergency address, before the client account can be created." };
-  }
   const name = personName(user.name);
-  return {
-    ok: true as const,
-    profile: { ...name, address, city, state, country, zip, phone, email },
-  };
+  return { ok: true as const, profile: { ...name, ...place, email } };
 }
 
 async function connectDid(did: string, account: string) {
@@ -93,13 +86,15 @@ export async function syncCustomerDids(userId: number) {
 }
 
 export async function ensureVoipClient(userId: number, refresh = false): Promise<{ ok: true; clientId: string } | { ok: false; message: string }> {
+  const existing = getVoipClient(userId);
+  if (existing?.client_id && !refresh) return { ok: true, clientId: existing.client_id };
   const connection = getConnection("voipms");
   if (!connection.enabled || !connection.secret || !connection.public.api_username) {
-    return { ok: false, message: "VoIP.ms is not connected, so a client account was not created." };
+    const message = "VoIP.ms is not connected, so a client account was not created.";
+    if (!existing?.client_id) saveClient({ userId, clientId: "", email: "", password: "", message });
+    return { ok: false, message };
   }
-  const existing = getVoipClient(userId);
   const built = profileFor(userId);
-  if (existing?.client_id && !refresh) return { ok: true, clientId: existing.client_id };
   if (!built.ok) {
     if (existing) note(userId, built.message);
     return built;
@@ -154,4 +149,16 @@ export async function ensureVoipClient(userId: number, refresh = false): Promise
   saveClient({ userId, clientId, email: profile.email, password, message: `Client ${clientId} is linked.` });
   await syncCustomerDids(userId);
   return { ok: true, clientId };
+}
+
+export async function provisionCustomer(userId: number) {
+  const client = await ensureVoipClient(userId);
+  if (!client.ok) return client;
+  const line = await ensureSubaccount(userId, client.clientId);
+  if (!line.ok) {
+    note(userId, line.message);
+    return { ok: false as const, message: line.message };
+  }
+  await syncCustomerDids(userId);
+  return { ok: true as const, clientId: client.clientId };
 }

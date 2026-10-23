@@ -31,6 +31,10 @@ export async function login(formData: FormData) {
   if (user.disabled) return { error: "This account is turned off. An administrator can turn it back on." };
   const needsCode = flagOn("auth.mfa") && Boolean(user.mfa_secret);
   await createSession(user.id, needsCode);
+  if (user.role === "customer") {
+    const { provisionCustomer } = await import("@/lib/voip-client");
+    await provisionCustomer(user.id).catch(() => undefined);
+  }
   audit(user.email, "auth.login", needsCode ? "mfa-pending" : "password");
   if (needsCode) redirect("/account/login?step=code");
   if (flagOn("auth.mfa") && !user.mfa_secret) redirect("/account/security");
@@ -69,8 +73,8 @@ export async function register(formData: FormData) {
       .run(user.id, JSON.stringify({ plan: planName, prompt: setup }), new Date().toISOString());
   }
   await createSession(user.id, false);
-  const { ensureVoipClient } = await import("@/lib/voip-client");
-  await ensureVoipClient(user.id);
+  const { provisionCustomer } = await import("@/lib/voip-client");
+  await provisionCustomer(user.id).catch(() => undefined);
   audit(email, "auth.register", planName || "customer");
   redirect(planName ? `/account/billing?plan=${encodeURIComponent(planName)}` : "/account/billing");
 }
