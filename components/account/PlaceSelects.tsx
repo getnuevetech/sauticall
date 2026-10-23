@@ -12,6 +12,8 @@ export function PlaceSelects({
   cityDefault = "",
   regionName = "state",
   cityName = "city",
+  countryName = "country",
+  includeCity = true,
 }: {
   countryLabel: string;
   regionLabel: string;
@@ -21,6 +23,8 @@ export function PlaceSelects({
   cityDefault?: string;
   regionName?: string;
   cityName?: string;
+  countryName?: string;
+  includeCity?: boolean;
 }) {
   const [country, setCountry] = useState(countryDefault === "CA" ? "CA" : "US");
   const [region, setRegion] = useState(regionDefault.toUpperCase());
@@ -29,7 +33,7 @@ export function PlaceSelects({
   const [note, setNote] = useState("");
 
   useEffect(() => {
-    if (!region) {
+    if (!includeCity || !region) {
       setPlaces([]);
       setNote("");
       return;
@@ -54,13 +58,13 @@ export function PlaceSelects({
     return () => {
       cancel = true;
     };
-  }, [country, region]);
+  }, [country, region, includeCity]);
 
   const regions = regionsFor(country);
   return (
     <>
       <label>{countryLabel}
-        <select name="country" value={country} onChange={(event) => { setCountry(event.target.value); setRegion(""); setCity(""); }}>
+        <select name={countryName} value={country} onChange={(event) => { setCountry(event.target.value); setRegion(""); setCity(""); }}>
           <option value="US">United States</option>
           <option value="CA">Canada</option>
         </select>
@@ -71,12 +75,12 @@ export function PlaceSelects({
           {regions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </label>
-      <label>{cityLabel}
+      {includeCity ? <label>{cityLabel}
         <select name={cityName} value={city} required onChange={(event) => setCity(event.target.value)}>
           <option value="">{region ? "Choose a city" : "Choose a state first"}</option>
           {places.map((place) => <option key={place} value={place}>{place}</option>)}
         </select>
-      </label>
+      </label> : null}
       {note ? <p className="form-feedback" style={{ gridColumn: "1 / -1" }}>{note}</p> : null}
     </>
   );

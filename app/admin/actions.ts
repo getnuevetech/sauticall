@@ -143,6 +143,13 @@ export async function saveConnection(formData: FormData) {
       allowed_codecs: String(formData.get("allowed_codecs") || "ulaw;alaw;g729").trim() || "ulaw;alaw;g729",
       dtmf_mode: String(formData.get("dtmf_mode") || "auto").trim() || "auto",
       nat: String(formData.get("nat") || "yes").trim() || "yes",
+      client_email_domain: String(formData.get("client_email_domain") || "").trim().toLowerCase().replace(/^@/, ""),
+      client_phone: String(formData.get("client_phone") || "").replace(/\D/g, "").slice(0, 10),
+      client_address: String(formData.get("client_address") || "").trim().slice(0, 80),
+      client_city: String(formData.get("client_city") || "").trim().slice(0, 80),
+      client_state: String(formData.get("client_state") || "").trim().toUpperCase().slice(0, 2),
+      client_country: String(formData.get("client_country") || "") === "CA" ? "CA" : "US",
+      client_zip: String(formData.get("client_zip") || "").trim().toUpperCase().slice(0, 10),
     }, secret);
   } else {
     persist(provider, enabled, {

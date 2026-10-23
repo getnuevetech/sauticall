@@ -265,10 +265,19 @@ export function upgradeContent(database: Database.Database) {
       account.numbersStateLabel = "State or province";
       changed = true;
     }
+    const oldNumbers = "Search the phone company inventory and request one of the numbers listed. Add the address where emergency services should find you. It is sent to the phone company when the number is bought.";
+    if (account.numbersBody === oldNumbers) {
+      account.numbersBody = "Search the phone company inventory by city, by a full number, or by how the number starts or ends. Add the address where emergency services should find you. It is sent to the phone company when the number is bought.";
+      changed = true;
+    }
     if (mergeMissing(account, {
       numbersBuy: "Buy this number",
       numbersOrdered: "This number was bought from the phone company.",
       numbersHeld: "The request is saved. Buying is turned off, so it waits until live number ordering is on.",
+      numbersModeLabel: "Search by",
+      numbersQueryNumber: "Number",
+      numbersQueryPrefix: "Starts with",
+      numbersQuerySuffix: "Ends with",
     })) changed = true;
     if (changed) writeJson(database, "page.account", account);
   }

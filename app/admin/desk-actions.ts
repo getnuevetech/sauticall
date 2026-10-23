@@ -130,6 +130,19 @@ export async function saveCustomerUser(formData: FormData) {
   redirect(`${path}?saved=Saved.`);
 }
 
+export async function provisionVoipClient(formData: FormData) {
+  const actor = await requirePermission("users.customers");
+  const id = Number(formData.get("id") || 0);
+  const path = accountPath(id, "customers");
+  const target = getDb().prepare("SELECT id FROM users WHERE id = ? AND role = 'customer'").get(id);
+  if (!target) back("/admin/customers", "That customer was not found.");
+  const { ensureVoipClient } = await import("@/lib/voip-client");
+  const result = await ensureVoipClient(id, true);
+  audit(actor.email, "voip.client", `${id}:${result.ok ? result.clientId : "failed"}`);
+  if (!result.ok) back(path, result.message);
+  redirect(`${path}?saved=${encodeURIComponent(`VoIP.ms client ${result.clientId} is linked.`)}`);
+}
+
 export async function searchTicketCustomers(query: string) {
   await requireAnyPermission(["tickets.reply", "tickets.view_all", "tickets.manage"]);
   return findCustomersByEmail(query);

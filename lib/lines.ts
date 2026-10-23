@@ -2,6 +2,7 @@ import { getConnection, orderDid, pbxRequest } from "./carriers";
 import { flagOn, getDb } from "./db";
 import { enforceUser } from "./minutes";
 import { extensionRange } from "./pbx";
+import { ensureVoipClient, syncCustomerDids } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
 
 type Line = { id: number; user_id: number; request_id: number; did: string; status: string; trunk_id: number; last_message: string };
@@ -139,8 +140,9 @@ export function markTrunkDone(lineId: number, note: string) {
 }
 
 export async function purchaseNumber(input: { requestId: number; userId: number; did: string }) {
-  const sub = await ensureSubaccount(input.userId);
-  const ordered = await orderDid(input.did, sub.ok ? `account:${sub.account}` : undefined);
+  const client = await ensureVoipClient(input.userId);
+  const sub = await ensureSubaccount(input.userId, client.ok ? client.clientId : "");
+  const ordered = await orderDid(input.did, sub.ok ? `account:${sub.account}` : undefined, client.ok && sub.ok ? sub.account : undefined);
   if (!ordered.ok) return { ok: false, message: ordered.message };
   const existing = getDb().prepare("SELECT id FROM phone_lines WHERE request_id = ?").get(input.requestId) as { id: number } | undefined;
   let lineId = existing?.id || 0;
@@ -150,6 +152,7 @@ export async function purchaseNumber(input: { requestId: number; userId: number;
     ).run(input.userId, input.requestId, input.did, new Date().toISOString());
     lineId = Number(info.lastInsertRowid);
   }
+  if (client.ok && sub.ok) await syncCustomerDids(input.userId);
   const trunk = await attachTrunk(lineId);
   const limited = await enforceUser(input.userId);
   const { sendEmergency } = await import("./e911");

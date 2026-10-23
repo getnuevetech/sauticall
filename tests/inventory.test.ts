@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { clientEmail, personName, readVoipClientId } from "../lib/client-profile.ts";
+import { didMatches, parseDigitSearch } from "../lib/did-search.ts";
 import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
 import { numberPurchaseMode } from "../lib/number-order.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
@@ -26,6 +28,26 @@ test("number buying is manual until automatic buying is switched on", () => {
   assert.equal(numberPurchaseMode(false, true), "off");
   assert.equal(numberPurchaseMode(true, false), "manual");
   assert.equal(numberPurchaseMode(true, true), "automatic");
+});
+
+test("a number search can target the whole number, its start, or its end", () => {
+  const exact = parseDigitSearch("number", "(713) 555-0100");
+  const prefix = parseDigitSearch("prefix", "713");
+  const suffix = parseDigitSearch("suffix", "0100");
+  assert.equal(exact.ok && exact.search.query, "7135550100");
+  assert.equal(prefix.ok && didMatches("7135550199", prefix.search), true);
+  assert.equal(prefix.ok && didMatches("8325550199", prefix.search), false);
+  assert.equal(suffix.ok && didMatches("2815550100", suffix.search), true);
+  assert.equal(parseDigitSearch("prefix", "71").ok, false);
+  assert.equal(parseDigitSearch("number", "713555").ok, false);
+});
+
+test("a VoIP.ms client stays tied to the SautiCall customer", () => {
+  assert.deepEqual(personName("Ada Customer"), { first: "Ada", last: "Customer" });
+  assert.equal(clientEmail(12, "ada@example.com", "clients.example.com"), "customer-12@clients.example.com");
+  assert.equal(clientEmail(12, "ada@example.com", ""), "ada@example.com");
+  assert.equal(readVoipClientId({ client: 561115 }), "561115");
+  assert.equal(readVoipClientId({ clients: [{ client: 42, email: "a@b.c" }] }), "42");
 });
 
 test("state and city lists reject a typed code that is not a real place", () => {

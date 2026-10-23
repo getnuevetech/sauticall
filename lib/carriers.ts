@@ -1,4 +1,5 @@
 import { getDb } from "./db";
+import { carrierSearchType, didMatches, type DigitSearch } from "./did-search";
 import { readDids, type ListedDid } from "./did-list";
 import { readRateCenters } from "./places";
 
@@ -109,6 +110,15 @@ export async function searchDids(country: string, region: string, ratecenter: st
   return { ok: true, message: "success", dids: readDids(result.body, limit) };
 }
 
+export async function searchPatternDids(country: string, region: string, search: DigitSearch, limit = 20) {
+  const method = country === "CA" ? "searchDIDsCAN" : "searchDIDsUSA";
+  const regionKey = country === "CA" ? "province" : "state";
+  const result = await callVoipms(method, { [regionKey]: region.toUpperCase(), type: carrierSearchType(search.mode), query: search.query });
+  if (!result.ok && !result.status.startsWith("no_")) return { ok: false, message: result.message, dids: [] as ListedDid[] };
+  const dids = readDids(result.body, 0).filter((item) => didMatches(item.did, search)).slice(0, limit);
+  return { ok: true, message: "success", dids };
+}
+
 export async function findInventoryDid(country: string, region: string, ratecenter: string, did: string) {
   const wanted = did.replace(/\D/g, "");
   const normalized = wanted.length === 11 && wanted.startsWith("1") ? wanted.slice(1) : wanted;
@@ -123,7 +133,7 @@ export async function findInventoryDid(country: string, region: string, ratecent
   return null;
 }
 
-export async function orderDid(did: string, routingOverride?: string) {
+export async function orderDid(did: string, routingOverride?: string, resellerAccount?: string) {
   const connection = getConnection("voipms");
   const routing = routingOverride || connection.public.routing;
   const pop = connection.public.pop;
@@ -132,6 +142,7 @@ export async function orderDid(did: string, routingOverride?: string) {
   return callVoipms("orderDID", {
     did,
     routing,
+    ...(resellerAccount ? { account: resellerAccount } : {}),
     pop,
     dialtime,
     cnam: connection.public.cnam === "1" ? "1" : "0",

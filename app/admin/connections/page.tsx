@@ -1,4 +1,5 @@
 import { saveConnection, testConnection } from "../actions";
+import { PlaceSelects } from "@/components/account/PlaceSelects";
 import { requirePermission } from "@/lib/access";
 import { getConnection } from "@/lib/carriers";
 import { dialTimeChoices, withCurrent } from "@/lib/admin-choices";
@@ -38,6 +39,24 @@ function VoipForm() {
           <label>Codecs <input name="allowed_codecs" defaultValue={config.allowed_codecs || "ulaw;alaw;g729"} /></label>
           <label>DTMF <input name="dtmf_mode" defaultValue={config.dtmf_mode || "auto"} /></label>
           <label>NAT <input name="nat" defaultValue={config.nat || "yes"} /></label>
+          <p>Hidden client account. Each customer gets a VoIP.ms client. They never see it. Use an email domain you control so VoIP.ms does not mail the customer. The address below is used until that customer saves an emergency address. The phone number is always taken from here.</p>
+          <label>Client email domain <input name="client_email_domain" defaultValue={config.client_email_domain || ""} placeholder="clients.example.com" autoComplete="off" /></label>
+          <label>Client phone <input name="client_phone" defaultValue={config.client_phone || ""} placeholder="7135550100" autoComplete="off" /></label>
+          <label>Street <input name="client_address" defaultValue={config.client_address || ""} autoComplete="off" /></label>
+          <div className="form-grid">
+            <PlaceSelects
+              countryLabel="Country"
+              regionLabel="State or province"
+              cityLabel="City"
+              countryName="client_country"
+              regionName="client_state"
+              cityName="client_city"
+              countryDefault={config.client_country || "US"}
+              regionDefault={config.client_state || ""}
+              cityDefault={config.client_city || ""}
+            />
+            <label>ZIP or postal code <input name="client_zip" defaultValue={config.client_zip || ""} autoComplete="off" /></label>
+          </div>
         </div>
       </details>
       <p>{connection.checked_at ? `${connection.last_ok ? "Last check worked" : "Last check failed"}: ${connection.last_message}` : "Not checked yet."}</p>

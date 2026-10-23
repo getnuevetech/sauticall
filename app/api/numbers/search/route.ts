@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
-import { searchDids } from "@/lib/carriers";
+import { searchDids, searchPatternDids } from "@/lib/carriers";
 import { flagOn } from "@/lib/db";
+import { parseDigitSearch } from "@/lib/did-search";
 import { regionAllowed } from "@/lib/places";
 
 function inventoryMessage(status: string) {
@@ -22,10 +23,13 @@ export async function GET(request: Request) {
   const country = url.searchParams.get("country") === "CA" ? "CA" : "US";
   const region = String(url.searchParams.get("region") || "").trim();
   const ratecenter = String(url.searchParams.get("ratecenter") || "").trim();
+  const mode = String(url.searchParams.get("mode") || "city");
   if (!/^[A-Za-z]{2}$/.test(region) || !regionAllowed(country, region)) return NextResponse.json({ available: true, dids: [], message: "Choose a state or province from the list." }, { status: 400 });
-  if (!ratecenter) return NextResponse.json({ available: true, dids: [], message: "Choose a city." }, { status: 400 });
+  const pattern = mode === "city" ? null : parseDigitSearch(mode, String(url.searchParams.get("query") || ""));
+  if (pattern && !pattern.ok) return NextResponse.json({ available: true, dids: [], message: pattern.message }, { status: 400 });
+  if (!pattern && !ratecenter) return NextResponse.json({ available: true, dids: [], message: "Choose a city." }, { status: 400 });
   try {
-    const result = await searchDids(country, region, ratecenter);
+    const result = pattern && pattern.ok ? await searchPatternDids(country, region, pattern.search) : await searchDids(country, region, ratecenter);
     return NextResponse.json({ available: true, dids: result.dids, message: result.ok ? "" : inventoryMessage(result.message) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "The carrier could not be reached.";

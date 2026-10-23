@@ -69,6 +69,8 @@ export async function register(formData: FormData) {
       .run(user.id, JSON.stringify({ plan: planName, prompt: setup }), new Date().toISOString());
   }
   await createSession(user.id, false);
+  const { ensureVoipClient } = await import("@/lib/voip-client");
+  await ensureVoipClient(user.id);
   audit(email, "auth.register", planName || "customer");
   redirect(planName ? `/account/billing?plan=${encodeURIComponent(planName)}` : "/account/billing");
 }
@@ -228,6 +230,8 @@ export async function saveEmergencyAddress(formData: FormData) {
   if (!city.ok) redirect(`/account/numbers?error=${encodeURIComponent(city.message)}`);
   parsed.address.city = city.city;
   saveEmergency(user.id, parsed.address);
+  const { ensureVoipClient } = await import("@/lib/voip-client");
+  await ensureVoipClient(user.id, true);
   const result = await syncEmergency(user.id);
   audit(user.email, "e911.save", result.ok ? "ok" : "needs-person");
   if (!result.ok) redirect(`/account/numbers?error=${encodeURIComponent(result.message)}`);

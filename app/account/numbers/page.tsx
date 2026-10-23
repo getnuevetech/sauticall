@@ -30,7 +30,7 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
   const address = getEmergency(user.id);
   const rows = getDb().prepare("SELECT id, payload, status, staff_note, created_at FROM account_requests WHERE user_id = ? AND kind = 'number' ORDER BY id DESC").all(user.id) as { id: number; payload: string; status: string; staff_note: string; created_at: string }[];
   const lines = getDb().prepare("SELECT did, e911_status, e911_message FROM phone_lines WHERE user_id = ? ORDER BY id DESC").all(user.id) as { did: string; e911_status: string; e911_message: string }[];
-  const labels = Object.fromEntries(["numbersCountryLabel", "numbersStateLabel", "numbersRateLabel", "numbersRatePlaceholder", "numbersSearchLabel", "numbersEmpty", "numbersRequest", "numbersBuy", "numbersLiveOff", "numbersDetailLabel", "numbersDetailPlaceholder"].map((key) => [key, text(key)]));
+  const labels = Object.fromEntries(["numbersCountryLabel", "numbersStateLabel", "numbersRateLabel", "numbersRatePlaceholder", "numbersSearchLabel", "numbersEmpty", "numbersRequest", "numbersBuy", "numbersLiveOff", "numbersDetailLabel", "numbersDetailPlaceholder", "numbersModeLabel", "numbersQueryNumber", "numbersQueryPrefix", "numbersQuerySuffix"].map((key) => [key, text(key)]));
   const purchase = numberPurchaseMode(flagOn("numbers.live_order"), flagOn("numbers.auto_order"));
   return (
     <Frame pathname="/account/numbers">

@@ -192,6 +192,14 @@ function migrate(database: Database.Database) {
       seconds INTEGER NOT NULL,
       UNIQUE(uniqueid, grant_id)
     );
+    CREATE TABLE IF NOT EXISTS voip_clients (
+      user_id INTEGER PRIMARY KEY,
+      client_id TEXT NOT NULL DEFAULT '',
+      email TEXT NOT NULL DEFAULT '',
+      password TEXT NOT NULL DEFAULT '',
+      last_message TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT ''
+    );
     CREATE TABLE IF NOT EXISTS voip_subaccounts (
       user_id INTEGER PRIMARY KEY,
       account TEXT NOT NULL,

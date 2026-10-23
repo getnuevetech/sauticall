@@ -79,13 +79,34 @@ function createdAccount(body: unknown) {
   return String(record.account || record.subaccount || "");
 }
 
-export async function ensureSubaccount(userId: number): Promise<{ ok: true; account: string; sipHost: string } | { ok: false; message: string }> {
+export async function linkSubaccountClient(userId: number, clientId: string) {
+  const row = getSubaccount(userId);
+  if (!row?.account || !clientId) return { ok: true, message: "" };
+  const settings = readSettings(row.settings_json);
+  if (settings.reseller_client === clientId) return { ok: true, message: "" };
+  const result = await callVoipms("setSubAccount", {
+    ...settings,
+    account: row.account,
+    description: `SautiCall ${userId}`,
+    reseller_client: clientId,
+    auth_type: row.locked ? "2" : "1",
+    password: row.locked ? "" : row.password,
+  });
+  if (!result.ok) return { ok: false, message: `VoIP.ms did not link the line account to the client (${result.status}).` };
+  getDb().prepare("UPDATE voip_subaccounts SET settings_json = ? WHERE user_id = ?").run(JSON.stringify({ ...settings, reseller_client: clientId }), userId);
+  return { ok: true, message: "" };
+}
+
+export async function ensureSubaccount(userId: number, resellerClient = ""): Promise<{ ok: true; account: string; sipHost: string } | { ok: false; message: string }> {
   const existing = getSubaccount(userId);
-  if (existing?.account && existing.password) return { ok: true, account: existing.account, sipHost: existing.sip_host };
+  if (existing?.account && existing.password) {
+    if (resellerClient) await linkSubaccountClient(userId, resellerClient);
+    return { ok: true, account: existing.account, sipHost: existing.sip_host };
+  }
   const connection = getConnection("voipms");
   if (!connection.enabled || !connection.secret) return { ok: false, message: "VoIP.ms is not connected, so a line account was not created." };
   const username = usernameFor(userId);
-  const settings = settingsFromConnection();
+  const settings = { ...settingsFromConnection(), ...(resellerClient ? { reseller_client: resellerClient } : {}) };
   const description = `SautiCall ${userId}`;
   const host = sipHost(connection.public.pop || "");
   const listed = await callVoipms("getSubAccounts", {});
