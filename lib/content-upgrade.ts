@@ -257,6 +257,14 @@ export function upgradeContent(database: Database.Database) {
       account.phoneBody = "Add people, then make a ring group or a call queue. Daytime calls go to the group you choose. After hours they go to voicemail. Until a group is on the phone system, daytime calls go to the first person.";
       changed = true;
     }
+    if (account.numbersRateLabel === "Rate center") {
+      account.numbersRateLabel = "City";
+      changed = true;
+    }
+    if (account.numbersStateLabel === "State or province code") {
+      account.numbersStateLabel = "State or province";
+      changed = true;
+    }
     if (mergeMissing(account, {
       numbersBuy: "Buy this number",
       numbersOrdered: "This number was bought from the phone company.",

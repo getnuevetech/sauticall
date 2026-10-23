@@ -1,5 +1,6 @@
 import { callVoipms } from "./carriers";
 import { flagOn, getDb } from "./db";
+import { regionAllowed } from "./places";
 
 export type EmergencyAddress = {
   full_name: string;
@@ -36,7 +37,7 @@ export function parseEmergency(input: Record<string, string>): { ok: true; addre
     street_name: (input.street_name || "").trim().slice(0, 80),
     address_type: unitTypes.some((item) => item.value === input.address_type) ? input.address_type : "",
     address_number: (input.address_number || "").replace(/\D/g, "").slice(0, 10),
-    city: (input.city || "").trim().slice(0, 40),
+    city: (input.city || "").trim().slice(0, 80),
     state: (input.state || "").trim().toUpperCase().slice(0, 2),
     country: country === "CA" ? "CA" : "US",
     zip,
@@ -45,9 +46,9 @@ export function parseEmergency(input: Record<string, string>): { ok: true; addre
   if (!address.full_name) return { ok: false, message: "Enter the name emergency services should ask for." };
   if (!address.street_number) return { ok: false, message: "Enter the street number, using digits such as 1200." };
   if (!address.street_name) return { ok: false, message: "Enter the street name." };
-  if (!address.city) return { ok: false, message: "Enter the city." };
-  if (!/^[A-Z]{2}$/.test(address.state)) return { ok: false, message: "Enter the two-letter state or province." };
+  if (!address.city) return { ok: false, message: "Choose a city." };
   if (!country) return { ok: false, message: "Choose the United States or Canada." };
+  if (!regionAllowed(country, address.state)) return { ok: false, message: "Choose a state or province." };
   if (country === "US" && !/^\d{5}(\d{4})?$/.test(address.zip)) return { ok: false, message: "Enter a 5-digit ZIP code." };
   if (country === "CA" && !/^[A-Z]\d[A-Z]\d[A-Z]\d$/.test(address.zip)) return { ok: false, message: "Enter a Canadian postal code." };
   if (input.address_number && !address.address_number) return { ok: false, message: "The apartment or suite number should be digits." };

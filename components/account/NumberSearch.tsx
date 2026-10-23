@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { saveNumber } from "@/app/account/actions";
+import { PlaceSelects } from "./PlaceSelects";
 
 type Did = { did: string; ratecenter: string; state: string; monthly: string };
 
@@ -22,12 +23,13 @@ export function NumberSearch({
   async function onSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    const chosenCountry = String(data.get("country") || "US");
     const params = new URLSearchParams({
-      country: String(data.get("country") || "US"),
+      country: chosenCountry,
       region: String(data.get("region") || ""),
       ratecenter: String(data.get("ratecenter") || ""),
     });
-    setCountry(String(data.get("country") || "US"));
+    setCountry(chosenCountry);
     setPending(true);
     const response = await fetch(`/api/numbers/search?${params}`);
     const payload = (await response.json()) as { dids?: Did[]; message?: string };
@@ -41,12 +43,14 @@ export function NumberSearch({
       {live ? (
         <form onSubmit={onSearch}>
           <div className="form-grid">
-            <label>{copy.numbersCountryLabel}
-              <select name="country" defaultValue="US"><option value="US">United States</option><option value="CA">Canada</option></select>
-            </label>
-            <label>{copy.numbersStateLabel} <input name="region" required maxLength={2} placeholder="TX" /></label>
+            <PlaceSelects
+              countryLabel={copy.numbersCountryLabel}
+              regionLabel={copy.numbersStateLabel}
+              cityLabel={copy.numbersRateLabel}
+              regionName="region"
+              cityName="ratecenter"
+            />
           </div>
-          <label>{copy.numbersRateLabel} <input name="ratecenter" placeholder={copy.numbersRatePlaceholder} /></label>
           <button className="btn btn-primary" type="submit" disabled={pending}>{copy.numbersSearchLabel}</button>
         </form>
       ) : <p>{copy.numbersLiveOff}</p>}

@@ -1,0 +1,83 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { regionsFor } from "@/lib/places";
+
+export function PlaceSelects({
+  countryLabel,
+  regionLabel,
+  cityLabel,
+  countryDefault = "US",
+  regionDefault = "",
+  cityDefault = "",
+  regionName = "state",
+  cityName = "city",
+}: {
+  countryLabel: string;
+  regionLabel: string;
+  cityLabel: string;
+  countryDefault?: string;
+  regionDefault?: string;
+  cityDefault?: string;
+  regionName?: string;
+  cityName?: string;
+}) {
+  const [country, setCountry] = useState(countryDefault === "CA" ? "CA" : "US");
+  const [region, setRegion] = useState(regionDefault.toUpperCase());
+  const [city, setCity] = useState(cityDefault);
+  const [places, setPlaces] = useState<string[]>([]);
+  const [note, setNote] = useState("");
+
+  useEffect(() => {
+    if (!region) {
+      setPlaces([]);
+      setNote("");
+      return;
+    }
+    let cancel = false;
+    setNote("");
+    fetch(`/api/numbers/places?country=${country}&region=${region}`)
+      .then((response) => response.json())
+      .then((payload: { places?: string[]; message?: string }) => {
+        if (cancel) return;
+        const list = payload.places || [];
+        setPlaces(list);
+        setCity((current) => list.find((item) => item.toUpperCase() === current.toUpperCase()) || "");
+        setNote(list.length ? "" : payload.message || "No cities were returned for that state.");
+      })
+      .catch(() => {
+        if (!cancel) {
+          setPlaces([]);
+          setNote("The city list could not be loaded.");
+        }
+      });
+    return () => {
+      cancel = true;
+    };
+  }, [country, region]);
+
+  const regions = regionsFor(country);
+  return (
+    <>
+      <label>{countryLabel}
+        <select name="country" value={country} onChange={(event) => { setCountry(event.target.value); setRegion(""); setCity(""); }}>
+          <option value="US">United States</option>
+          <option value="CA">Canada</option>
+        </select>
+      </label>
+      <label>{regionLabel}
+        <select name={regionName} value={region} required onChange={(event) => { setRegion(event.target.value); setCity(""); }}>
+          <option value="">Choose a state</option>
+          {regions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </label>
+      <label>{cityLabel}
+        <select name={cityName} value={city} required onChange={(event) => setCity(event.target.value)}>
+          <option value="">{region ? "Choose a city" : "Choose a state first"}</option>
+          {places.map((place) => <option key={place} value={place}>{place}</option>)}
+        </select>
+      </label>
+      {note ? <p className="form-feedback" style={{ gridColumn: "1 / -1" }}>{note}</p> : null}
+    </>
+  );
+}

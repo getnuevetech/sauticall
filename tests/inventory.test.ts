@@ -3,6 +3,7 @@ import test from "node:test";
 import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
 import { numberPurchaseMode } from "../lib/number-order.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
+import { readRateCenters, regionAllowed } from "../lib/places.ts";
 
 test("a number request has to be a full 10-digit inventory number", () => {
   assert.equal(normalizeRequestedDid("832"), "");
@@ -25,6 +26,14 @@ test("number buying is manual until automatic buying is switched on", () => {
   assert.equal(numberPurchaseMode(false, true), "off");
   assert.equal(numberPurchaseMode(true, false), "manual");
   assert.equal(numberPurchaseMode(true, true), "automatic");
+});
+
+test("state and city lists reject a typed code that is not a real place", () => {
+  assert.equal(regionAllowed("US", "TX"), true);
+  assert.equal(regionAllowed("US", "Texas"), false);
+  assert.equal(regionAllowed("CA", "ON"), true);
+  assert.equal(regionAllowed("US", "ON"), false);
+  assert.deepEqual(readRateCenters({ ratecenters: [{ ratecenter: "HOUSTON" }, { ratecenter: "AUSTIN" }, "DALLAS"] }), ["AUSTIN", "DALLAS", "HOUSTON"]);
 });
 
 test("a created 3CX user id can come from the Location header", () => {

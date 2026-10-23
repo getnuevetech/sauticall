@@ -179,12 +179,15 @@ export async function saveNumber(formData: FormData) {
   if (!did) redirect("/account/numbers?error=Choose%20a%2010-digit%20number%20from%20the%20inventory%20search.");
   const country = String(formData.get("country") || "US").slice(0, 2).toUpperCase() === "CA" ? "CA" : "US";
   const region = String(formData.get("region") || "").trim().toUpperCase();
-  const ratecenter = String(formData.get("ratecenter") || "").trim().toUpperCase();
-  if (!/^[A-Z]{2}$/.test(region)) redirect("/account/numbers?error=Choose%20a%20number%20from%20a%20state%20or%20province%20search.");
-  const { findInventoryDid } = await import("@/lib/carriers");
-  const match = await findInventoryDid(country, region, ratecenter, did);
+  const ratecenter = String(formData.get("ratecenter") || "").trim();
+  const { regionAllowed } = await import("@/lib/places");
+  if (!/^[A-Z]{2}$/.test(region) || !regionAllowed(country, region)) redirect("/account/numbers?error=Choose%20a%20state%20or%20province%20from%20the%20list.");
+  const { findInventoryDid, listedCity } = await import("@/lib/carriers");
+  const city = await listedCity(country, region, ratecenter);
+  if (!city.ok) redirect(`/account/numbers?error=${encodeURIComponent(city.message)}`);
+  const match = await findInventoryDid(country, region, city.city, did);
   if (!match) redirect("/account/numbers?error=That%20number%20is%20not%20in%20the%20current%20inventory.%20Search%20again%20and%20choose%20a%20listed%20number.");
-  const payload = { did: match.did, country, region: (match.state || region).toUpperCase(), ratecenter: (match.ratecenter || ratecenter).toUpperCase(), emergency };
+  const payload = { did: match.did, country, region: (match.state || region).toUpperCase(), ratecenter: (match.ratecenter || city.city).toUpperCase(), emergency };
   const info = getDb()
     .prepare("INSERT INTO account_requests (user_id, kind, payload, status, created_at) VALUES (?, 'number', ?, 'requested', ?)")
     .run(user.id, JSON.stringify(payload), new Date().toISOString());
@@ -220,6 +223,10 @@ export async function saveEmergencyAddress(formData: FormData) {
     language: String(formData.get("language") || ""),
   });
   if (!parsed.ok) redirect(`/account/numbers?error=${encodeURIComponent(parsed.message)}`);
+  const { listedCity } = await import("@/lib/carriers");
+  const city = await listedCity(parsed.address.country, parsed.address.state, parsed.address.city);
+  if (!city.ok) redirect(`/account/numbers?error=${encodeURIComponent(city.message)}`);
+  parsed.address.city = city.city;
   saveEmergency(user.id, parsed.address);
   const result = await syncEmergency(user.id);
   audit(user.email, "e911.save", result.ok ? "ok" : "needs-person");
@@ -248,6 +255,12 @@ export async function savePort(formData: FormData) {
     provider_account: String(formData.get("provider_account") || "").trim(),
     pin: String(formData.get("pin") || "").trim(),
   };
+  const { regionAllowed } = await import("@/lib/places");
+  if (!regionAllowed(payload.country, payload.state)) redirect("/account/porting?error=Choose%20a%20state%20or%20province%20from%20the%20list.");
+  const { listedCity } = await import("@/lib/carriers");
+  const chosen = await listedCity(payload.country, payload.state, payload.city);
+  if (!chosen.ok) redirect(`/account/porting?error=${encodeURIComponent(chosen.message)}`);
+  payload.city = chosen.city;
   if (!payload.numbers || !payload.first_name || !payload.last_name || !payload.address1 || !payload.city || !payload.state || !payload.zip_code || !payload.provider_name || !payload.provider_account) {
     redirect("/account/porting?error=Number%2C%20name%2C%20service%20address%2C%20current%20carrier%2C%20and%20carrier%20account%20are%20required.");
   }

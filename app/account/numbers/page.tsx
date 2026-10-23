@@ -1,6 +1,7 @@
 import { Frame } from "@/components/site/Frame";
 import { AccountHero, AccountNav } from "@/components/account/Portal";
 import { NumberSearch } from "@/components/account/NumberSearch";
+import { PlaceSelects } from "@/components/account/PlaceSelects";
 import { saveEmergencyAddress } from "../actions";
 import { guardAccount } from "@/lib/guard";
 import { flagOn, getDb } from "@/lib/db";
@@ -61,13 +62,14 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
                 <label>{text("e911Unit")} <input name="address_number" defaultValue={address?.address_number || ""} /></label>
               </div>
               <div className="form-grid">
-                <label>{text("e911City")} <input name="city" defaultValue={address?.city || ""} required /></label>
-                <label>{text("e911State")} <input name="state" defaultValue={address?.state || ""} maxLength={2} required /></label>
-              </div>
-              <div className="form-grid">
-                <label>{text("e911Country")}
-                  <select name="country" defaultValue={address?.country || "US"}><option value="US">United States</option><option value="CA">Canada</option></select>
-                </label>
+                <PlaceSelects
+                  countryLabel={text("e911Country")}
+                  regionLabel={text("e911State")}
+                  cityLabel={text("e911City")}
+                  countryDefault={address?.country || "US"}
+                  regionDefault={address?.state || ""}
+                  cityDefault={address?.city || ""}
+                />
                 <label>{text("e911Zip")} <input name="zip" defaultValue={address?.zip || ""} required /></label>
               </div>
               <label>{text("e911Language")}

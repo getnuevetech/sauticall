@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { searchDids } from "@/lib/carriers";
 import { flagOn } from "@/lib/db";
+import { regionAllowed } from "@/lib/places";
 
 function inventoryMessage(status: string) {
   if (status === "not_configured") return "VoIP.ms is not connected, so inventory cannot be searched.";
   if (status === "invalid_credentials") return "VoIP.ms rejected the API login.";
-  if (status === "invalid_ratecenter" || status === "missing_ratecenter") return "That city was not found. Use the rate center name, such as HOUSTON.";
-  if (status === "missing_state" || status === "invalid_state" || status === "invalid_province") return "Use a two-letter state or province code.";
+  if (status === "invalid_ratecenter" || status === "missing_ratecenter") return "That city is not in the carrier list. Choose another city.";
+  if (status === "missing_state" || status === "invalid_state" || status === "invalid_province") return "Choose a state or province from the list.";
   return status === "success" ? "" : `The carrier returned ${status}.`;
 }
 
@@ -21,7 +22,8 @@ export async function GET(request: Request) {
   const country = url.searchParams.get("country") === "CA" ? "CA" : "US";
   const region = String(url.searchParams.get("region") || "").trim();
   const ratecenter = String(url.searchParams.get("ratecenter") || "").trim();
-  if (!/^[A-Za-z]{2}$/.test(region)) return NextResponse.json({ available: true, dids: [], message: "Use a two-letter state or province code." }, { status: 400 });
+  if (!/^[A-Za-z]{2}$/.test(region) || !regionAllowed(country, region)) return NextResponse.json({ available: true, dids: [], message: "Choose a state or province from the list." }, { status: 400 });
+  if (!ratecenter) return NextResponse.json({ available: true, dids: [], message: "Choose a city." }, { status: 400 });
   try {
     const result = await searchDids(country, region, ratecenter);
     return NextResponse.json({ available: true, dids: result.dids, message: result.ok ? "" : inventoryMessage(result.message) });

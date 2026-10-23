@@ -1,5 +1,6 @@
 import { getDb } from "./db";
 import { readDids, type ListedDid } from "./did-list";
+import { readRateCenters } from "./places";
 
 export type PublicConfig = Record<string, string>;
 
@@ -75,6 +76,29 @@ export async function callVoipms(method: string, params: Record<string, string>)
 export function inventoryReady() {
   const connection = getConnection("voipms");
   return Boolean(connection.enabled && connection.hasSecret && connection.public.api_username);
+}
+
+export async function listRateCenters(country: string, region: string) {
+  const method = country === "CA" ? "getRateCentersCAN" : "getRateCentersUSA";
+  const key = country === "CA" ? "province" : "state";
+  const result = await callVoipms(method, { [key]: region.toUpperCase() });
+  if (!result.ok) return { ok: false, message: result.message, places: [] as string[] };
+  return { ok: true, message: "", places: readRateCenters(result.body) };
+}
+
+export async function listedCity(country: string, region: string, city: string) {
+  const listed = await listRateCenters(country, region);
+  if (!listed.ok) {
+    const message = listed.message === "not_configured"
+      ? "VoIP.ms is not connected, so the city list cannot be loaded."
+      : listed.message === "invalid_credentials"
+        ? "VoIP.ms rejected the API login."
+        : `The carrier returned ${listed.message}.`;
+    return { ok: false as const, message, city: "" };
+  }
+  const match = listed.places.find((place) => place.toUpperCase() === city.trim().toUpperCase());
+  if (!match) return { ok: false as const, message: "Choose a city from the list.", city: "" };
+  return { ok: true as const, message: "", city: match };
 }
 
 export async function searchDids(country: string, region: string, ratecenter: string, limit = 20): Promise<{ ok: boolean; message: string; dids: ListedDid[] }> {
