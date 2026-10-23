@@ -281,12 +281,22 @@ export function dashboardFor(user: Staff) {
     if (missingAddress) attention.push({ href: "/admin/lines", title: `${missingAddress} emergency address${missingAddress === 1 ? "" : "es"} not finished`, detail: "These numbers still need a completed address" });
   }
 
+  if (can(user, permissions, "users.customers")) {
+    const customers = database.prepare("SELECT created_at, disabled FROM users WHERE role = 'customer'").all() as { created_at: string; disabled: number }[];
+    kpis.push({
+      label: "Customers",
+      value: String(customers.filter((person) => !person.disabled).length),
+      hint: `${customers.filter((person) => person.disabled).length} turned off`,
+      href: "/admin/customers",
+    });
+    cards.push({ title: "New customers", href: "/admin/customers", kind: "columns", points: seriesFrom(days, customers.map((person) => ({ at: person.created_at }))), empty: "No new customers in the last 30 days." });
+  }
+
   if (can(user, permissions, "access.manage")) {
-    const people = database.prepare("SELECT role, access_role_id, created_at FROM users").all() as { role: string; access_role_id: number; created_at: string }[];
+    const people = database.prepare("SELECT role, access_role_id, disabled FROM users WHERE role IN ('staff', 'super_admin')").all() as { role: string; access_role_id: number; disabled: number }[];
     const roles = new Map((database.prepare("SELECT id, name FROM access_roles").all() as { id: number; name: string }[]).map((row) => [row.id, row.name]));
-    kpis.push({ label: "Accounts", value: String(people.length), hint: `${people.filter((person) => person.role === "customer").length} customers`, href: "/admin/access" });
-    cards.push({ title: "New accounts", href: "/admin/access", kind: "columns", points: seriesFrom(days, people.map((person) => ({ at: person.created_at }))), empty: "No new accounts in the last 30 days." });
-    cards.push({ title: "Account types", href: "/admin/access", kind: "donut", slices: slicesFrom(tally(people, (person) => person.role), ["customer", "staff", "super_admin"]), empty: "No accounts." });
+    kpis.push({ label: "Admin users", value: String(people.filter((person) => !person.disabled).length), hint: `${people.filter((person) => person.role === "super_admin").length} super admins`, href: "/admin/team" });
+    cards.push({ title: "Admin account types", href: "/admin/team", kind: "donut", slices: slicesFrom(tally(people, (person) => person.role), ["staff", "super_admin"]), empty: "No admin accounts." });
     const byLevel = new Map<string, number>();
     for (const person of people.filter((item) => item.role === "staff")) {
       const name = roles.get(person.access_role_id) || "No access";

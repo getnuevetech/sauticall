@@ -15,8 +15,8 @@ export default async function MessagesPage() {
   }[];
   return (
     <>
-      <span className="eyebrow">Inbox</span>
-      <h2>Messages</h2>
+      <span className="eyebrow">Customers</span>
+      <h2>Contact messages</h2>
       <p>People who wrote in from the contact page or the custom-plan form.</p>
       {rows.length === 0 ? <p>No messages yet.</p> : null}
       {rows.map((row) => (

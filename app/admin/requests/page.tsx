@@ -16,7 +16,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
   const ordering = flagOn("numbers.live_order");
   return (
     <>
-      <span className="eyebrow">Inbox</span>
+      <span className="eyebrow">Customers</span>
       <h2>Number and transfer requests</h2>
       <p>These are requests from customers. Buying a number only happens when you press the button, and only if buying is turned on.</p>
       {params.error ? <p className="form-feedback">{params.error}</p> : null}

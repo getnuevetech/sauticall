@@ -354,6 +354,7 @@ function migrate(database: Database.Database) {
   `);
   const userCols = new Set((database.prepare("PRAGMA table_info(users)").all() as { name: string }[]).map((column) => column.name));
   if (!userCols.has("access_role_id")) database.exec("ALTER TABLE users ADD COLUMN access_role_id INTEGER NOT NULL DEFAULT 0");
+  if (!userCols.has("disabled")) database.exec("ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0");
 }
 
 function put(database: Database.Database, key: string, value: unknown) {

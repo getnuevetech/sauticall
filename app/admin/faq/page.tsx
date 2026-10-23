@@ -10,7 +10,7 @@ export default async function FaqAdminPage() {
   const posts = getDb().prepare("SELECT id, slug, title, published, updated_at FROM faq_posts ORDER BY updated_at DESC").all() as Post[];
   return (
     <>
-      <span className="eyebrow">FAQ blog</span>
+      <span className="eyebrow">Website</span>
       <h2>FAQ articles</h2>
       <p>Published articles appear on the public FAQ page. Pricing-page questions stay under Questions and are separate from these articles.</p>
       <p><Link className="btn btn-primary" href="/admin/faq/new">New article</Link></p>

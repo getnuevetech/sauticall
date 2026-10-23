@@ -69,7 +69,7 @@ export default async function ConnectionsPage() {
   await requirePermission("settings.connections");
   return (
     <>
-      <span className="eyebrow">Settings</span>
+      <span className="eyebrow">Integrations</span>
       <h2>Phone connections</h2>
       <p>Enter the VoIP.ms and 3CX API credentials. They stay on this server and are not shown again after you save. Searching, buying, sending transfers, reading call minutes, and adding trunks are separate switches under What customers can do. Buying a number spends money, so leave that switch off until you mean to.</p>
       <div className="features-grid">

@@ -116,12 +116,17 @@ export async function currentUser(): Promise<SessionUser | null> {
   if (!token) return null;
   const row = getDb()
     .prepare(
-      `SELECT u.id, u.email, u.name, u.role, u.mfa_secret, s.mfa_pending
+      `SELECT u.id, u.email, u.name, u.role, u.mfa_secret, u.disabled, s.mfa_pending
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.token = ? AND s.expires_at > ?`,
     )
-    .get(token, new Date().toISOString()) as SessionUser | undefined;
-  return row ?? null;
+    .get(token, new Date().toISOString()) as (SessionUser & { disabled?: number }) | undefined;
+  if (!row) return null;
+  if (row.disabled) {
+    getDb().prepare("DELETE FROM sessions WHERE token = ?").run(token);
+    return null;
+  }
+  return row;
 }
 
 export async function requireStaff() {

@@ -19,6 +19,7 @@ type UserRow = {
   password_hash: string;
   role: "super_admin" | "staff" | "customer";
   mfa_secret: string | null;
+  disabled?: number;
 };
 
 export async function login(formData: FormData) {
@@ -27,6 +28,7 @@ export async function login(formData: FormData) {
   const password = String(formData.get("password") || "");
   const user = getDb().prepare("SELECT * FROM users WHERE email = ?").get(email) as UserRow | undefined;
   if (!user || !verifyPassword(password, user.password_hash)) return { error: "Email or password is incorrect." };
+  if (user.disabled) return { error: "This account is turned off. An administrator can turn it back on." };
   const needsCode = flagOn("auth.mfa") && Boolean(user.mfa_secret);
   await createSession(user.id, needsCode);
   audit(user.email, "auth.login", needsCode ? "mfa-pending" : "password");
