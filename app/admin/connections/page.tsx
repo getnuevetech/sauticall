@@ -1,4 +1,5 @@
 import { saveConnection, testConnection } from "../actions";
+import { requirePermission } from "@/lib/access";
 import { getConnection } from "@/lib/carriers";
 import { dialTimeChoices, withCurrent } from "@/lib/admin-choices";
 
@@ -64,7 +65,8 @@ function PbxForm() {
   );
 }
 
-export default function ConnectionsPage() {
+export default async function ConnectionsPage() {
+  await requirePermission("settings.connections");
   return (
     <>
       <span className="eyebrow">Settings</span>

@@ -1,14 +1,15 @@
 import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
+import { userCan } from "@/lib/access";
 import { currentUser } from "@/lib/auth";
 import { audit, getDb } from "@/lib/db";
 import { uploadDir } from "@/lib/paths";
 
 export async function POST(request: Request) {
   const user = await currentUser();
-  if (!user || (user.role !== "super_admin" && user.role !== "staff")) {
-    return NextResponse.json({ error: "Staff sign-in is required." }, { status: 401 });
+  if (!user || !userCan(user, "inbox.media")) {
+    return NextResponse.json({ error: "You do not have access to upload pictures." }, { status: 401 });
   }
   const form = await request.formData();
   const file = form.get("file");

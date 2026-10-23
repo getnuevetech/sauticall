@@ -1,8 +1,10 @@
 import { DocumentEditor } from "@/components/admin/Editors";
+import { requirePermission } from "@/lib/access";
 import { screenFor } from "@/lib/admin-labels";
 import { readDoc } from "@/lib/db";
 
-export default function ThemePage() {
+export default async function ThemePage() {
+  await requirePermission("settings.theme");
   const screen = screenFor("theme");
   return (
     <>

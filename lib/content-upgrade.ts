@@ -153,19 +153,26 @@ export function upgradeContent(database: Database.Database) {
         }
       }
     }
+    const oldPhone = "Add the people who should have an extension. During the day calls go to the first person. After hours they go to voicemail.";
+    if (account.phoneBody === oldPhone) {
+      account.phoneBody = "Add people, then make a ring group or a call queue. Daytime calls go to the group you choose. After hours they go to voicemail. Until a group is on the phone system, daytime calls go to the first person.";
+      changed = true;
+    }
     if (changed) writeJson(database, "page.account", account);
   }
 
-  const nav = readJson<NavLink[]>(database, "nav");
-  if (nav && !nav.some((link) => link.href === "/account/phone")) {
-    nav.push({ label: "Phone system", href: "/account/phone", location: "account" });
-    writeJson(database, "nav", nav);
-  }
-  const withPhone = readJson<NavLink[]>(database, "nav");
-  if (withPhone && !withPhone.some((link) => link.href === "/account/minutes")) {
-    withPhone.push({ label: "Call minutes", href: "/account/minutes", location: "account" });
-    writeJson(database, "nav", withPhone);
-  }
+  const ensureNav = (link: NavLink) => {
+    const nav = readJson<NavLink[]>(database, "nav");
+    if (nav && !nav.some((item) => item.href === link.href && item.location === link.location)) {
+      nav.push(link);
+      writeJson(database, "nav", nav);
+    }
+  };
+  ensureNav({ label: "Phone system", href: "/account/phone", location: "account" });
+  ensureNav({ label: "Call minutes", href: "/account/minutes", location: "account" });
+  ensureNav({ label: "Support", href: "/account/tickets", location: "account" });
+  ensureNav({ label: "FAQ", href: "/faq", location: "header" });
+  ensureNav({ label: "FAQ", href: "/faq", location: "mobile" });
 
   const disclaimers = [
     "*Illustrative concept prices only. Not live plans or a purchase offer. Custom has no public price. Minutes, DIDs, 3CX licenses, telecom charges, taxes, E911 and AI usage require final commercial validation.",
@@ -184,5 +191,11 @@ export function upgradeContent(database: Database.Database) {
   if (explore && !explore.links.some((link) => link.href === "/custom")) {
     explore.links.push({ label: "Custom plan", href: "/custom" });
     writeJson(database, "footer", footer);
+  }
+  const withFaq = readJson<{ groups: { title: string; links: { label: string; href: string }[] }[] }>(database, "footer");
+  const faqExplore = withFaq?.groups.find((group) => group.title === "Explore");
+  if (faqExplore && !faqExplore.links.some((link) => link.href === "/faq")) {
+    faqExplore.links.push({ label: "FAQ", href: "/faq" });
+    writeJson(database, "footer", withFaq);
   }
 }

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Frame } from "@/components/site/Frame";
 import { AdminNav } from "@/components/admin/AdminNav";
+import { visibleAdminNav } from "@/lib/access";
 import { requireStaff } from "@/lib/auth";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -10,7 +11,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <Frame pathname="/admin">
       <main className="admin-page">
         <div className="admin-shell">
-          <AdminNav />
+          <AdminNav groups={visibleAdminNav(user)} />
           <div className="admin-main">{children}</div>
         </div>
       </main>

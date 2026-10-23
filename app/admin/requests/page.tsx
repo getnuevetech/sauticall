@@ -1,4 +1,5 @@
 import { orderSavedNumber, refreshPortStatus, setRequestStatus } from "../actions";
+import { requirePermission } from "@/lib/access";
 import { formatAddress, parseEmergency } from "@/lib/e911";
 import { requestStatusLabel, requestStatuses } from "@/lib/admin-labels";
 import { flagOn, getDb } from "@/lib/db";
@@ -6,6 +7,7 @@ import { flagOn, getDb } from "@/lib/db";
 type Row = { id: number; email: string; kind: string; payload: string; status: string; provider_ref: string; staff_note: string; created_at: string };
 
 export default async function RequestsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  await requirePermission("inbox.requests");
   const params = await searchParams;
   const rows = getDb().prepare(
     `SELECT r.id, u.email, r.kind, r.payload, r.status, r.provider_ref, r.staff_note, r.created_at

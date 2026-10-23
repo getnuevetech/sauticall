@@ -1,8 +1,10 @@
 import { DocumentEditor } from "@/components/admin/Editors";
+import { requirePermission } from "@/lib/access";
 import { screenFor } from "@/lib/admin-labels";
 import { readDoc } from "@/lib/db";
 
-export default function FlagsPage() {
+export default async function FlagsPage() {
+  await requirePermission("settings.flags");
   const screen = screenFor("flags");
   return (
     <>

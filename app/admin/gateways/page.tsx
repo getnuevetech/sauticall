@@ -1,12 +1,14 @@
 import { GatewayForm } from "@/components/admin/Editors";
 import { setGatewayEnabled, testGateway } from "../actions";
+import { requirePermission } from "@/lib/access";
 import { getDb } from "@/lib/db";
 import { readGatewaySecret } from "@/lib/payment-keys";
 import { publicGatewayConfig } from "@/lib/payments";
 
 const COMPANY: Record<string, string> = { stripe: "Stripe", paypal: "PayPal", square: "Square" };
 
-export default function GatewaysPage() {
+export default async function GatewaysPage() {
+  await requirePermission("settings.payments");
   const gateways = getDb().prepare("SELECT id, name, provider_key, public_label, enabled, priority, mode, currencies, config_json, secret, last_ok, last_message, checked_at FROM gateways ORDER BY priority, id").all() as {
     id: number;
     name: string;
