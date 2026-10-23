@@ -1,9 +1,11 @@
+import { currentUser } from "@/lib/auth";
 import { enabled, loadSite } from "@/lib/site";
 import { themeStyle } from "@/lib/theme-css";
 import { SiteFooter, SiteHeader } from "./Chrome";
 
-export function Frame({ pathname, children }: { pathname: string; children: React.ReactNode }) {
+export async function Frame({ pathname, children }: { pathname: string; children: React.ReactNode }) {
   const site = loadSite();
+  const user = await currentUser();
   const home = site.home;
   const talk = typeof home.headerTalk === "string" ? home.headerTalk : "Talk to us";
   const talkHref = typeof home.headerTalkHref === "string" ? home.headerTalkHref : "/contact";
@@ -16,6 +18,7 @@ export function Frame({ pathname, children }: { pathname: string; children: Reac
         theme={site.theme}
         pathname={pathname}
         showSignIn={enabled(site.flags, "auth.show_sign_in")}
+        signedIn={Boolean(user)}
         talkLabel={talk}
         talkHref={talkHref}
       />

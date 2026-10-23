@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { logout } from "@/app/account/actions";
 import { Icon } from "../Icon";
 import { MenuButton } from "./Interactive";
 import type { NavLink, Theme } from "@/lib/types";
@@ -18,11 +19,20 @@ function Brand({ theme, href = "/" }: { theme: Theme; href?: string }) {
   );
 }
 
+function SignOut({ className }: { className: string }) {
+  return (
+    <form action={logout}>
+      <button className={className} type="submit">Sign out</button>
+    </form>
+  );
+}
+
 export function SiteHeader({
   nav,
   theme,
   pathname,
   showSignIn,
+  signedIn,
   talkLabel,
   talkHref,
 }: {
@@ -30,6 +40,7 @@ export function SiteHeader({
   theme: Theme;
   pathname: string;
   showSignIn: boolean;
+  signedIn: boolean;
   talkLabel: string;
   talkHref: string;
 }) {
@@ -45,15 +56,19 @@ export function SiteHeader({
           ))}
         </nav>
         <div className="nav-actions">
-          {showSignIn ? <Link className="nav-sign" href="/account/login">Sign in</Link> : null}
+          {signedIn || !showSignIn ? null : <Link className="nav-sign" href="/account/login">Sign in</Link>}
           <Link className="nav-sign" href={talkHref}>{talkLabel}</Link>
-          <Link className="btn btn-primary nav-cta" href="/account/register">Create account <Icon name="arrow" size={17} /></Link>
+          {signedIn ? (
+            <SignOut className="btn btn-primary nav-cta" />
+          ) : (
+            <Link className="btn btn-primary nav-cta" href="/account/register">Create account <Icon name="arrow" size={17} /></Link>
+          )}
           <MenuButton />
         </div>
       </div>
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        <Link href="/account/register">Create account</Link>
-        {showSignIn ? <Link href="/account/login">Sign in</Link> : null}
+        {signedIn ? <SignOut className="nav-menu-action" /> : <Link href="/account/register">Create account</Link>}
+        {signedIn || !showSignIn ? null : <Link href="/account/login">Sign in</Link>}
         {mobile.map((item) => <Link key={`m-${item.href}-${item.label}`} href={item.href}>{item.label}</Link>)}
       </nav>
     </header>

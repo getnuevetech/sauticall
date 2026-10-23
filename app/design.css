@@ -163,3 +163,6 @@ body{background:#fff}
 .faq-article h2{font-size:1.6rem}
 .faq-article h3{font-size:1.25rem}
 .faq-article li{color:#64697a}
+.nav-actions form{margin:0;display:inline-flex}
+.mobile-nav form{margin:0}
+.mobile-nav button.nav-menu-action{background:none;border:0;color:inherit;text-align:left;width:100%;padding:11px 0;border-bottom:1px solid #233a4a;cursor:pointer}
