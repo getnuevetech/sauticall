@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/access";
 import { permissionForDocument } from "@/lib/access-catalog";
 import { audit, getDb, writeDoc } from "@/lib/db";
+import { normalizePlans } from "@/lib/plan-features";
+import type { Plan } from "@/lib/types";
 import { readGatewaySecret, stripePublishableMatches, stripeSecretMatches, writeGatewaySecret } from "@/lib/payment-keys";
 
 async function staff(permission: string) {
@@ -24,6 +26,26 @@ export async function saveDocument(key: string, json: string) {
     writeDoc(key, value, user.email);
   }
   revalidatePath("/", "layout");
+}
+
+export async function savePlans(json: string) {
+  const user = await staff("content.plans");
+  let parsed: Plan[];
+  try {
+    const value = JSON.parse(json) as unknown;
+    if (!Array.isArray(value)) throw new Error("bad");
+    parsed = value as Plan[];
+  } catch {
+    redirect("/admin/content/plans?error=Those%20plans%20could%20not%20be%20read.");
+  }
+  const names = parsed.map((plan) => String(plan.name || "").trim());
+  if (names.some((name) => !name) || new Set(names.map((name) => name.toLowerCase())).size !== names.length) {
+    redirect("/admin/content/plans?error=Give%20every%20plan%20its%20own%20name.");
+  }
+  const plans = normalizePlans(parsed.map((plan, index) => ({ ...plan, name: names[index] })));
+  writeDoc("plans", plans, user.email);
+  revalidatePath("/", "layout");
+  redirect("/admin/content/plans?saved=1");
 }
 
 export async function saveGateway(formData: FormData) {

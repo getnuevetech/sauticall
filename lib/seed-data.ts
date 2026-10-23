@@ -108,10 +108,10 @@ export const defaultServices: Service[] = [
 export const anyLanguageFeature = "AI that understands callers in any language";
 
 export const defaultPlans: Plan[] = [
-  { name: "Solo", price: 19, custom: false, base: true, multilingual: false, includedMinutes: 200, priceLabel: "", desc: "For individuals and one-person businesses.", units: "1 user / extension", features: ["Business number request", "Mobile & desktop softphone", "Voicemail and call forwarding", "Online account management"], note: "Base plan. Any-language AI starts on the plans above.", popular: false, ctaLabel: "Request this plan", ctaHref: "/contact" },
-  { name: "Small Business", price: 39, custom: false, base: false, multilingual: true, includedMinutes: 800, priceLabel: "", desc: "For small teams that want to sound established.", units: "Up to 5 extensions", features: ["Everything in Solo", anyLanguageFeature, "Business-hour routing", "Ring groups and transfers", "Supported desk-phone setup", "AI setup assistant"], note: "Most popular starting point", popular: true, ctaLabel: "Request this plan", ctaHref: "/contact" },
-  { name: "Team", price: 79, custom: false, base: false, multilingual: true, includedMinutes: 2000, priceLabel: "", desc: "For busy offices and customer-facing teams.", units: "Up to 10 extensions", features: ["Everything in Small Business", anyLanguageFeature, "Call queues and reporting", "Multi-user administration", "Priority setup assistance"], note: "Scale as your call traffic grows", popular: false, ctaLabel: "Request this plan", ctaHref: "/contact" },
-  { name: "Custom", price: 0, custom: true, base: false, multilingual: true, includedMinutes: 0, priceLabel: "Custom", desc: "A phone system shaped around a specific business.", units: "Scoped with you", features: ["A design for your call flow", anyLanguageFeature, "Extensions, queues, and numbers sized to the business", "A salesperson follows up on the request"], note: "No public price. Tell us what you need.", popular: false, ctaLabel: "Request a custom system", ctaHref: "/custom" },
+  { name: "Solo", price: 19, custom: false, base: false, multilingual: false, includedMinutes: 200, seats: 1, priceLabel: "", desc: "For individuals and one-person businesses.", units: "1 person", features: ["numbers", "softphone", "voicemail"], note: "A single person, without the AI receptionist.", popular: false, ctaLabel: "Request this plan", ctaHref: "/contact" },
+  { name: "Small Business", price: 39, custom: false, base: false, multilingual: true, includedMinutes: 800, seats: 5, priceLabel: "", desc: "For small teams that want to sound established.", units: "5 people", features: ["numbers", "porting", "softphone", "voicemail", "business_hours", "ring_groups", "desk_phones", "ai", "ai_any_language"], note: "Most popular starting point", popular: true, ctaLabel: "Request this plan", ctaHref: "/contact" },
+  { name: "Team", price: 79, custom: false, base: false, multilingual: true, includedMinutes: 2000, seats: 10, priceLabel: "", desc: "For busy offices and customer-facing teams.", units: "10 people", features: ["numbers", "porting", "softphone", "voicemail", "business_hours", "ring_groups", "queues", "desk_phones", "ai", "ai_any_language", "reporting"], note: "Scale as your call traffic grows", popular: false, ctaLabel: "Request this plan", ctaHref: "/contact" },
+  { name: "Custom", price: 0, custom: true, base: false, multilingual: true, includedMinutes: 0, seats: 0, priceLabel: "Custom", desc: "A phone system shaped around a specific business.", units: "Scoped with you", features: ["numbers", "porting", "softphone", "desk_phones", "voicemail", "business_hours", "ring_groups", "queues", "ai", "ai_any_language", "reporting"], note: "No public price. Tell us what you need.", popular: false, ctaLabel: "Request a custom system", ctaHref: "/custom" },
 ];
 
 export const defaultMinuteBundles = [
@@ -125,7 +125,7 @@ export const defaultFaqs: Faq[] = [
   { q: "Do I have to buy office phones?", a: "No. You can use compatible desktop or mobile softphones. If your team prefers physical office phones, SautiCall can help you set up supported IP desk phones." },
   { q: "Will the AI change my phone system without asking?", a: "No. SautiCall presents a clear configuration for approval before applying it. Some changes may require additional verification or help from an administrator." },
   { q: "Is this a real subscription offer?", a: "Yes. In your account, choose a plan and pay with a method an administrator has connected. The charge is that plan’s monthly price." },
-  { q: "Can the AI understand a caller in any language?", a: "Yes, on every plan except the base plan. The AI receptionist can receive the call and understand the caller in the language they speak. The Solo plan is the base plan and does not include this." },
+  { q: "Can the AI understand a caller in any language?", a: "Only on a plan where an administrator has checked AI in any language. A plan without the AI receptionist checked does not include AI at all." },
   { q: "What if none of the priced plans fit?", a: "Choose Custom. There is no public price. Describe the system you need and leave your contact details. A salesperson will reach out." },
   { q: "What happens if a setup step needs manual assistance?", a: "You will see the request status in your dashboard. A SautiCall administrator can complete the exceptional step while the rest of your setup remains tracked." },
 ];
@@ -178,8 +178,8 @@ export const defaultPages: Record<string, Record<string, unknown>> = {
     personaTitle: "Your calls deserve the right kind of care.",
     languageEyebrow: "ANY LANGUAGE",
     languageTitle: "Callers can speak the language they know.",
-    languageBody: "On every plan except the base plan, the AI receptionist can receive a call and understand the person speaking, whichever language they use.",
-    languageException: "Solo is the base plan, so any-language understanding is not included there. It is included on Small Business, Team, and Custom.",
+    languageBody: "Any-language understanding is included only on plans where an administrator has checked that feature.",
+    languageException: "A plan without the AI receptionist checked does not include AI. Any-language understanding is a separate check.",
     languageBadge: "Any language",
     priceEyebrow: "GOOD THINGS SHOULD BE SIMPLE",
     priceTitle: "Transparent-looking plans. Human-sized businesses.",
@@ -243,11 +243,11 @@ export const defaultPages: Record<string, Record<string, unknown>> = {
     storyEyebrow: "A HELPFUL FIRST HELLO",
     storyTitle: "Sound present, even when you’re busy.",
     storyBody: "Configure what the receptionist should say, which questions it can answer, when it should transfer calls, and what happens outside business hours.",
-    points: ["Natural-language greetings", "Understands callers in any language on every plan except the base plan", "Answers using your approved business information", "Call transfers to real employees", "After-hours message capture", "Summaries and follow-up notifications"],
+    points: ["Natural-language greetings", "Understands callers in any language only on plans where that feature is checked", "Answers using your approved business information", "Call transfers to real employees", "After-hours message capture", "Summaries and follow-up notifications"],
     languageEyebrow: "ANY LANGUAGE",
     languageTitle: "Understand the caller, whatever language they use.",
-    languageBody: "The AI receptionist can receive the call and follow what the caller is saying in any language. That is included on every plan except the base plan.",
-    languageException: "The base plan is Solo. Small Business, Team, and Custom include any-language call understanding.",
+    languageBody: "The AI receptionist follows what the caller is saying in any language when that feature is checked on the customer's plan.",
+    languageException: "Plans that do not have the AI receptionist checked do not include AI.",
     controlEyebrow: "CONTROL STAYS WITH YOU",
     controlTitle: "Your rules. Your voice. Your business.",
     controlBody: "AI handling is configured from your SautiCall account, within supported 3CX capabilities and approved access permissions.",

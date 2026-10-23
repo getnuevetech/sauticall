@@ -4,6 +4,8 @@ import { NumberSearch } from "@/components/account/NumberSearch";
 import { saveEmergencyAddress } from "../actions";
 import { guardAccount } from "@/lib/guard";
 import { flagOn, getDb } from "@/lib/db";
+import { paidPlan } from "@/lib/pbx";
+import { planAllows } from "@/lib/plan-features";
 import { formatAddress, getEmergency, unitTypes, type EmergencyAddress } from "@/lib/e911";
 import { loadSite } from "@/lib/site";
 
@@ -21,6 +23,7 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
   const copy = loadSite().account;
   const text = (key: string) => (typeof copy[key] === "string" ? String(copy[key]) : "");
   const open = flagOn("numbers.search");
+  const included = planAllows(paidPlan(user.id), "numbers");
   const address = getEmergency(user.id);
   const rows = getDb().prepare("SELECT id, payload, status, staff_note, created_at FROM account_requests WHERE user_id = ? AND kind = 'number' ORDER BY id DESC").all(user.id) as { id: number; payload: string; status: string; staff_note: string; created_at: string }[];
   const lines = getDb().prepare("SELECT did, e911_status, e911_message FROM phone_lines WHERE user_id = ? ORDER BY id DESC").all(user.id) as { did: string; e911_status: string; e911_message: string }[];
@@ -67,7 +70,7 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
               </label>
               <button className="btn btn-primary" type="submit">{text("e911Save")}</button>
             </form>
-            {open ? <NumberSearch live={flagOn("numbers.live_search")} copy={labels} /> : <div className="contact-form"><p>{text("numbersClosed")}</p></div>}
+            {!included ? <div className="contact-form"><p>Business numbers are not included on your plan.</p></div> : open ? <NumberSearch live={flagOn("numbers.live_search")} copy={labels} /> : <div className="contact-form"><p>{text("numbersClosed")}</p></div>}
             <div className="faq-list" style={{ marginTop: 28 }}>
               {lines.map((line) => <p key={line.did}>{line.did} · {E911[line.e911_status] || line.e911_status}{line.e911_message ? ` · ${line.e911_message}` : ""}</p>)}
               {rows.map((row) => {

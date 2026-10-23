@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
-import { anyLanguageFeature, defaultFlags, defaultPages, defaultPersonas, defaultPlans } from "./seed-data";
+import { normalizePlans } from "./plan-features";
+import { defaultFlags, defaultPages, defaultPersonas, defaultPlans } from "./seed-data";
 import type { Faq, Flag, NavLink, Persona, Plan } from "./types";
 
 function readJson<T>(database: Database.Database, key: string): T | null {
@@ -43,50 +44,53 @@ export function upgradeContent(database: Database.Database) {
       if (custom) plans.push(custom);
       changed = true;
     }
-    const baseIndex = plans.findIndex((plan) => !plan.custom);
-    plans.forEach((plan, index) => {
-      if (plan.custom == null) {
-        plan.custom = false;
-        changed = true;
-      }
-      if (plan.base == null) {
-        plan.base = !plan.custom && index === baseIndex;
-        changed = true;
-      }
-      if (plan.multilingual == null) {
-        plan.multilingual = !plan.base;
-        changed = true;
-      }
-      if (plan.priceLabel == null) {
-        plan.priceLabel = plan.custom ? "Custom" : "";
-        changed = true;
-      }
-      if (plan.multilingual && !plan.features.includes(anyLanguageFeature)) {
-        plan.features.push(anyLanguageFeature);
-        changed = true;
-      }
-      if (plan.base && plan.note === "AI receptionist available as add-on") {
-        plan.note = "Base plan. Any-language AI starts on the plans above.";
-        changed = true;
-      }
+    plans.forEach((plan) => {
+      if (plan.custom == null) plan.custom = false;
+      if (plan.priceLabel == null) plan.priceLabel = plan.custom ? "Custom" : "";
       if (plan.includedMinutes == null) {
         const seeded = defaultPlans.find((item) => item.name === plan.name);
         plan.includedMinutes = seeded ? seeded.includedMinutes : plan.custom ? 0 : 200;
+      }
+      if (plan.note === "AI receptionist available as add-on" || plan.note === "Base plan. Any-language AI starts on the plans above.") {
+        plan.note = "A single person, without the AI receptionist.";
         changed = true;
       }
     });
-    if (changed) writeJson(database, "plans", plans);
+    const normalized = normalizePlans(plans);
+    if (JSON.stringify(normalized) !== JSON.stringify(plans)) changed = true;
+    if (changed) writeJson(database, "plans", normalized);
   }
 
   for (const [key, value] of Object.entries(defaultPages)) {
     const page = readJson<Record<string, unknown>>(database, `page.${key}`);
-    if (page && mergeMissing(page, value)) writeJson(database, `page.${key}`, page);
+    if (!page) continue;
+    let pageChanged = mergeMissing(page, value);
+    const replacements: Record<string, string> = {
+      "On every plan except the base plan, the AI receptionist can receive a call and understand the person speaking, whichever language they use.": "Any-language understanding is included only on plans where an administrator has checked that feature.",
+      "Solo is the base plan, so any-language understanding is not included there. It is included on Small Business, Team, and Custom.": "A plan without the AI receptionist checked does not include AI. Any-language understanding is a separate check.",
+      "The AI receptionist can receive the call and follow what the caller is saying in any language. That is included on every plan except the base plan.": "The AI receptionist follows what the caller is saying in any language when that feature is checked on the customer's plan.",
+      "The base plan is Solo. Small Business, Team, and Custom include any-language call understanding.": "Plans that do not have the AI receptionist checked do not include AI.",
+    };
+    for (const [from, to] of Object.entries(replacements)) {
+      for (const [field, current] of Object.entries(page)) {
+        if (current === from) {
+          page[field] = to;
+          pageChanged = true;
+        }
+      }
+    }
+    if (pageChanged) writeJson(database, `page.${key}`, page);
   }
 
   const ai = readJson<Record<string, unknown>>(database, "page.ai");
-  if (ai && Array.isArray(ai.points) && ai.points.every((point) => point !== "Understands callers in any language on every plan except the base plan")) {
-    ai.points.splice(1, 0, "Understands callers in any language on every plan except the base plan");
-    writeJson(database, "page.ai", ai);
+  if (ai && Array.isArray(ai.points)) {
+    const oldPoint = "Understands callers in any language on every plan except the base plan";
+    const nextPoint = "Understands callers in any language only on plans where that feature is checked";
+    const index = ai.points.indexOf(oldPoint);
+    if (index >= 0) ai.points[index] = nextPoint;
+    else if (!ai.points.includes(nextPoint)) ai.points.splice(1, 0, nextPoint);
+    else ai.points = null;
+    if (ai.points) writeJson(database, "page.ai", ai);
   }
 
   const contact = readJson<Record<string, unknown>>(database, "page.contact");
@@ -99,7 +103,7 @@ export function upgradeContent(database: Database.Database) {
 
   const faqs = readJson<Faq[]>(database, "faqs");
   const extraFaqs: Faq[] = [
-    { q: "Can the AI understand a caller in any language?", a: "Yes, on every plan except the base plan. The AI receptionist can receive the call and understand the caller in the language they speak. The Solo plan is the base plan and does not include this." },
+    { q: "Can the AI understand a caller in any language?", a: "Only on a plan where an administrator has checked AI in any language. A plan without the AI receptionist checked does not include AI at all." },
     { q: "What if none of the priced plans fit?", a: "Choose Custom. There is no public price. Describe the system you need and leave your contact details. A salesperson will reach out." },
     { q: "How do call minutes work?", a: "Each priced plan includes outbound minutes for 30 days after you pay. You can also buy minute bundles, and those minutes last until you use them. When the balance reaches zero, outbound calls stop at the phone company. An administrator sets the included minutes and the bundle prices." },
   ];
@@ -114,6 +118,10 @@ export function upgradeContent(database: Database.Database) {
     for (const faq of faqs) {
       if (faq.q === "Is this a real subscription offer?" && faq.a.startsWith("This website is a design prototype")) {
         faq.a = "Yes. In your account, choose a plan and pay with a method an administrator has connected. The charge is that plan’s monthly price.";
+        changed = true;
+      }
+      if (faq.q === "Can the AI understand a caller in any language?" && faq.a.includes("base plan")) {
+        faq.a = "Only on a plan where an administrator has checked AI in any language. A plan without the AI receptionist checked does not include AI at all.";
         changed = true;
       }
     }

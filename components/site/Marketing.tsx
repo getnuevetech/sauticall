@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Icon } from "../Icon";
 import { ChatDemo, ContactForm, CustomRequestForm, Estimator } from "./Interactive";
 import { EndCta, PhoneArt } from "./Chrome";
+import { featureLabels, normalizePlan, planAllows } from "@/lib/plan-features";
 import type { Faq, Persona, Plan, Service } from "@/lib/types";
 
 function str(page: Record<string, unknown>, key: string) {
@@ -20,7 +21,9 @@ function list(page: Record<string, unknown>, key: string) {
 function PricingCards({ plans, ribbon, languageBadge }: { plans: Plan[]; ribbon: string; languageBadge: string }) {
   return (
     <div className="price-grid">
-      {plans.map((plan) => (
+      {plans.map((raw) => {
+        const plan = normalizePlan(raw);
+        return (
         <article key={plan.name} className={`price-card ${plan.popular ? "popular" : ""} ${plan.custom ? "custom" : ""}`}>
           {plan.popular ? <div className="price-ribbon">{ribbon}</div> : null}
           <div className="plan-name">{plan.name}</div>
@@ -28,17 +31,18 @@ function PricingCards({ plans, ribbon, languageBadge }: { plans: Plan[]; ribbon:
           <div className="price-line">
             {plan.custom ? <strong>{plan.priceLabel || "Custom"}</strong> : (<><sup>$</sup><strong>{plan.price}</strong><span>/month*</span></>)}
           </div>
-          {plan.multilingual && languageBadge ? <div className="lang-pill">{languageBadge}</div> : null}
+          {planAllows(plan, "ai_any_language") && languageBadge ? <div className="lang-pill">{languageBadge}</div> : null}
           <div className="unit-line"><Icon name="users" size={16} /> {plan.units}</div>
           {plan.includedMinutes > 0 ? <div className="unit-line"><Icon name="phone" size={16} /> {plan.includedMinutes} outbound minutes / month</div> : null}
           <div className="plan-rule" />
           <ul>
-            {plan.features.map((feature) => <li key={feature}><Icon name="check" size={17} /> <span>{feature}</span></li>)}
+            {featureLabels(plan.features).map((feature) => <li key={feature}><Icon name="check" size={17} /> <span>{feature}</span></li>)}
           </ul>
           <Link className={`btn ${plan.popular ? "btn-primary" : "btn-secondary"}`} href={plan.ctaHref}>{plan.ctaLabel} <Icon name="arrow" size={16} /></Link>
           <small>{plan.note}</small>
         </article>
-      ))}
+        );
+      })}
     </div>
   );
 }

@@ -160,6 +160,9 @@ export async function saveNumber(formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
   if (!flagOn("numbers.search")) redirect("/account/numbers?error=An%20administrator%20has%20turned%20this%20request%20off.");
+  const { paidPlan } = await import("@/lib/pbx");
+  const { planAllows } = await import("@/lib/plan-features");
+  if (!planAllows(paidPlan(user.id), "numbers")) redirect("/account/numbers?error=Business%20numbers%20are%20not%20included%20on%20your%20plan.");
   const { getEmergency } = await import("@/lib/e911");
   const emergency = getEmergency(user.id);
   if (!emergency) redirect("/account/numbers?error=Add%20the%20emergency%20address%20first.");
@@ -207,6 +210,9 @@ export async function savePort(formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
   if (!flagOn("porting.requests")) redirect("/account/porting?error=An%20administrator%20has%20turned%20this%20request%20off.");
+  const { paidPlan: subscribed } = await import("@/lib/pbx");
+  const { planAllows: allows } = await import("@/lib/plan-features");
+  if (!allows(subscribed(user.id), "porting")) redirect("/account/porting?error=Number%20transfer%20is%20not%20included%20on%20your%20plan.");
   const payload = {
     numbers: String(formData.get("numbers") || "").replace(/[^\d,]/g, ""),
     country: String(formData.get("country") || "US").toUpperCase() === "CA" ? "CA" : "US",
@@ -294,6 +300,9 @@ export async function savePhoneHours(formData: FormData) {
   const open = String(formData.get("open_time") || "09:00").slice(0, 5);
   const close = String(formData.get("close_time") || "17:00").slice(0, 5);
   if (!/^\d{2}:\d{2}$/.test(open) || !/^\d{2}:\d{2}$/.test(close)) redirect("/account/phone?error=Use%20hours%20like%2009%3A00.");
+  const { paidPlan: hoursPlan } = await import("@/lib/pbx");
+  const { planAllows: hoursAllowed } = await import("@/lib/plan-features");
+  if (!hoursAllowed(hoursPlan(user.id), "business_hours")) redirect("/account/phone?error=Business%20hours%20are%20not%20included%20on%20your%20plan.");
   getDb().prepare(
     `INSERT INTO pbx_departments (user_id, name, xapi_id, number_from, number_to, open_time, close_time, last_message)
      VALUES (?, ?, 0, '', '', ?, ?, '')

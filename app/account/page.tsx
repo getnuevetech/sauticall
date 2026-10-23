@@ -4,6 +4,8 @@ import { AccountHero, AccountNav } from "@/components/account/Portal";
 import { guardAccount } from "@/lib/guard";
 import { getDb } from "@/lib/db";
 import { minuteBalance } from "@/lib/minutes";
+import { paidPlan } from "@/lib/pbx";
+import { featureLabels, planAllows } from "@/lib/plan-features";
 import { loadSite } from "@/lib/site";
 
 export default async function AccountHome() {
@@ -13,6 +15,7 @@ export default async function AccountHome() {
   const text = (key: string) => (typeof copy[key] === "string" ? String(copy[key]) : "");
   const requests = getDb().prepare("SELECT kind, status, created_at FROM account_requests WHERE user_id = ? ORDER BY id DESC LIMIT 5").all(user.id) as { kind: string; status: string; created_at: string }[];
   const minutes = minuteBalance(user.id);
+  const plan = paidPlan(user.id);
   return (
     <Frame pathname="/account">
       <main>
@@ -24,6 +27,16 @@ export default async function AccountHome() {
               <Link className="btn btn-primary" href={text("primaryHref")}>{text("primaryCta")}</Link>
               <Link className="btn btn-secondary" href={text("secondaryHref")}>{text("secondaryCta")}</Link>
             </div>
+            <article className="feature-card" style={{ marginBottom: 22 }}>
+              <h3>{plan ? plan.name : "No plan yet"}</h3>
+              {plan ? (
+                <>
+                  <p>{plan.seats || 0} {plan.seats === 1 ? "person" : "people"} · {plan.includedMinutes} outbound minutes each month.</p>
+                  <ul className="desk-lines">{featureLabels(plan.features).map((feature) => <li key={feature}>{feature}</li>)}</ul>
+                  <p>{planAllows(plan, "ai") ? `AI receptionist is included${planAllows(plan, "ai_any_language") ? " and understands any language." : "."}` : "AI receptionist is not included on this plan."}</p>
+                </>
+              ) : <p><Link className="text-link" href="/account/billing">Choose a plan</Link> to open the phone features it includes.</p>}
+            </article>
             <div className="features-grid">
               <article className="feature-card">
                 <h3>Services</h3>

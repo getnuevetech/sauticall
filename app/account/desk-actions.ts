@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { createCallGroup, removeCallGroup, setDaytimeGroup } from "@/lib/call-groups";
+import { paidPlan } from "@/lib/pbx";
+import { planAllows } from "@/lib/plan-features";
 import { audit } from "@/lib/db";
 import { createCustomerTicket, customerReply } from "@/lib/tickets";
 
@@ -14,6 +16,7 @@ async function accountUser() {
 
 export async function createRingGroup(formData: FormData) {
   const user = await accountUser();
+  if (!planAllows(paidPlan(user.id), "ring_groups")) redirect("/account/phone?error=Ring%20groups%20are%20not%20included%20on%20your%20plan.");
   const result = await createCallGroup({
     userId: user.id,
     kind: "ring",
@@ -28,6 +31,7 @@ export async function createRingGroup(formData: FormData) {
 
 export async function createQueue(formData: FormData) {
   const user = await accountUser();
+  if (!planAllows(paidPlan(user.id), "queues")) redirect("/account/phone?error=Call%20queues%20are%20not%20included%20on%20your%20plan.");
   const result = await createCallGroup({
     userId: user.id,
     kind: "queue",
