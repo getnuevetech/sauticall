@@ -7,9 +7,11 @@ type Did = { did: string; ratecenter: string; state: string; monthly: string };
 
 export function NumberSearch({
   live,
+  automatic,
   copy,
 }: {
   live: boolean;
+  automatic: boolean;
   copy: Record<string, string>;
 }) {
   const [dids, setDids] = useState<Did[]>([]);
@@ -57,7 +59,7 @@ export function NumberSearch({
           <input type="hidden" name="ratecenter" value={item.ratecenter} />
           <strong>{item.did}</strong>
           <p>{[item.ratecenter, item.state, item.monthly ? `$${item.monthly}/mo` : ""].filter(Boolean).join(" · ")}</p>
-          <button className="btn btn-secondary" type="submit">{copy.numbersRequest}</button>
+          <button className="btn btn-secondary" type="submit">{automatic ? copy.numbersBuy || "Buy this number" : copy.numbersRequest}</button>
         </form>
       ))}
     </div>

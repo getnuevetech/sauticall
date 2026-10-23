@@ -185,11 +185,22 @@ export async function saveNumber(formData: FormData) {
   const match = await findInventoryDid(country, region, ratecenter, did);
   if (!match) redirect("/account/numbers?error=That%20number%20is%20not%20in%20the%20current%20inventory.%20Search%20again%20and%20choose%20a%20listed%20number.");
   const payload = { did: match.did, country, region: (match.state || region).toUpperCase(), ratecenter: (match.ratecenter || ratecenter).toUpperCase(), emergency };
-  getDb()
+  const info = getDb()
     .prepare("INSERT INTO account_requests (user_id, kind, payload, status, created_at) VALUES (?, 'number', ?, 'requested', ?)")
     .run(user.id, JSON.stringify(payload), new Date().toISOString());
+  const requestId = Number(info.lastInsertRowid);
   audit(user.email, "request.number", payload.did);
-  redirect("/account/numbers?saved=1");
+  const { numberPurchaseMode } = await import("@/lib/number-order");
+  const mode = numberPurchaseMode(flagOn("numbers.live_order"), flagOn("numbers.auto_order"));
+  if (mode === "off" && flagOn("numbers.auto_order")) redirect("/account/numbers?saved=held");
+  if (mode !== "automatic") redirect("/account/numbers?saved=1");
+  const { purchaseNumber } = await import("@/lib/lines");
+  const result = await purchaseNumber({ requestId, userId: user.id, did: payload.did });
+  const status = result.ok ? "ordered" : "exception";
+  getDb().prepare("UPDATE account_requests SET status = ?, staff_note = ? WHERE id = ?").run(status, result.message, requestId);
+  audit(user.email, "request.order", `${requestId}:${status}`);
+  if (!result.ok) redirect(`/account/numbers?error=${encodeURIComponent(result.message)}`);
+  redirect("/account/numbers?saved=ordered");
 }
 
 export async function saveEmergencyAddress(formData: FormData) {

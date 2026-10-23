@@ -257,6 +257,11 @@ export function upgradeContent(database: Database.Database) {
       account.phoneBody = "Add people, then make a ring group or a call queue. Daytime calls go to the group you choose. After hours they go to voicemail. Until a group is on the phone system, daytime calls go to the first person.";
       changed = true;
     }
+    if (mergeMissing(account, {
+      numbersBuy: "Buy this number",
+      numbersOrdered: "This number was bought from the phone company.",
+      numbersHeld: "The request is saved. Buying is turned off, so it waits until live number ordering is on.",
+    })) changed = true;
     if (changed) writeJson(database, "page.account", account);
   }
 

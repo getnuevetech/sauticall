@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
+import { numberPurchaseMode } from "../lib/number-order.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 
 test("a number request has to be a full 10-digit inventory number", () => {
@@ -17,6 +18,13 @@ test("inventory results keep real DIDs and can return the whole list", () => {
   const many = { dids: Array.from({ length: 25 }, (_, index) => ({ did: `832555${String(index).padStart(4, "0")}` })) };
   assert.equal(readDids(many, 20).length, 20);
   assert.equal(readDids(many, 0).length, 25);
+});
+
+test("number buying is manual until automatic buying is switched on", () => {
+  assert.equal(numberPurchaseMode(false, false), "off");
+  assert.equal(numberPurchaseMode(false, true), "off");
+  assert.equal(numberPurchaseMode(true, false), "manual");
+  assert.equal(numberPurchaseMode(true, true), "automatic");
 });
 
 test("a created 3CX user id can come from the Location header", () => {

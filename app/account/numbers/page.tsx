@@ -7,6 +7,7 @@ import { flagOn, getDb } from "@/lib/db";
 import { paidPlan } from "@/lib/pbx";
 import { planAllows } from "@/lib/plan-features";
 import { inventoryReady } from "@/lib/carriers";
+import { numberPurchaseMode } from "@/lib/number-order";
 import { formatAddress, getEmergency, unitTypes, type EmergencyAddress } from "@/lib/e911";
 import { loadSite } from "@/lib/site";
 
@@ -28,7 +29,8 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
   const address = getEmergency(user.id);
   const rows = getDb().prepare("SELECT id, payload, status, staff_note, created_at FROM account_requests WHERE user_id = ? AND kind = 'number' ORDER BY id DESC").all(user.id) as { id: number; payload: string; status: string; staff_note: string; created_at: string }[];
   const lines = getDb().prepare("SELECT did, e911_status, e911_message FROM phone_lines WHERE user_id = ? ORDER BY id DESC").all(user.id) as { did: string; e911_status: string; e911_message: string }[];
-  const labels = Object.fromEntries(["numbersCountryLabel", "numbersStateLabel", "numbersRateLabel", "numbersRatePlaceholder", "numbersSearchLabel", "numbersEmpty", "numbersRequest", "numbersLiveOff", "numbersDetailLabel", "numbersDetailPlaceholder"].map((key) => [key, text(key)]));
+  const labels = Object.fromEntries(["numbersCountryLabel", "numbersStateLabel", "numbersRateLabel", "numbersRatePlaceholder", "numbersSearchLabel", "numbersEmpty", "numbersRequest", "numbersBuy", "numbersLiveOff", "numbersDetailLabel", "numbersDetailPlaceholder"].map((key) => [key, text(key)]));
+  const purchase = numberPurchaseMode(flagOn("numbers.live_order"), flagOn("numbers.auto_order"));
   return (
     <Frame pathname="/account/numbers">
       <main>
@@ -36,7 +38,9 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
         <section className="section">
           <div className="wrap" style={{ maxWidth: 760 }}>
             <AccountNav pathname="/account/numbers" />
-            {params.saved ? <p className="form-feedback">{text("numbersSaved")}</p> : null}
+            {params.saved === "ordered" ? <p className="form-feedback">{text("numbersOrdered")}</p> : null}
+            {params.saved === "held" ? <p className="form-feedback">{text("numbersHeld")}</p> : null}
+            {params.saved === "1" ? <p className="form-feedback">{text("numbersSaved")}</p> : null}
             {params.address ? <p className="form-feedback">{text("e911Saved")}</p> : null}
             {params.error ? <p className="form-feedback">{params.error}</p> : null}
             <form action={saveEmergencyAddress} className="contact-form">
@@ -71,7 +75,7 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
               </label>
               <button className="btn btn-primary" type="submit">{text("e911Save")}</button>
             </form>
-            {!included ? <div className="contact-form"><p>Business numbers are not included on your plan.</p></div> : open ? <NumberSearch live={flagOn("numbers.live_search") && inventoryReady()} copy={labels} /> : <div className="contact-form"><p>{text("numbersClosed")}</p></div>}
+            {!included ? <div className="contact-form"><p>Business numbers are not included on your plan.</p></div> : open ? <NumberSearch live={flagOn("numbers.live_search") && inventoryReady()} automatic={purchase === "automatic"} copy={labels} /> : <div className="contact-form"><p>{text("numbersClosed")}</p></div>}
             <div className="faq-list" style={{ marginTop: 28 }}>
               {lines.map((line) => <p key={line.did}>{line.did} · {E911[line.e911_status] || line.e911_status}{line.e911_message ? ` · ${line.e911_message}` : ""}</p>)}
               {rows.map((row) => {
