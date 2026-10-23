@@ -3,6 +3,7 @@ import { Icon } from "../Icon";
 import { ContactForm, CustomRequestForm, Estimator, SetupAssistant } from "./Interactive";
 import { EndCta, PhoneArt } from "./Chrome";
 import { featureLabels, normalizePlan, planAllows } from "@/lib/plan-features";
+import { recommendPlan } from "@/lib/setup-assistant";
 import { planSignupPath, signupHref } from "@/lib/signup";
 import type { Faq, Persona, Plan, Service } from "@/lib/types";
 
@@ -73,12 +74,17 @@ function FaqList({ faqs }: { faqs: Faq[] }) {
   );
 }
 
-function assistantCopy(page: Record<string, unknown>) {
+function assistantCopy(page: Record<string, unknown>, plans: Plan[]) {
+  const sample = str(page, "chatSampleUser");
   return {
     title: str(page, "chatTitle"),
     sub: str(page, "chatSub"),
     status: str(page, "chatStatus"),
     placeholder: str(page, "chatPlaceholder"),
+    hello: str(page, "chatHello"),
+    proposal: str(page, "chatProposal"),
+    sample,
+    initial: sample ? recommendPlan(plans, sample) : null,
   };
 }
 
@@ -166,7 +172,7 @@ export function HomePage({
             </div>
             <a className="btn btn-primary" href="#ai-demo">{str(page, "easyCta") || "Describe your setup"} <Icon name="arrow" size={18} /></a>
           </div>
-          {showDemo ? <SetupAssistant {...assistantCopy(page)} /> : null}
+          {showDemo ? <SetupAssistant {...assistantCopy(page, plans)} /> : null}
         </div>
       </section>
       <section className="section b-personas">
@@ -323,7 +329,7 @@ export function AiPage({ page, home }: { page: Record<string, unknown>; home: Re
   );
 }
 
-export function HowPage({ page, home, showDemo }: { page: Record<string, unknown>; home: Record<string, unknown>; showDemo: boolean }) {
+export function HowPage({ page, home, plans, showDemo }: { page: Record<string, unknown>; home: Record<string, unknown>; plans: Plan[]; showDemo: boolean }) {
   const steps = list(page, "steps") as { n?: string; title?: string; body?: string }[];
   const cards = list(page, "cards") as { icon?: string; title?: string; body?: string }[];
   return (
@@ -343,7 +349,7 @@ export function HowPage({ page, home, showDemo }: { page: Record<string, unknown
               ))}
             </div>
           </div>
-          {showDemo ? <SetupAssistant {...assistantCopy(home)} /> : null}
+          {showDemo ? <SetupAssistant {...assistantCopy(home, plans)} /> : null}
         </div>
       </section>
       <section className="section detail-band">

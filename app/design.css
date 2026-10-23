@@ -107,6 +107,8 @@ body{background:#fff}
 .plan-editor input,.plan-editor select{width:100%}
 .plan-editor h3{margin:12px 0 6px;font-size:1rem}
 .chat-demo textarea,.chat-demo .btn{width:100%}
+.proposal-foot p{margin:0 0 10px;font-size:.75rem;color:#405191}
+.proposal-foot .btn{width:100%;justify-content:center}
 .setup-result{margin-top:14px;padding:14px;border:1px solid #e1e7f2;border-radius:14px;background:#fff}
 .setup-result ul{margin:8px 0 14px;padding-left:18px}
 .feature-card.chosen{outline:2px solid #354bc8}

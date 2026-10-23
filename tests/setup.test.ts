@@ -23,6 +23,14 @@ test("AI and a kept number choose the plan that includes both", () => {
   assert.match(planSignupPath("Team", "queues"), /plan=Team/);
 });
 
+test("the sample team request names the city, the extensions, AI, and sales routing", () => {
+  const prompt = "I have a team of four. I'd like a Houston number, calls answered by AI, and sales transferred to my manager.";
+  const advice = recommendPlan(plans, prompt);
+  assert.equal(readSetupNeed(prompt).people, 4);
+  assert.equal(advice?.planName, "Small Business");
+  assert.deepEqual(advice?.points, ["Houston number", "4 extensions", "AI receptionist", "Sales call routing"]);
+});
+
 test("a large queue request goes to the custom form", () => {
   const advice = recommendPlan(plans, "20 agents and a call queue");
   assert.equal(advice?.custom, true);

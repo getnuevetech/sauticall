@@ -22,19 +22,41 @@ export function MenuButton() {
   );
 }
 
-export function SetupAssistant({ title, sub, status, placeholder }: { title: string; sub: string; status: string; placeholder: string }) {
-  const [advice, setAdvice] = useState<SetupAdvice | null>(null);
+export function SetupAssistant({
+  title,
+  sub,
+  status,
+  placeholder,
+  hello,
+  proposal,
+  sample,
+  initial,
+}: {
+  title: string;
+  sub: string;
+  status: string;
+  placeholder: string;
+  hello: string;
+  proposal: string;
+  sample: string;
+  initial: SetupAdvice | null;
+}) {
+  const [advice, setAdvice] = useState<SetupAdvice | null>(initial);
+  const [said, setSaid] = useState(sample);
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const prompt = String(new FormData(event.currentTarget).get("prompt") || "");
+    const form = event.currentTarget;
+    const prompt = String(new FormData(form).get("prompt") || "").trim();
     setPending(true);
     setMessage("");
+    setSaid(prompt);
     const response = await fetch("/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt }) });
     const payload = (await response.json()) as SetupAdvice & { message?: string };
     setPending(false);
+    form.reset();
     if (!response.ok || !payload.planName) {
       setAdvice(null);
       setMessage(payload.message || "The assistant could not match a plan.");
@@ -48,23 +70,29 @@ export function SetupAssistant({ title, sub, status, placeholder }: { title: str
       <div className="chat-head">
         <span className="chat-head-icon"><Icon name="spark" size={19} /></span>
         <div><b>{title || "Setup assistant"}</b><small>{sub || "Matches your description to a plan you can subscribe to"}</small></div>
-        <span className="chat-status"><i /> {status || "Ready"}</span>
+        <span className="chat-status"><i /> {pending ? "Reading" : status || "Ready"}</span>
       </div>
-      <form className="contact-form" onSubmit={onSubmit}>
-        <label>Describe the phone system you need
-          <textarea name="prompt" rows={4} required placeholder={placeholder || "6 people, an AI receptionist, and keep our current number"} />
-        </label>
-        <button className="btn btn-primary" type="submit" disabled={pending}>{pending ? "Matching a plan…" : "Recommend a plan"}</button>
+      <div className="chat-convo">
+        <div className="bubble bot-bubble">{hello || "Tell me how you would like your business calls to work."}</div>
+        {said ? <div className="bubble user-bubble">{said}</div> : null}
+        {advice ? (
+          <div className="proposal" aria-live="polite">
+            <span className="proposal-head"><Icon name="spark" size={16} /> {proposal || "RECOMMENDED SETUP"}</span>
+            <div className="proposal-grid">
+              {advice.points.map((point) => <span key={point}><Icon name="check" size={15} /> {point}</span>)}
+            </div>
+            <div className="proposal-foot">
+              <p>{advice.summary}</p>
+              <a className="btn btn-primary" href={advice.href}>{advice.custom ? "Request this custom system" : `Create an account on ${advice.planName}`}</a>
+            </div>
+          </div>
+        ) : null}
+        {message ? <p className="form-feedback">{message}</p> : null}
+      </div>
+      <form className="demo-form" onSubmit={onSubmit}>
+        <input name="prompt" aria-label="Describe your phone setup" placeholder={placeholder || "6 people, an AI receptionist, and keep our current number"} required />
+        <button type="submit" aria-label="Recommend a setup" disabled={pending}><Icon name="arrow" size={18} /></button>
       </form>
-      {message ? <p className="form-feedback">{message}</p> : null}
-      {advice ? (
-        <div className="setup-result" aria-live="polite">
-          <h3>{advice.planName}</h3>
-          <p>{advice.summary}</p>
-          <ul>{advice.features.map((feature) => <li key={feature}>{feature}</li>)}</ul>
-          <a className="btn btn-primary" href={advice.href}>{advice.custom ? "Request this custom system" : `Create an account on ${advice.planName}`}</a>
-        </div>
-      ) : null}
     </div>
   );
 }
