@@ -6,6 +6,7 @@ import { guardAccount } from "@/lib/guard";
 import { QUEUE_STRATEGIES, RING_STRATEGIES, groupMembers, strategyLabel, type CallGroup } from "@/lib/call-groups";
 import { getDb } from "@/lib/db";
 import { extensionCapacity, paidPlan } from "@/lib/pbx";
+import { planAllows } from "@/lib/plan-features";
 import { loadSite } from "@/lib/site";
 
 type Extension = { id: number; number: string; first_name: string; last_name: string; email: string; status: string; access_password: string; last_message: string };
@@ -46,6 +47,9 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
             {!plan ? <div className="contact-form"><p>{text("phoneClosed")}</p></div> : (
               <>
                 <p>{plan.name} includes {limit} {limit === 1 ? "person" : "people"}. {rows.length} added.</p>
+                {!planAllows(plan, "ring_groups") ? <p>Ring groups are not included on {plan.name}.</p> : null}
+                {!planAllows(plan, "queues") ? <p>Call queues are not included on {plan.name}.</p> : null}
+                {!planAllows(plan, "ai") ? <p>The AI receptionist is not included on {plan.name}.</p> : null}
                 {rows.length < limit ? (
                   <form className="contact-form" action={addPerson}>
                     <div className="form-grid">
@@ -56,7 +60,7 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
                     <button className="btn btn-primary" type="submit">{text("phoneAdd")}</button>
                   </form>
                 ) : <p>{text("phoneLimit")}</p>}
-                <form className="contact-form" action={savePhoneHours} style={{ marginTop: 18 }}>
+                {planAllows(plan, "business_hours") ? <form className="contact-form" action={savePhoneHours} style={{ marginTop: 18 }}>
                   <h3>{text("phoneHours")}</h3>
                   <div className="form-grid">
                     <label>{text("phoneOpen")} <input name="open_time" type="time" defaultValue={hours?.open_time || "09:00"} required /></label>
@@ -64,10 +68,10 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
                   </div>
                   <button className="btn btn-secondary" type="submit">{text("phoneRoute")}</button>
                   {hours?.last_message ? <p>{hours.last_message}</p> : null}
-                </form>
+                </form> : null}
                 {rows.length ? (
                   <>
-                    <form className="contact-form" action={createRingGroup} style={{ marginTop: 18 }}>
+                    {planAllows(plan, "ring_groups") ? <form className="contact-form" action={createRingGroup} style={{ marginTop: 18 }}>
                       <h3>{text("phoneRing")}</h3>
                       <p>{text("phoneRingBody")}</p>
                       <label>{text("phoneGroupName")} <input name="name" required placeholder="Front desk" /></label>
@@ -78,8 +82,8 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
                       </label>
                       <PeopleFields rows={rows} label={text("phoneMembers")} />
                       <button className="btn btn-primary" type="submit">{text("phoneCreateRing")}</button>
-                    </form>
-                    <form className="contact-form" action={createQueue} style={{ marginTop: 18 }}>
+                    </form> : null}
+                    {planAllows(plan, "queues") ? <form className="contact-form" action={createQueue} style={{ marginTop: 18 }}>
                       <h3>{text("phoneQueue")}</h3>
                       <p>{text("phoneQueueBody")}</p>
                       <label>{text("phoneGroupName")} <input name="name" required placeholder="Support" /></label>
@@ -90,7 +94,7 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
                       </label>
                       <PeopleFields rows={rows} label={text("phoneMembers")} />
                       <button className="btn btn-primary" type="submit">{text("phoneCreateQueue")}</button>
-                    </form>
+                    </form> : null}
                   </>
                 ) : null}
               </>

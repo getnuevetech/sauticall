@@ -6,6 +6,7 @@ import { guardAccount } from "@/lib/guard";
 import { flagOn, getDb, readDoc } from "@/lib/db";
 import { loadSite } from "@/lib/site";
 import { readGatewaySecret } from "@/lib/payment-keys";
+import { featureLabels, normalizePlan } from "@/lib/plan-features";
 import type { Plan } from "@/lib/types";
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
@@ -28,10 +29,13 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
             {!open ? <div className="contact-form"><p>{text("billingClosed")}</p></div> : null}
             {open && ready.length === 0 ? <div className="contact-form"><p>{gateways.length ? "A way to pay is turned on, but its API secret is not saved yet." : text("billingEmpty")}</p></div> : null}
             <div className="faq-list">
-              {plans.map((plan) => (
+              {plans.map((raw) => {
+                const plan = normalizePlan(raw);
+                return (
                 <article key={plan.name} className="feature-card" style={{ marginBottom: 16 }}>
                   <h3>{plan.name}</h3>
                   <p>${plan.price} per month · {plan.units}{plan.includedMinutes > 0 ? ` · ${plan.includedMinutes} outbound minutes for 30 days` : ""}</p>
+                  <ul className="desk-lines">{featureLabels(plan.features).map((feature) => <li key={feature}>{feature}</li>)}</ul>
                   {open ? ready.map((gateway) => (
                     <AuthForm
                       key={gateway.id}
@@ -42,7 +46,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                     />
                   )) : null}
                 </article>
-              ))}
+                );
+              })}
             </div>
           </div>
         </section>

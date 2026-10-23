@@ -1,14 +1,10 @@
 import crypto from "crypto";
 import { pbxRequest } from "./carriers";
 import { flagOn, getDb, readDoc } from "./db";
+import { extensionCapacity, normalizePlan } from "./plan-features";
 import type { Plan } from "./types";
 
-export function extensionCapacity(plan: { base?: boolean; units?: string } | undefined) {
-  if (!plan) return 1;
-  if (plan.base) return 1;
-  const match = String(plan.units || "").match(/(\d+)/);
-  return match ? Number(match[1]) : 1;
-}
+export { extensionCapacity };
 
 export function extensionRange(userId: number) {
   const from = 100 + (Math.max(userId, 1) - 1) * 10;
@@ -47,7 +43,8 @@ export function paidPlan(userId: number) {
   const row = getDb().prepare("SELECT plan_name FROM payment_attempts WHERE user_id = ? AND status = 'paid' ORDER BY id DESC LIMIT 1").get(userId) as { plan_name: string } | undefined;
   if (!row?.plan_name) return null;
   const plans = readDoc<Plan[]>("plans");
-  return plans.find((plan) => plan.name === row.plan_name && !plan.custom) || null;
+  const plan = plans.find((item) => item.name === row.plan_name && !item.custom);
+  return plan ? normalizePlan(plan) : null;
 }
 
 async function ensureDepartment(userId: number) {

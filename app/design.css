@@ -103,6 +103,9 @@ body{background:#fff}
 .desk-queues a[data-current="true"]{background:#354bc8;border-color:#354bc8;color:#fff}
 .desk-queues b{font-weight:750}
 .desk-filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin:0 0 16px}
+.plan-editor{margin:0 0 18px}
+.plan-editor input,.plan-editor select{width:100%}
+.plan-editor h3{margin:12px 0 6px;font-size:1rem}
 .desk-filters label{display:grid;gap:4px;color:#3a4354;font-size:.88rem}
 .desk-filters label.check-option{display:flex;align-items:center;gap:8px}
 .desk-filters input,.desk-filters select{min-width:180px}

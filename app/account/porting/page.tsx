@@ -3,6 +3,8 @@ import { AccountHero, AccountNav } from "@/components/account/Portal";
 import { PortForm } from "@/components/account/PortForm";
 import { guardAccount } from "@/lib/guard";
 import { flagOn, getDb } from "@/lib/db";
+import { paidPlan } from "@/lib/pbx";
+import { planAllows } from "@/lib/plan-features";
 import { loadSite } from "@/lib/site";
 
 export default async function PortingPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
@@ -11,6 +13,7 @@ export default async function PortingPage({ searchParams }: { searchParams: Prom
   const copy = loadSite().account;
   const text = (key: string) => (typeof copy[key] === "string" ? String(copy[key]) : "");
   const open = flagOn("porting.requests");
+  const included = planAllows(paidPlan(user.id), "porting");
   const rows = getDb().prepare("SELECT payload, status, provider_ref, staff_note, created_at FROM account_requests WHERE user_id = ? AND kind = 'port' ORDER BY id DESC").all(user.id) as { payload: string; status: string; provider_ref: string; staff_note: string; created_at: string }[];
   const labels = {
     number: text("portNumberLabel"),
@@ -36,7 +39,7 @@ export default async function PortingPage({ searchParams }: { searchParams: Prom
             <AccountNav pathname="/account/porting" />
             {params.saved ? <p className="form-feedback">{text("portingSaved")}</p> : null}
             {params.error ? <p className="form-feedback">{params.error}</p> : null}
-            {open ? <PortForm labels={labels} /> : <div className="contact-form"><p>{text("portingClosed")}</p></div>}
+            {!included ? <div className="contact-form"><p>Number transfer is not included on your plan.</p></div> : open ? <PortForm labels={labels} /> : <div className="contact-form"><p>{text("portingClosed")}</p></div>}
             <div style={{ marginTop: 28 }}>
               {rows.map((row) => {
                 const payload = JSON.parse(row.payload) as { numbers?: string };

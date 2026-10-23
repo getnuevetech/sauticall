@@ -304,7 +304,7 @@ export const documentScreens: Record<string, { title: string; intro: string }> =
   nav: { title: "Menu", intro: "Choose the links people see at the top, on a phone, and inside an account." },
   footer: { title: "Footer", intro: "Edit the links and notes at the bottom of every page." },
   services: { title: "Services", intro: "Edit the service cards." },
-  plans: { title: "Plans", intro: "Edit prices, the outbound minutes included each month, and which plan is the base plan. Plan minutes last 30 days from the day the customer pays." },
+  plans: { title: "Plans", intro: "Check the features each plan includes. A subscribed customer gets those features in their account." },
   minute_bundles: { title: "Call minute bundles", intro: "These are extra outbound minutes a customer can buy. Bought minutes last until they are used. Turn a bundle off to hide it." },
   faqs: { title: "Questions", intro: "Edit the questions and answers." },
   personas: { title: "Who it is for", intro: "Edit the four short stories on the home page." },
