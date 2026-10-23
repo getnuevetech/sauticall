@@ -130,12 +130,17 @@ export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
       { label: "Menu", href: "/admin/content/nav", permission: "content.nav" },
       { label: "Footer", href: "/admin/content/footer", permission: "content.footer" },
       { label: "Services", href: "/admin/content/services", permission: "content.services" },
-      { label: "Plans", href: "/admin/content/plans", permission: "content.plans" },
-      { label: "Call minute bundles", href: "/admin/content/minute_bundles", permission: "content.bundles" },
       { label: "Pricing questions", href: "/admin/content/faqs", permission: "content.faqs" },
       { label: "Who it's for", href: "/admin/content/personas", permission: "content.personas" },
       { label: "Account wording", href: "/admin/content/page.account", permission: "content.account" },
       { label: "FAQ articles", href: "/admin/faq", permission: "blog.manage" },
+    ],
+  },
+  {
+    title: "Catalog",
+    links: [
+      { label: "Plans", href: "/admin/content/plans", permission: "content.plans" },
+      { label: "Call minute bundles", href: "/admin/content/minute_bundles", permission: "content.bundles" },
     ],
   },
   {

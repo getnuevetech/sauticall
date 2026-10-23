@@ -33,6 +33,23 @@ export function upgradeContent(database: Database.Database) {
         changed = true;
       }
     }
+    for (const flag of flags) {
+      if (flag.key === "auth.show_sign_in" && String(flag.description).includes("approved header")) {
+        flag.enabled = true;
+        flag.description = "Show Sign in in the header so a returning customer can open an account.";
+        changed = true;
+      }
+      if (flag.key === "marketing.ai_demo" && String(flag.description).includes("sample")) {
+        flag.label = "Setup assistant";
+        flag.description = "Show the setup assistant. It matches a description to a real plan and opens signup.";
+        changed = true;
+      }
+      if (flag.key === "marketing.estimator" && String(flag.description).includes("sample")) {
+        flag.label = "Pricing plan picker";
+        flag.description = "Show the plan picker on the pricing page. The button opens signup for that plan.";
+        changed = true;
+      }
+    }
     if (changed) writeJson(database, "flags", flags);
   }
 
@@ -56,6 +73,13 @@ export function upgradeContent(database: Database.Database) {
         changed = true;
       }
     });
+    for (const plan of plans) {
+      if (!plan.custom && (plan.ctaHref === "/contact" || plan.ctaHref === "/how-it-works" || plan.ctaLabel === "Request this plan")) {
+        plan.ctaLabel = "Create account";
+        plan.ctaHref = `/account/register?plan=${encodeURIComponent(plan.name)}`;
+        changed = true;
+      }
+    }
     const normalized = normalizePlans(plans);
     if (JSON.stringify(normalized) !== JSON.stringify(plans)) changed = true;
     if (changed) writeJson(database, "plans", normalized);
@@ -70,13 +94,43 @@ export function upgradeContent(database: Database.Database) {
       "Solo is the base plan, so any-language understanding is not included there. It is included on Small Business, Team, and Custom.": "A plan without the AI receptionist checked does not include AI. Any-language understanding is a separate check.",
       "The AI receptionist can receive the call and follow what the caller is saying in any language. That is included on every plan except the base plan.": "The AI receptionist follows what the caller is saying in any language when that feature is checked on the customer's plan.",
       "The base plan is Solo. Small Business, Team, and Custom include any-language call understanding.": "Plans that do not have the AI receptionist checked do not include AI.",
+      "Try describing a sample setup in the interactive box. This prototype will show a sample interpretation; it does not connect to a live AI or PBX.": "Describe the phone system you need. The assistant matches it to a real plan, then you create an account and subscribe.",
+      "Here's a sample interpretation": "Your plan",
+      "Preview only. A real system would ask follow-up questions, validate pricing and carrier availability, then request your approval before provisioning.": "Create an account on this plan to subscribe.",
+      "Try a sample request": "Matches your description to a plan you can subscribe to",
+      "Design my phone system": "Create account",
+      "Build my system": "Create account",
+      "Preview": "Ready",
+      "See the setup experience": "Describe your setup",
+      "Transparent-looking plans. Human-sized businesses.": "Plans you can subscribe to.",
     };
+    const signupFields = ["headerCtaHref", "primaryHref", "endHref", "estimateHref"];
     for (const [from, to] of Object.entries(replacements)) {
       for (const [field, current] of Object.entries(page)) {
         if (current === from) {
           page[field] = to;
           pageChanged = true;
         }
+      }
+    }
+    if (key !== "custom" && key !== "account") {
+      for (const field of signupFields) {
+        if (page[field] === "/how-it-works" || page[field] === "/contact") {
+          page[field] = "/account/register";
+          pageChanged = true;
+        }
+      }
+    }
+    if (key === "account") {
+      if (page.primaryHref === "/how-it-works") {
+        page.primaryHref = "/account/billing";
+        page.primaryCta = "Choose a plan";
+        pageChanged = true;
+      }
+      if (page.secondaryHref === "/contact") {
+        page.secondaryHref = "/account/phone";
+        page.secondaryCta = "Phone system";
+        pageChanged = true;
       }
     }
     if (pageChanged) writeJson(database, `page.${key}`, page);

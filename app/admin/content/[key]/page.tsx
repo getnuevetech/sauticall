@@ -19,7 +19,7 @@ export default async function ContentPage({ params, searchParams }: { params: Pr
     const query = await searchParams;
     return (
       <>
-        <span className="eyebrow">Website</span>
+        <span className="eyebrow">Catalog</span>
         <h2>Plans</h2>
         <p>Check the features each plan includes. People, minutes, and price are numbers. A customer who subscribes gets exactly the checked features in their account.</p>
         {query.error ? <p className="form-feedback">{query.error}</p> : null}
@@ -29,11 +29,13 @@ export default async function ContentPage({ params, searchParams }: { params: Pr
     );
   }
   const screen = screenFor(key);
+  const catalog = key === "minute_bundles";
   return (
     <>
-      <span className="eyebrow">Edit</span>
+      <span className="eyebrow">{catalog ? "Catalog" : "Website wording"}</span>
       <h2>{screen.title}</h2>
       <p>{screen.intro}</p>
+      {catalog ? null : <p>These fields change words on the public site. Creating an account, plan features, prices, payments, and phone connections are set in Catalog, Integrations, and Customers.</p>}
       <DocumentEditor docKey={key} initial={JSON.parse(row.json)} />
     </>
   );

@@ -22,11 +22,13 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
       {params.error ? <p className="form-feedback">{params.error}</p> : null}
       {rows.length === 0 ? <p>No requests yet.</p> : null}
       {rows.map((row) => {
-        const payload = JSON.parse(row.payload) as { did?: string; detail?: string; numbers?: string; emergency?: Record<string, string> };
+        const payload = JSON.parse(row.payload) as { did?: string; detail?: string; numbers?: string; emergency?: Record<string, string>; plan?: string; prompt?: string };
         const emergency = payload.emergency ? parseEmergency(payload.emergency) : null;
+        const kind = row.kind === "number" ? "Number" : row.kind === "setup" ? "Signup" : "Transfer";
         return (
           <article key={row.id} className="feature-card" style={{ marginBottom: 16 }}>
-            <h3>{row.kind === "number" ? "Number" : "Transfer"} · {payload.did || payload.numbers || payload.detail}</h3>
+            <h3>{kind} · {payload.plan || payload.did || payload.numbers || payload.detail || "Request"}</h3>
+            {payload.prompt ? <p>{payload.prompt}</p> : null}
             {emergency?.ok ? <p>Emergency address: {formatAddress(emergency.address)}</p> : row.kind === "number" ? <p>No emergency address on this request.</p> : null}
             <p>{row.email} · {requestStatusLabel(row.status)}{row.provider_ref ? ` · ${row.provider_ref}` : ""}</p>
             {row.staff_note ? <p>{row.staff_note}</p> : null}

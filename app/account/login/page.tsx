@@ -31,6 +31,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             {passwordOn && params.step === "code" ? (
               <AuthForm action={confirmMfa} submit="Confirm code" fields={[{ name: "code", label: "Authenticator code", placeholder: "123456" }]} />
             ) : null}
+            {passwordOn && params.step !== "code" && flagOn("auth.signup") ? <p><Link className="btn btn-secondary" href="/account/register">Create an account</Link></p> : null}
             {passwordOn && params.step !== "code" ? (
               <AuthForm
                 action={login}

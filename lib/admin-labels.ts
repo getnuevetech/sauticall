@@ -292,7 +292,7 @@ export function requestStatusLabel(value: string) {
 }
 
 export const documentScreens: Record<string, { title: string; intro: string }> = {
-  "page.home": { title: "Home page", intro: "Edit the words on the first page people see." },
+  "page.home": { title: "Home page", intro: "Edit the words on the first page. The Create account button always opens signup." },
   "page.solutions": { title: "Solutions page", intro: "Edit the services page." },
   "page.ai": { title: "AI receptionist page", intro: "Edit the page about the AI receptionist." },
   "page.how": { title: "How it works", intro: "Edit the page that explains setup." },

@@ -25,8 +25,6 @@ export function SiteHeader({
   showSignIn,
   talkLabel,
   talkHref,
-  ctaLabel,
-  ctaHref,
 }: {
   nav: NavLink[];
   theme: Theme;
@@ -34,8 +32,6 @@ export function SiteHeader({
   showSignIn: boolean;
   talkLabel: string;
   talkHref: string;
-  ctaLabel: string;
-  ctaHref: string;
 }) {
   const header = nav.filter((item) => item.location === "header");
   const mobile = nav.filter((item) => item.location === "mobile");
@@ -51,11 +47,13 @@ export function SiteHeader({
         <div className="nav-actions">
           {showSignIn ? <Link className="nav-sign" href="/account/login">Sign in</Link> : null}
           <Link className="nav-sign" href={talkHref}>{talkLabel}</Link>
-          <Link className="btn btn-primary nav-cta" href={ctaHref}>{ctaLabel} <Icon name="arrow" size={17} /></Link>
+          <Link className="btn btn-primary nav-cta" href="/account/register">Create account <Icon name="arrow" size={17} /></Link>
           <MenuButton />
         </div>
       </div>
       <nav className="mobile-nav" aria-label="Mobile navigation">
+        <Link href="/account/register">Create account</Link>
+        {showSignIn ? <Link href="/account/login">Sign in</Link> : null}
         {mobile.map((item) => <Link key={`m-${item.href}-${item.label}`} href={item.href}>{item.label}</Link>)}
       </nav>
     </header>

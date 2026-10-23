@@ -9,7 +9,7 @@ import { readGatewaySecret } from "@/lib/payment-keys";
 import { featureLabels, normalizePlan } from "@/lib/plan-features";
 import type { Plan } from "@/lib/types";
 
-export default async function BillingPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export default async function BillingPage({ searchParams }: { searchParams: Promise<{ error?: string; plan?: string }> }) {
   await guardAccount();
   const params = await searchParams;
   const copy = loadSite().account;
@@ -32,8 +32,9 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
               {plans.map((raw) => {
                 const plan = normalizePlan(raw);
                 return (
-                <article key={plan.name} className="feature-card" style={{ marginBottom: 16 }}>
+                <article key={plan.name} id={plan.name} className={`feature-card${params.plan === plan.name ? " chosen" : ""}`} style={{ marginBottom: 16 }}>
                   <h3>{plan.name}</h3>
+                  {params.plan === plan.name ? <p>This is the plan you chose when you created the account.</p> : null}
                   <p>${plan.price} per month · {plan.units}{plan.includedMinutes > 0 ? ` · ${plan.includedMinutes} outbound minutes for 30 days` : ""}</p>
                   <ul className="desk-lines">{featureLabels(plan.features).map((feature) => <li key={feature}>{feature}</li>)}</ul>
                   {open ? ready.map((gateway) => (

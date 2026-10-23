@@ -13,7 +13,9 @@ export default async function AccountHome() {
   const site = loadSite();
   const copy = site.account;
   const text = (key: string) => (typeof copy[key] === "string" ? String(copy[key]) : "");
-  const requests = getDb().prepare("SELECT kind, status, created_at FROM account_requests WHERE user_id = ? ORDER BY id DESC LIMIT 5").all(user.id) as { kind: string; status: string; created_at: string }[];
+  const requests = getDb().prepare("SELECT kind, status, payload, created_at FROM account_requests WHERE user_id = ? ORDER BY id DESC LIMIT 5").all(user.id) as { kind: string; status: string; payload: string; created_at: string }[];
+  const setup = requests.find((item) => item.kind === "setup");
+  const setupPayload = setup ? JSON.parse(setup.payload) as { plan?: string; prompt?: string } : null;
   const minutes = minuteBalance(user.id);
   const plan = paidPlan(user.id);
   return (
@@ -24,8 +26,8 @@ export default async function AccountHome() {
           <div className="wrap">
             <AccountNav pathname="/account" />
             <div className="cta-pair" style={{ marginBottom: 28 }}>
-              <Link className="btn btn-primary" href={text("primaryHref")}>{text("primaryCta")}</Link>
-              <Link className="btn btn-secondary" href={text("secondaryHref")}>{text("secondaryCta")}</Link>
+              <Link className="btn btn-primary" href="/account/billing">Choose a plan</Link>
+              <Link className="btn btn-secondary" href="/account/phone">Phone system</Link>
             </div>
             <article className="feature-card" style={{ marginBottom: 22 }}>
               <h3>{plan ? plan.name : "No plan yet"}</h3>
@@ -35,7 +37,8 @@ export default async function AccountHome() {
                   <ul className="desk-lines">{featureLabels(plan.features).map((feature) => <li key={feature}>{feature}</li>)}</ul>
                   <p>{planAllows(plan, "ai") ? `AI receptionist is included${planAllows(plan, "ai_any_language") ? " and understands any language." : "."}` : "AI receptionist is not included on this plan."}</p>
                 </>
-              ) : <p><Link className="text-link" href="/account/billing">Choose a plan</Link> to open the phone features it includes.</p>}
+              ) : <p><Link className="text-link" href={setupPayload?.plan ? `/account/billing?plan=${encodeURIComponent(setupPayload.plan)}` : "/account/billing"}>Choose a plan</Link> to open the phone features it includes.</p>}
+              {setupPayload?.prompt ? <p>You described this when you signed up: {setupPayload.prompt}</p> : null}
             </article>
             <div className="features-grid">
               <article className="feature-card">

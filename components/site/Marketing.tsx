@@ -1,17 +1,14 @@
 import Link from "next/link";
 import { Icon } from "../Icon";
-import { ChatDemo, ContactForm, CustomRequestForm, Estimator } from "./Interactive";
+import { ContactForm, CustomRequestForm, Estimator, SetupAssistant } from "./Interactive";
 import { EndCta, PhoneArt } from "./Chrome";
 import { featureLabels, normalizePlan, planAllows } from "@/lib/plan-features";
+import { planSignupPath, signupHref } from "@/lib/signup";
 import type { Faq, Persona, Plan, Service } from "@/lib/types";
 
 function str(page: Record<string, unknown>, key: string) {
   const value = page[key];
   return typeof value === "string" ? value : "";
-}
-function num(page: Record<string, unknown>, key: string) {
-  const value = page[key];
-  return typeof value === "number" ? value : Number(value || 0);
 }
 function list(page: Record<string, unknown>, key: string) {
   const value = page[key];
@@ -38,7 +35,7 @@ function PricingCards({ plans, ribbon, languageBadge }: { plans: Plan[]; ribbon:
           <ul>
             {featureLabels(plan.features).map((feature) => <li key={feature}><Icon name="check" size={17} /> <span>{feature}</span></li>)}
           </ul>
-          <Link className={`btn ${plan.popular ? "btn-primary" : "btn-secondary"}`} href={plan.ctaHref}>{plan.ctaLabel} <Icon name="arrow" size={16} /></Link>
+          <Link className={`btn ${plan.popular ? "btn-primary" : "btn-secondary"}`} href={plan.custom ? "/custom" : planSignupPath(plan.name)}>{plan.custom ? (plan.ctaLabel || "Request a custom system") : "Create account"} <Icon name="arrow" size={16} /></Link>
           <small>{plan.note}</small>
         </article>
         );
@@ -76,19 +73,12 @@ function FaqList({ faqs }: { faqs: Faq[] }) {
   );
 }
 
-function chatCopy(page: Record<string, unknown>) {
+function assistantCopy(page: Record<string, unknown>) {
   return {
     title: str(page, "chatTitle"),
     sub: str(page, "chatSub"),
     status: str(page, "chatStatus"),
-    hello: str(page, "chatHello"),
-    sampleUser: str(page, "chatSampleUser"),
-    proposal: str(page, "chatProposal"),
-    points: list(page, "chatPoints").filter((item): item is string => typeof item === "string"),
-    foot: str(page, "chatFoot"),
     placeholder: str(page, "chatPlaceholder"),
-    resultTitle: str(page, "chatResultTitle"),
-    resultNote: str(page, "chatResultNote"),
   };
 }
 
@@ -116,7 +106,7 @@ export function HomePage({
             <h1>{str(page, "titleLead")} <span className="underline-coral">{str(page, "titleAccent")}</span></h1>
             <p>{str(page, "lead")}</p>
             <div className="cta-pair">
-              <Link className="btn btn-primary" href={str(page, "primaryHref")}>{str(page, "primaryCta")} <Icon name="arrow" size={18} /></Link>
+              <Link className="btn btn-primary" href={signupHref(str(page, "primaryHref"))}>{str(page, "primaryCta") || "Create account"} <Icon name="arrow" size={18} /></Link>
               <Link className="btn btn-secondary" href={str(page, "secondaryHref")}>{str(page, "secondaryCta")} <Icon name="arrow" size={17} /></Link>
             </div>
             <div className="b-little-line">
@@ -174,9 +164,9 @@ export function HomePage({
               <h2>{str(page, "easyTitle")} <i>{str(page, "easyTitleEm")}</i></h2>
               <p>{str(page, "easyBody")}</p>
             </div>
-            <Link className="btn btn-primary" href={str(page, "easyHref")}>{str(page, "easyCta")} <Icon name="arrow" size={18} /></Link>
+            <a className="btn btn-primary" href="#ai-demo">{str(page, "easyCta") || "Describe your setup"} <Icon name="arrow" size={18} /></a>
           </div>
-          {showDemo ? <ChatDemo copy={chatCopy(page)} /> : null}
+          {showDemo ? <SetupAssistant {...assistantCopy(page)} /> : null}
         </div>
       </section>
       <section className="section b-personas">
@@ -209,7 +199,7 @@ export function HomePage({
           <p className="disclaimer">{str(page, "disclaimer")}</p>
         </div>
       </section>
-      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={str(page, "endHref")} />
+      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
     </main>
   );
 }
@@ -279,7 +269,7 @@ export function SolutionsPage({ page, services }: { page: Record<string, unknown
           </div>
         </div>
       </section>
-      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={str(page, "endHref")} />
+      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
     </main>
   );
 }
@@ -328,7 +318,7 @@ export function AiPage({ page, home }: { page: Record<string, unknown>; home: Re
           <Cards items={cards} />
         </div>
       </section>
-      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={str(page, "endHref")} />
+      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
     </main>
   );
 }
@@ -353,7 +343,7 @@ export function HowPage({ page, home, showDemo }: { page: Record<string, unknown
               ))}
             </div>
           </div>
-          {showDemo ? <ChatDemo copy={chatCopy(home)} /> : null}
+          {showDemo ? <SetupAssistant {...assistantCopy(home)} /> : null}
         </div>
       </section>
       <section className="section detail-band">
@@ -366,7 +356,7 @@ export function HowPage({ page, home, showDemo }: { page: Record<string, unknown
           <Cards items={cards} />
         </div>
       </section>
-      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={str(page, "endHref")} />
+      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
     </main>
   );
 }
@@ -388,12 +378,8 @@ export function PricingPage({ page, plans, faqs, showEstimator }: { page: Record
               </div>
               <Estimator
                 plans={plans.filter((plan) => !plan.custom)}
-                aiPrice={num(page, "aiAddonPrice")}
-                aiLabel={str(page, "estimateAiLabel")}
                 planLabel={str(page, "estimatePlanLabel")}
                 totalLabel={str(page, "estimateTotalLabel")}
-                cta={str(page, "estimateCta")}
-                href={str(page, "estimateHref")}
               />
             </div>
           ) : null}
@@ -413,7 +399,7 @@ export function PricingPage({ page, plans, faqs, showEstimator }: { page: Record
           </div>
         </div>
       </section>
-      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={str(page, "endHref")} />
+      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
     </main>
   );
 }
@@ -449,7 +435,7 @@ export function AboutPage({ page }: { page: Record<string, unknown> }) {
           <Cards items={cards} />
         </div>
       </section>
-      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={str(page, "endHref")} />
+      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
     </main>
   );
 }
@@ -505,7 +491,7 @@ export function ContactPage({ page, faqs, formEnabled }: { page: Record<string, 
   );
 }
 
-export function CustomPlanPage({ page, formEnabled }: { page: Record<string, unknown>; formEnabled: boolean }) {
+export function CustomPlanPage({ page, formEnabled, setup = "" }: { page: Record<string, unknown>; formEnabled: boolean; setup?: string }) {
   const steps = list(page, "steps") as { icon?: string; label?: string }[];
   return (
     <main>
@@ -539,10 +525,11 @@ export function CustomPlanPage({ page, formEnabled }: { page: Record<string, unk
               thanks: str(page, "thanks"),
               closed: str(page, "closed"),
             }}
+            setup={setup}
           />
         </div>
       </section>
-      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={str(page, "endHref")} />
+      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
     </main>
   );
 }

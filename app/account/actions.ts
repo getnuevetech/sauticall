@@ -61,9 +61,16 @@ export async function register(formData: FormData) {
     return { error: "An account with that email already exists." };
   }
   const user = getDb().prepare("SELECT id FROM users WHERE email = ?").get(email) as { id: number };
+  const planName = String(formData.get("plan") || "").trim().slice(0, 80);
+  const setup = String(formData.get("setup") || "").trim().slice(0, 400);
+  if (planName || setup) {
+    getDb()
+      .prepare("INSERT INTO account_requests (user_id, kind, payload, status, created_at) VALUES (?, 'setup', ?, 'requested', ?)")
+      .run(user.id, JSON.stringify({ plan: planName, prompt: setup }), new Date().toISOString());
+  }
   await createSession(user.id, false);
-  audit(email, "auth.register", "customer");
-  redirect("/account");
+  audit(email, "auth.register", planName || "customer");
+  redirect(planName ? `/account/billing?plan=${encodeURIComponent(planName)}` : "/account/billing");
 }
 
 export async function logout() {

@@ -7,8 +7,6 @@ export function Frame({ pathname, children }: { pathname: string; children: Reac
   const home = site.home;
   const talk = typeof home.headerTalk === "string" ? home.headerTalk : "Talk to us";
   const talkHref = typeof home.headerTalkHref === "string" ? home.headerTalkHref : "/contact";
-  const cta = typeof home.headerCta === "string" ? home.headerCta : "Build my system";
-  const ctaHref = typeof home.headerCtaHref === "string" ? home.headerCtaHref : "/how-it-works";
   return (
     <>
       {site.theme.fontStylesheetUrl.startsWith("https://") ? <link rel="stylesheet" href={site.theme.fontStylesheetUrl} /> : null}
@@ -20,8 +18,6 @@ export function Frame({ pathname, children }: { pathname: string; children: Reac
         showSignIn={enabled(site.flags, "auth.show_sign_in")}
         talkLabel={talk}
         talkHref={talkHref}
-        ctaLabel={cta}
-        ctaHref={ctaHref}
       />
       {children}
       <SiteFooter theme={site.theme} footer={site.footer} />

@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { Icon } from "../Icon";
+import type { SetupAdvice } from "@/lib/setup-assistant";
 
 export function MenuButton() {
   const [open, setOpen] = useState(false);
@@ -21,60 +22,47 @@ export function MenuButton() {
   );
 }
 
-type ChatCopy = {
-  title: string;
-  sub: string;
-  status: string;
-  hello: string;
-  sampleUser: string;
-  proposal: string;
-  points: string[];
-  foot: string;
-  placeholder: string;
-  resultTitle: string;
-  resultNote: string;
-};
+export function SetupAssistant({ title, sub, status, placeholder }: { title: string; sub: string; status: string; placeholder: string }) {
+  const [advice, setAdvice] = useState<SetupAdvice | null>(null);
+  const [message, setMessage] = useState("");
+  const [pending, setPending] = useState(false);
 
-export function ChatDemo({ copy }: { copy: ChatCopy }) {
-  const [result, setResult] = useState("");
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const val = String(new FormData(event.currentTarget).get("prompt") || "").toLowerCase();
-    const match = val.match(/\b(\d+)\s*(?:employees|people|users|staff|extensions|team members)/i);
-    const n = match?.[1] || "a few";
-    const yes = /(ai|receptionist|assistant|automatically answer|answer calls)/.test(val);
-    const port = /(keep|port|existing|transfer my number)/.test(val);
-    setResult(`${n} team users · ${yes ? "AI receptionist requested" : "Standard business answering"} · ${port ? "Existing-number transfer" : "New business number (if needed)"}`);
+    const prompt = String(new FormData(event.currentTarget).get("prompt") || "");
+    setPending(true);
+    setMessage("");
+    const response = await fetch("/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt }) });
+    const payload = (await response.json()) as SetupAdvice & { message?: string };
+    setPending(false);
+    if (!response.ok || !payload.planName) {
+      setAdvice(null);
+      setMessage(payload.message || "The assistant could not match a plan.");
+      return;
+    }
+    setAdvice(payload);
   }
+
   return (
     <div className="chat-demo" id="ai-demo">
       <div className="chat-head">
         <span className="chat-head-icon"><Icon name="spark" size={19} /></span>
-        <div><b>{copy.title}</b><small>{copy.sub}</small></div>
-        <span className="chat-status"><i /> {copy.status}</span>
+        <div><b>{title || "Setup assistant"}</b><small>{sub || "Matches your description to a plan you can subscribe to"}</small></div>
+        <span className="chat-status"><i /> {status || "Ready"}</span>
       </div>
-      <div className="chat-convo">
-        <div className="bubble bot-bubble">{copy.hello}</div>
-        <div className="bubble user-bubble">{copy.sampleUser}</div>
-        <div className="proposal">
-          <span className="proposal-head"><Icon name="spark" size={16} /> {copy.proposal}</span>
-          <div className="proposal-grid">
-            {copy.points.map((point) => <span key={point}><Icon name="check" size={15} /> {point}</span>)}
-          </div>
-          <div className="proposal-foot">{copy.foot}</div>
-        </div>
-      </div>
-      <form className="demo-form" onSubmit={onSubmit}>
-        <input name="prompt" aria-label="Describe your phone setup" placeholder={copy.placeholder} required />
-        <button type="submit" aria-label="Generate example setup"><Icon name="arrow" size={18} /></button>
+      <form className="contact-form" onSubmit={onSubmit}>
+        <label>Describe the phone system you need
+          <textarea name="prompt" rows={4} required placeholder={placeholder || "6 people, an AI receptionist, and keep our current number"} />
+        </label>
+        <button className="btn btn-primary" type="submit" disabled={pending}>{pending ? "Matching a plan…" : "Recommend a plan"}</button>
       </form>
-      {result ? (
-        <div className="demo-result" aria-live="polite">
-          <div className="sample-output">
-            <strong><Icon name="spark" size={17} /> {copy.resultTitle}</strong>
-            <p>{result}</p>
-            <small>{copy.resultNote}</small>
-          </div>
+      {message ? <p className="form-feedback">{message}</p> : null}
+      {advice ? (
+        <div className="setup-result" aria-live="polite">
+          <h3>{advice.planName}</h3>
+          <p>{advice.summary}</p>
+          <ul>{advice.features.map((feature) => <li key={feature}>{feature}</li>)}</ul>
+          <a className="btn btn-primary" href={advice.href}>{advice.custom ? "Request this custom system" : `Create an account on ${advice.planName}`}</a>
         </div>
       ) : null}
     </div>
@@ -83,38 +71,28 @@ export function ChatDemo({ copy }: { copy: ChatCopy }) {
 
 export function Estimator({
   plans,
-  aiPrice,
-  aiLabel,
   planLabel,
   totalLabel,
-  cta,
-  href,
 }: {
-  plans: { name: string; price: number; custom?: boolean }[];
-  aiPrice: number;
-  aiLabel: string;
+  plans: { name: string; price: number; custom?: boolean; includedMinutes?: number }[];
   planLabel: string;
   totalLabel: string;
-  cta: string;
-  href: string;
 }) {
-  const priced = plans.filter((item) => !item.custom);
-  const [plan, setPlan] = useState(String(priced[1]?.price ?? priced[0]?.price ?? 0));
-  const [ai, setAi] = useState(false);
-  const total = Number(plan) + (ai ? aiPrice : 0);
+  const priced = plans.filter((item) => !item.custom && item.price > 0);
+  const [name, setName] = useState(priced[1]?.name || priced[0]?.name || "");
+  const plan = priced.find((item) => item.name === name) || priced[0];
+  if (!plan) return null;
   return (
-    <form id="estimate-form">
-      <label htmlFor="base-plan">{planLabel}</label>
-      <select id="base-plan" value={plan} onChange={(event) => setPlan(event.target.value)}>
-        {priced.map((item) => (
-          <option key={item.name} value={item.price}>{item.name} · ${item.price}</option>
-        ))}
-      </select>
-      <label className="check-option">
-        <input type="checkbox" checked={ai} onChange={(event) => setAi(event.target.checked)} /> {aiLabel}
+    <form id="estimate-form" action="/account/register" method="get">
+      <label htmlFor="base-plan">{planLabel || "Plan"}
+        <select id="base-plan" name="plan" value={plan.name} onChange={(event) => setName(event.target.value)}>
+          {priced.map((item) => (
+            <option key={item.name} value={item.name}>{item.name} · ${item.price}/month</option>
+          ))}
+        </select>
       </label>
-      <div className="estimate-output"><span>{totalLabel}</span><strong>${total}</strong></div>
-      <a className="btn btn-primary" href={href}>{cta} <Icon name="arrow" size={16} /></a>
+      <div className="estimate-output"><span>{totalLabel || "Monthly price"}</span><strong>${plan.price}</strong></div>
+      <button className="btn btn-primary" type="submit">Create an account on {plan.name}</button>
     </form>
   );
 }
@@ -170,8 +148,10 @@ export function ContactForm({
 export function CustomRequestForm({
   copy,
   enabled,
+  setup = "",
 }: {
   enabled: boolean;
+  setup?: string;
   copy: {
     formTitle: string;
     nameLabel: string;
@@ -211,7 +191,7 @@ export function CustomRequestForm({
         <label>{copy.emailLabel} <input required name="email" type="email" placeholder={copy.emailPlaceholder} /></label>
         <label>{copy.phoneLabel} <input required name="phone" type="tel" placeholder={copy.phonePlaceholder} /></label>
       </div>
-      <label>{copy.needsLabel} <textarea required name="needs" rows={6} placeholder={copy.needsPlaceholder} /></label>
+      <label>{copy.needsLabel} <textarea required name="needs" rows={6} placeholder={copy.needsPlaceholder} defaultValue={setup} /></label>
       <button type="submit" className="btn btn-primary">{copy.submitLabel} <Icon name="arrow" size={17} /></button>
       <div className="form-feedback" role="status" aria-live="polite">{feedback}</div>
     </form>
