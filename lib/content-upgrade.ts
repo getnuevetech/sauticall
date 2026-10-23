@@ -103,6 +103,13 @@ export function upgradeContent(database: Database.Database) {
       "Preview": "Ready",
       "See the setup experience": "Describe your setup",
       "Transparent-looking plans. Human-sized businesses.": "Plans you can subscribe to.",
+      "Explore concept packages for SautiCall. Plans, allowances, and final prices will be finalized after provider licensing and operating costs are confirmed.": "Choose a plan and create the account. The monthly price is the price on the plan.",
+      "Build a sample estimate.": "Choose a plan to set up.",
+      "This is a design-demo estimator, not a checkout or binding quote.": "Pick a plan here. The button opens account setup for that plan.",
+      "Illustrative SautiCall plans for solo operators, small businesses, and teams.": "Choose Solo, Small Business, or Team and create the account.",
+      "Start with your idea": "Create account",
+      "Ask about pricing": "Create an account",
+      "EXPLORE YOUR SETUP": "SET UP A PLAN",
     };
     const signupFields = ["headerCtaHref", "primaryHref", "endHref", "estimateHref"];
     for (const [from, to] of Object.entries(replacements)) {
@@ -187,6 +194,22 @@ export function upgradeContent(database: Database.Database) {
   if (personas && customPersona && !personas.some((persona) => persona.href === "/custom")) {
     personas.push(customPersona);
     writeJson(database, "personas", personas);
+  }
+  if (personas) {
+    let personaChanged = false;
+    for (const persona of personas) {
+      const title = persona.title.toLowerCase();
+      const route = title.includes("just you") ? ["/account/register?plan=Solo", "Set up Solo"]
+        : title.includes("small") ? ["/account/register?plan=Small%20Business", "Set up Small Business"]
+        : title.includes("pouring") ? ["/account/register?plan=Team", "Set up Team"]
+        : null;
+      if (route && (persona.href !== route[0] || persona.cta !== route[1])) {
+        persona.href = route[0];
+        persona.cta = route[1];
+        personaChanged = true;
+      }
+    }
+    if (personaChanged) writeJson(database, "personas", personas);
   }
 
   const footer = readJson<{ legalRight?: string; groups: { title: string; links: { label: string; href: string }[] }[] }>(database, "footer");

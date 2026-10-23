@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { selectionAdvice } from "../lib/offerings.ts";
 import { recommendPlan, readSetupNeed } from "../lib/setup-assistant.ts";
 import { planSignupPath } from "../lib/signup.ts";
 import type { Plan } from "../lib/types.ts";
 
 const plans: Plan[] = [
   { name: "Solo", price: 19, custom: false, base: false, multilingual: false, includedMinutes: 200, seats: 1, priceLabel: "", desc: "", units: "", features: ["numbers", "softphone", "voicemail"], note: "", popular: false, ctaLabel: "", ctaHref: "" },
-  { name: "Small Business", price: 39, custom: false, base: false, multilingual: true, includedMinutes: 800, seats: 5, priceLabel: "", desc: "", units: "", features: ["numbers", "porting", "softphone", "ai", "ai_any_language", "ring_groups"], note: "", popular: true, ctaLabel: "", ctaHref: "" },
+  { name: "Small Business", price: 39, custom: false, base: false, multilingual: true, includedMinutes: 800, seats: 5, priceLabel: "", desc: "", units: "", features: ["numbers", "porting", "softphone", "desk_phones", "ai", "ai_any_language", "ring_groups"], note: "", popular: true, ctaLabel: "", ctaHref: "" },
   { name: "Team", price: 79, custom: false, base: false, multilingual: true, includedMinutes: 2000, seats: 10, priceLabel: "", desc: "", units: "", features: ["numbers", "porting", "queues", "ai", "ai_any_language"], note: "", popular: false, ctaLabel: "", ctaHref: "" },
   { name: "Custom", price: 0, custom: true, base: false, multilingual: true, includedMinutes: 0, seats: 0, priceLabel: "Custom", desc: "", units: "", features: ["ai"], note: "", popular: false, ctaLabel: "", ctaHref: "/custom" },
 ];
@@ -29,6 +30,14 @@ test("the sample team request names the city, the extensions, AI, and sales rout
   assert.equal(readSetupNeed(prompt).people, 4);
   assert.equal(advice?.planName, "Small Business");
   assert.deepEqual(advice?.points, ["Houston number", "4 extensions", "AI receptionist", "Sales call routing"]);
+});
+
+test("each product opens account setup on the plan that includes it", () => {
+  assert.equal(selectionAdvice(plans, { product: "phone" })?.planName, "Solo");
+  assert.equal(selectionAdvice(plans, { product: "ai", language: "1" })?.planName, "Small Business");
+  assert.equal(selectionAdvice(plans, { product: "desk" })?.planName, "Small Business");
+  assert.equal(selectionAdvice(plans, { product: "center" })?.planName, "Team");
+  assert.match(selectionAdvice(plans, { product: "ai", people: "20", language: "1" })?.href || "", /^\/custom\?setup=/);
 });
 
 test("a large queue request goes to the custom form", () => {

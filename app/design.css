@@ -112,6 +112,17 @@ body{background:#fff}
 .setup-result{margin-top:14px;padding:14px;border:1px solid #e1e7f2;border-radius:14px;background:#fff}
 .setup-result ul{margin:8px 0 14px;padding-left:18px}
 .feature-card.chosen{outline:2px solid #354bc8}
+.engage-grid{display:grid;grid-template-columns:minmax(280px,.85fr) minmax(340px,1.15fr);gap:36px;align-items:center;padding:54px 0 10px}
+.engage-grid h1{font-size:clamp(2.6rem,5vw,4.4rem)}
+.path-picks{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 18px}
+.path-picks a{border:1px solid #bbc0ce;border-radius:999px;padding:10px 16px;background:#fff;color:#293554;font-weight:650}
+.product-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.product-card .btn{margin-top:8px}
+.ai-choice{max-width:720px}
+#products,#plans,#ai-demo,#ai-choices{scroll-margin-top:96px}
+.ai-choice .check-option{display:flex;align-items:center;gap:10px}
+.ai-choice .check-option input{width:auto;min-width:0;margin:0}
+@media(max-width:900px){.engage-grid,.product-grid{grid-template-columns:1fr}}
 .desk-filters label{display:grid;gap:4px;color:#3a4354;font-size:.88rem}
 .desk-filters label.check-option{display:flex;align-items:center;gap:8px}
 .desk-filters input,.desk-filters select{min-width:180px}

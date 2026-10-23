@@ -5,7 +5,7 @@ export function planSignupPath(name: string, setup = "") {
   return `/account/register?${params.toString()}`;
 }
 
-const BROCHURE = new Set(["", "/", "/how-it-works", "/contact", "#"]);
+const BROCHURE = new Set(["", "/", "/how-it-works", "/contact", "/solutions", "/pricing", "/ai-receptionist", "#"]);
 
 export function signupHref(href: string) {
   if (BROCHURE.has(href)) return "/account/register";

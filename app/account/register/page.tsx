@@ -5,6 +5,7 @@ import { register } from "../actions";
 import { currentUser } from "@/lib/auth";
 import { flagOn, getDb, readDoc } from "@/lib/db";
 import { featureLabels, normalizePlans } from "@/lib/plan-features";
+import { selectionAdvice, selectionPrompt } from "@/lib/offerings";
 import { loadSite } from "@/lib/site";
 import type { Plan } from "@/lib/types";
 
@@ -15,20 +16,24 @@ function savedPlan(userId: number) {
   return payload.plan || "";
 }
 
-export default async function RegisterPage({ searchParams }: { searchParams: Promise<{ plan?: string; setup?: string }> }) {
+export default async function RegisterPage({ searchParams }: { searchParams: Promise<{ plan?: string; setup?: string; product?: string; people?: string; language?: string; ai?: string }> }) {
   const params = await searchParams;
-  const planName = String(params.plan || "");
-  const setup = String(params.setup || "").slice(0, 400);
+  const requestedPlan = String(params.plan || "");
   const user = await currentUser();
   if (user?.role === "customer") {
-    const saved = planName || savedPlan(user.id);
+    const saved = requestedPlan || savedPlan(user.id);
     redirect(saved ? `/account/billing?plan=${encodeURIComponent(saved)}` : "/account/billing");
   }
   if (user) redirect("/admin");
   const copy = loadSite().account;
   const text = (key: string) => (typeof copy[key] === "string" ? String(copy[key]) : "");
   const open = flagOn("auth.signup");
-  const chosen = normalizePlans(readDoc<Plan[]>("plans")).find((plan) => plan.name === planName && !plan.custom);
+  const catalog = normalizePlans(readDoc<Plan[]>("plans"));
+  const named = catalog.find((plan) => plan.name === requestedPlan && !plan.custom);
+  const advice = named ? null : selectionAdvice(catalog, params);
+  if (advice?.custom) redirect(advice.href);
+  const chosen = named || catalog.find((plan) => plan.name === advice?.planName && !plan.custom);
+  const setup = String(params.setup || (named ? "" : selectionPrompt(params)) || "").slice(0, 400);
   return (
     <Frame pathname="/account/register">
       <main>

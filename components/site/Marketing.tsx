@@ -3,6 +3,7 @@ import { Icon } from "../Icon";
 import { ContactForm, CustomRequestForm, Estimator, SetupAssistant } from "./Interactive";
 import { EndCta, PhoneArt } from "./Chrome";
 import { featureLabels, normalizePlan, planAllows } from "@/lib/plan-features";
+import { offeringForService, selectionAdvice } from "@/lib/offerings";
 import { recommendPlan } from "@/lib/setup-assistant";
 import { planSignupPath, signupHref } from "@/lib/signup";
 import type { Faq, Persona, Plan, Service } from "@/lib/types";
@@ -36,7 +37,7 @@ function PricingCards({ plans, ribbon, languageBadge }: { plans: Plan[]; ribbon:
           <ul>
             {featureLabels(plan.features).map((feature) => <li key={feature}><Icon name="check" size={17} /> <span>{feature}</span></li>)}
           </ul>
-          <Link className={`btn ${plan.popular ? "btn-primary" : "btn-secondary"}`} href={plan.custom ? "/custom" : planSignupPath(plan.name)}>{plan.custom ? (plan.ctaLabel || "Request a custom system") : "Create account"} <Icon name="arrow" size={16} /></Link>
+          <Link className={`btn ${plan.popular ? "btn-primary" : "btn-secondary"}`} href={plan.custom ? "/custom" : planSignupPath(plan.name)}>{plan.custom ? "Request a custom system" : `Set up ${plan.name}`} <Icon name="arrow" size={16} /></Link>
           <small>{plan.note}</small>
         </article>
         );
@@ -74,6 +75,20 @@ function FaqList({ faqs }: { faqs: Faq[] }) {
   );
 }
 
+function personaPath(persona: Persona) {
+  const title = persona.title.toLowerCase();
+  if (title.includes("just you") || title.includes("solo")) return { href: planSignupPath("Solo"), cta: "Set up Solo" };
+  if (title.includes("small")) return { href: planSignupPath("Small Business"), cta: "Set up Small Business" };
+  if (title.includes("pouring") || title.includes("team")) return { href: planSignupPath("Team"), cta: "Set up Team" };
+  if (title.includes("specific") || title.includes("custom")) return { href: "/custom", cta: "Request a custom system" };
+  return { href: signupHref(persona.href), cta: persona.cta || "Create account" };
+}
+
+function CloseCta({ eyebrow, title, body, cta, href }: { eyebrow: string; title: string; body: string; cta: string; href: string }) {
+  const vague = /idea|explore|sample|preview|ask about/i.test(cta);
+  return <EndCta eyebrow={eyebrow} title={title} body={body} cta={vague ? "Create account" : cta || "Create account"} href={signupHref(href)} />;
+}
+
 function assistantCopy(page: Record<string, unknown>, plans: Plan[]) {
   const sample = str(page, "chatSampleUser");
   return {
@@ -106,73 +121,52 @@ export function HomePage({
   return (
     <main>
       <section className="hero hero-b">
-        <div className="wrap b-hero-grid">
+        <div className="wrap engage-grid">
           <div className="b-hero-copy">
             <div className="tiny-head"><span className="starlet">✳</span> {str(page, "eyebrow")}</div>
             <h1>{str(page, "titleLead")} <span className="underline-coral">{str(page, "titleAccent")}</span></h1>
             <p>{str(page, "lead")}</p>
-            <div className="cta-pair">
-              <Link className="btn btn-primary" href={signupHref(str(page, "primaryHref"))}>{str(page, "primaryCta") || "Create account"} <Icon name="arrow" size={18} /></Link>
-              <Link className="btn btn-secondary" href={str(page, "secondaryHref")}>{str(page, "secondaryCta")} <Icon name="arrow" size={17} /></Link>
+            <p>Describe the phone system in the assistant, or start an account from a product, a plan, or the AI receptionist. Each one opens account setup.</p>
+            <div className="path-picks">
+              <a href="#products">Choose a product</a>
+              <a href="#plans">Choose a plan</a>
+              <a href="/ai-receptionist#ai-choices">Choose AI receptionist</a>
             </div>
             <div className="b-little-line">
               <span className="face-stack">{faces.map((face) => <i key={face}>{face}</i>)}</span>
               <span>{str(page, "faceCaption")}</span>
             </div>
           </div>
-          <div className="b-visual">
-            <PhoneArt
-              brand={str(page, "phoneBrand")}
-              title={str(page, "phoneTitle")}
-              sub={str(page, "phoneSub")}
-              badge1={str(page, "phoneBadge1")}
-              badge2={str(page, "phoneBadge2")}
-              chip1={str(page, "chipAnswered")}
-              chip2={str(page, "chipRoute")}
-              chip3={str(page, "chipAppointment")}
-            />
-            <div className="b-visual-label">{str(page, "visualLabel")} <span>↗</span></div>
-          </div>
+          {showDemo ? <SetupAssistant {...assistantCopy(page, plans)} /> : <Link className="btn btn-primary" href="/account/register">Create account <Icon name="arrow" size={18} /></Link>}
         </div>
         <div className="wrap b-lower-hero">
           {checks.map((check) => <div key={check}>{check} <b>✓</b></div>)}
         </div>
       </section>
-      <section className="section b-situation">
+      <section className="section" id="products">
         <div className="wrap">
-          <div className="split-b-intro">
-            <div>
-              <div className="section-heading">
-                <span className="eyebrow">{str(page, "situationEyebrow")}</span>
-                <h2>{str(page, "situationTitle")}</h2>
-              </div>
-            </div>
-            <p>{str(page, "situationBody")}</p>
+          <div className="section-heading">
+            <span className="eyebrow">Products</span>
+            <h2>Choose a product and open the account.</h2>
+            <p>Each product starts account setup on the plan that includes it. The assistant above is one way in. These buttons are the others.</p>
           </div>
-          <div className="b-service-grid">
-            {services.slice(0, 3).map((service, index) => (
-              <Link key={service.title} className="b-service" href={service.href} style={{ background: service.cardColor }}>
-                <span className="service-num">0{index + 1}</span>
-                <div className={`b-illustration ill-${index}`}><Icon name={service.icon} size={52} /></div>
-                <h3>{service.title}</h3>
-                <p>{service.desc}</p>
-                <span className="round-arrow"><Icon name="arrow" size={21} /></span>
-              </Link>
-            ))}
+          <div className="product-grid">
+            {services.map((service) => {
+              const offering = offeringForService(service);
+              const advice = offering ? selectionAdvice(plans, { product: offering.id }) : null;
+              const href = offering ? (advice?.href || "/account/register") : "#ai-demo";
+              const label = offering ? (advice?.custom ? "Request this custom system" : `Set up ${advice?.planName || "this product"}`) : "Use the setup assistant";
+              return (
+                <article key={service.title} className="feature-card product-card">
+                  <div className="feature-icon"><Icon name={service.icon} size={24} /></div>
+                  <h3>{service.title}</h3>
+                  <p>{service.desc}</p>
+                  {advice && !advice.custom ? <p>Opens account setup on {advice.planName}, ${advice.price}/month.</p> : null}
+                  <Link className="btn btn-primary" href={href}>{label} <Icon name="arrow" size={16} /></Link>
+                </article>
+              );
+            })}
           </div>
-        </div>
-      </section>
-      <section className="section b-easy">
-        <div className="wrap b-easy-grid">
-          <div className="b-easy-copy">
-            <div className="section-heading">
-              <span className="eyebrow">{str(page, "easyEyebrow")}</span>
-              <h2>{str(page, "easyTitle")} <i>{str(page, "easyTitleEm")}</i></h2>
-              <p>{str(page, "easyBody")}</p>
-            </div>
-            <a className="btn btn-primary" href="#ai-demo">{str(page, "easyCta") || "Describe your setup"} <Icon name="arrow" size={18} /></a>
-          </div>
-          {showDemo ? <SetupAssistant {...assistantCopy(page, plans)} /> : null}
         </div>
       </section>
       <section className="section b-personas">
@@ -182,19 +176,22 @@ export function HomePage({
             <h2>{str(page, "personaTitle")}</h2>
           </div>
           <div className="persona-grid">
-            {personas.map((persona) => (
-              <article key={persona.index}>
-                <span>{persona.index}</span>
-                <h3>{persona.title}</h3>
-                <p>{persona.body}</p>
-                <Link href={persona.href}>{persona.cta} <Icon name="arrow" size={16} /></Link>
-              </article>
-            ))}
+            {personas.map((persona) => {
+              const path = personaPath(persona);
+              return (
+                <article key={persona.index}>
+                  <span>{persona.index}</span>
+                  <h3>{persona.title}</h3>
+                  <p>{persona.body}</p>
+                  <Link className="btn btn-secondary" href={path.href}>{path.cta} <Icon name="arrow" size={16} /></Link>
+                </article>
+              );
+            })}
           </div>
         </div>
       </section>
       <LanguageBand page={page} />
-      <section className="section b-price">
+      <section className="section b-price" id="plans">
         <div className="wrap">
           <div className="section-heading">
             <span className="eyebrow">{str(page, "priceEyebrow")}</span>
@@ -205,7 +202,7 @@ export function HomePage({
           <p className="disclaimer">{str(page, "disclaimer")}</p>
         </div>
       </section>
-      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
+      <CloseCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
     </main>
   );
 }
@@ -242,7 +239,11 @@ export function SolutionsPage({ page, services }: { page: Record<string, unknown
                 <span className="feature-tag">{service.tag}</span>
                 <h3>{service.title}</h3>
                 <p>{service.desc}</p>
-                <Link className="text-link" href={service.href}>{str(page, "exploreLabel")} <Icon name="arrow" size={15} /></Link>
+                {(() => {
+                  const offering = offeringForService(service);
+                  if (!offering) return <Link className="btn btn-primary" href="/#ai-demo">Use the setup assistant <Icon name="arrow" size={15} /></Link>;
+                  return <Link className="btn btn-primary" href={`/account/register?product=${offering.id}`}>{offering.id === "ai" ? "Set up the AI receptionist" : "Set up this product"} <Icon name="arrow" size={15} /></Link>;
+                })()}
               </article>
             ))}
           </div>
@@ -275,7 +276,7 @@ export function SolutionsPage({ page, services }: { page: Record<string, unknown
           </div>
         </div>
       </section>
-      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
+      <CloseCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
     </main>
   );
 }
@@ -300,6 +301,29 @@ export function AiPage({ page, home }: { page: Record<string, unknown>; home: Re
   return (
     <main>
       <InnerHero eyebrow={str(page, "eyebrow")} title={str(page, "title")} titleEm={str(page, "titleEm")} lead={str(page, "lead")} />
+      <section className="section" id="ai-choices">
+        <div className="wrap ai-choice">
+          <div className="section-heading">
+            <span className="eyebrow">Start the AI receptionist</span>
+            <h2>Choose the AI options, then create the account.</h2>
+            <p>The AI receptionist is included. Any language is included when you check it. Account setup opens on the plan that has those choices.</p>
+          </div>
+          <form className="contact-form" action="/account/register" method="get">
+            <input type="hidden" name="product" value="ai" />
+            <label>How many people answer calls
+              <select name="people" defaultValue="1">
+                <option value="1">1 person</option>
+                <option value="4">4 people</option>
+                <option value="5">5 people</option>
+                <option value="10">10 people</option>
+                <option value="20">20 people</option>
+              </select>
+            </label>
+            <label className="check-option"><input type="checkbox" name="language" value="1" defaultChecked /> Callers can use any language</label>
+            <button className="btn btn-primary" type="submit">Create an account with these AI choices <Icon name="arrow" size={16} /></button>
+          </form>
+        </div>
+      </section>
       <section className="section">
         <div className="wrap ai-feature-split">
           <div className="ai-story">
@@ -324,7 +348,7 @@ export function AiPage({ page, home }: { page: Record<string, unknown>; home: Re
           <Cards items={cards} />
         </div>
       </section>
-      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
+      <CloseCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
     </main>
   );
 }
@@ -362,7 +386,7 @@ export function HowPage({ page, home, plans, showDemo }: { page: Record<string, 
           <Cards items={cards} />
         </div>
       </section>
-      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
+      <CloseCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
     </main>
   );
 }
@@ -405,7 +429,7 @@ export function PricingPage({ page, plans, faqs, showEstimator }: { page: Record
           </div>
         </div>
       </section>
-      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
+      <CloseCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
     </main>
   );
 }
@@ -441,7 +465,7 @@ export function AboutPage({ page }: { page: Record<string, unknown> }) {
           <Cards items={cards} />
         </div>
       </section>
-      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
+      <CloseCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
     </main>
   );
 }
@@ -535,7 +559,7 @@ export function CustomPlanPage({ page, formEnabled, setup = "" }: { page: Record
           />
         </div>
       </section>
-      <EndCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
+      <CloseCta eyebrow={str(page, "endEyebrow")} title={str(page, "endTitle")} body={str(page, "endBody")} cta={str(page, "endCta")} href={signupHref(str(page, "endHref"))} />
     </main>
   );
 }

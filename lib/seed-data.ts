@@ -131,9 +131,9 @@ export const defaultFaqs: Faq[] = [
 ];
 
 export const defaultPersonas: Persona[] = [
-  { index: "01", title: "It's just you", body: "A separate business number. A professional greeting. Less interruption.", cta: "Explore Solo", href: "/pricing" },
-  { index: "02", title: "You have a small team", body: "Simple extensions, shared calls, and desk or mobile phones that work together.", cta: "Explore Small Business", href: "/pricing" },
-  { index: "03", title: "Calls are pouring in", body: "Queues and smart call routing that help the right customers reach the right people.", cta: "Explore Team", href: "/pricing" },
+  { index: "01", title: "It's just you", body: "A separate business number. A professional greeting. Less interruption.", cta: "Set up Solo", href: "/account/register?plan=Solo" },
+  { index: "02", title: "You have a small team", body: "Simple extensions, shared calls, and desk or mobile phones that work together.", cta: "Set up Small Business", href: "/account/register?plan=Small%20Business" },
+  { index: "03", title: "Calls are pouring in", body: "Queues and smart call routing that help the right customers reach the right people.", cta: "Set up Team", href: "/account/register?plan=Team" },
   { index: "04", title: "You need something specific", body: "A system built around your call flow. Tell us what you need and a salesperson will follow up.", cta: "Request a custom system", href: "/custom" },
 ];
 

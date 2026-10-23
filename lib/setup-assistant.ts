@@ -17,6 +17,7 @@ export type SetupNeed = {
   place: string;
   localNumber: boolean;
   routing: string;
+  deskPhones: boolean;
 };
 
 function titleWord(value: string) {
@@ -60,6 +61,7 @@ export function readSetupNeed(prompt: string): SetupNeed {
   const porting = /\bport(?:ing|ed)?\b/.test(text) || /\bkeep (?:my|our|the) (?:current |existing )?number\b/.test(text) || /\bexisting number\b/.test(text) || /\btransfer (?:my|our|the) number\b/.test(text);
   const queues = /\b(queue|on hold|call center|contact center)\b/.test(text);
   const localNumber = Boolean(place) || /\b(?:local|new|business|toll-free|toll free)\s+numbers?\b/.test(text) || /\ba numbers?\b/.test(text);
+  const deskPhones = /\bdesk phones?\b/.test(text);
   return {
     people: Math.max(1, Math.min(500, peopleCount(text))),
     ai,
@@ -69,6 +71,7 @@ export function readSetupNeed(prompt: string): SetupNeed {
     place,
     localNumber,
     routing: routingPoint(text),
+    deskPhones,
   };
 }
 
@@ -81,6 +84,7 @@ export function setupPoints(need: SetupNeed) {
   if (need.ai) points.push(need.anyLanguage ? "AI receptionist, any language" : "AI receptionist");
   if (need.routing) points.push(need.routing);
   if (need.queues) points.push("Call queue");
+  if (need.deskPhones) points.push("Desk phones");
   return points;
 }
 
@@ -106,6 +110,7 @@ function covers(plan: Plan, need: SetupNeed) {
   if (need.anyLanguage) required.push("ai_any_language");
   if (need.porting) required.push("porting");
   if (need.queues) required.push("queues");
+  if (need.deskPhones) required.push("desk_phones");
   return required.every((key) => planAllows(plan, key));
 }
 
