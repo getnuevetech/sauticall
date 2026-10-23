@@ -100,7 +100,10 @@ export async function linkSubaccountClient(userId: number, clientId: string) {
 export async function ensureSubaccount(userId: number, resellerClient = ""): Promise<{ ok: true; account: string; sipHost: string } | { ok: false; message: string }> {
   const existing = getSubaccount(userId);
   if (existing?.account && existing.password) {
-    if (resellerClient) await linkSubaccountClient(userId, resellerClient);
+    if (resellerClient) {
+      const linked = await linkSubaccountClient(userId, resellerClient);
+      if (!linked.ok) return { ok: false, message: linked.message };
+    }
     return { ok: true, account: existing.account, sipHost: existing.sip_host };
   }
   const connection = getConnection("voipms");

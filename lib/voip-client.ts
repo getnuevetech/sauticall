@@ -14,10 +14,6 @@ function clientPassword() {
   return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
 }
 
-function countryName(country: string) {
-  return country === "CA" ? "Canada" : "United States";
-}
-
 export function getVoipClient(userId: number) {
   return getDb().prepare("SELECT * FROM voip_clients WHERE user_id = ?").get(userId) as ClientRow | undefined;
 }
@@ -52,7 +48,7 @@ function profileFor(userId: number) {
   const name = personName(user.name);
   return {
     ok: true as const,
-    profile: { ...name, address, city, state, country, countryName: countryName(country), zip, phone, email },
+    profile: { ...name, address, city, state, country, zip, phone, email },
   };
 }
 
@@ -119,7 +115,7 @@ export async function ensureVoipClient(userId: number, refresh = false): Promise
       address: profile.address,
       city: profile.city,
       state: profile.state,
-      country: profile.countryName,
+      country: profile.country,
       zip: profile.zip,
       phone_number: profile.phone,
     });
@@ -139,7 +135,7 @@ export async function ensureVoipClient(userId: number, refresh = false): Promise
       address: profile.address,
       city: profile.city,
       state: profile.state,
-      country: profile.countryName,
+      country: profile.country,
       zip: profile.zip,
       phone_number: profile.phone,
       email: profile.email,

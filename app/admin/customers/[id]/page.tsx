@@ -54,7 +54,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
           <p>{voipClient?.client_id ? `Client ${voipClient.client_id}` : "No client yet."}{lineAccount?.account ? ` · Line ${lineAccount.account}` : ""}</p>
           {voipClient?.email ? <p>{voipClient.email}</p> : null}
           {voipClient?.last_message ? <p>{voipClient.last_message}</p> : null}
-          <p>Customers do not see this account. Numbers for this customer are ordered onto their line account and linked to this client.</p>
+          <p>This client sits under the VoIP.ms reseller login. Customers do not see it. A number is bought only after the client exists, then routed through this customer's line account.</p>
           <form action={provisionVoipClient}><input type="hidden" name="id" value={person.id} /><button className="btn btn-secondary" type="submit">{voipClient?.client_id ? "Refresh the VoIP.ms client" : "Create the VoIP.ms client"}</button></form>
         </section>
         <section className="desk-card">

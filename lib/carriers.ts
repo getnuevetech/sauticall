@@ -171,10 +171,19 @@ function httpsHost(input: string) {
 export async function testVoipms() {
   try {
     const result = await callVoipms("getBalance", {});
+    if (!result.ok) {
+      const message = `VoIP.ms returned ${result.status}.`;
+      recordCheck("voipms", false, message);
+      return { ok: false, message };
+    }
+    const clients = await callVoipms("getClients", {});
     const balance = result.body && typeof result.body === "object" ? String((result.body as { balance?: unknown }).balance || "") : "";
-    const message = result.ok ? `Connected. Balance ${balance || "returned"}.` : `VoIP.ms returned ${result.status}.`;
-    recordCheck("voipms", result.ok, message);
-    return { ok: result.ok, message };
+    const reseller = clients.ok || clients.status === "no_client";
+    const message = reseller
+      ? `Connected. Balance ${balance || "returned"}. Reseller clients are available on this login.`
+      : `The balance was read, but reseller clients returned ${clients.status}.`;
+    recordCheck("voipms", reseller, message);
+    return { ok: reseller, message };
   } catch (error) {
     const message = error instanceof Error ? error.message : "VoIP.ms could not be reached.";
     recordCheck("voipms", false, message);

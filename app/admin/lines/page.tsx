@@ -66,7 +66,7 @@ export default async function LinesPage({ searchParams }: { searchParams: Promis
     <>
       <span className="eyebrow">Settings</span>
       <h2>Lines and trunks</h2>
-      <p>When a number is bought, SautiCall creates a VoIP.ms line account for that customer and tries to use the number as the SIP trunk for their department. If 3CX does not accept the trunk, finish it on the 3CX server with the details below, then mark it done. The emergency address is sent to VoIP.ms with the same switch as buying numbers. If VoIP.ms does not accept it, finish it there and mark it done.</p>
+      <p>When a number is bought, SautiCall uses that customer's VoIP.ms client and line account, then tries to use the number as the SIP trunk for their department. The number is not bought until that client exists. If 3CX does not accept the trunk, finish it on the 3CX server with the details below, then mark it done. The emergency address is sent to VoIP.ms with the same switch as buying numbers. If VoIP.ms does not accept it, finish it there and mark it done.</p>
       <p>{reading ? "Reading call minutes is on." : "Reading call minutes is off."} {limiting ? "Outbound calls stop at VoIP.ms when the balance is zero." : "Outbound calls are not stopped at VoIP.ms yet."} {trunks ? "Adding trunks from here is on." : "Adding trunks from here is off, so new numbers wait for the team."}</p>
       {params.error ? <p className="form-feedback">{params.error}</p> : null}
       {params.saved ? <p>Call minutes were updated.</p> : null}

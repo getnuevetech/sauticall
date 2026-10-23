@@ -141,8 +141,13 @@ export function markTrunkDone(lineId: number, note: string) {
 
 export async function purchaseNumber(input: { requestId: number; userId: number; did: string }) {
   const client = await ensureVoipClient(input.userId);
-  const sub = await ensureSubaccount(input.userId, client.ok ? client.clientId : "");
-  const ordered = await orderDid(input.did, sub.ok ? `account:${sub.account}` : undefined, client.ok && sub.ok ? sub.account : undefined);
+  if (!client.ok) return { ok: false, message: "The phone company account for this customer is not ready yet. An administrator can finish it on the customer page." };
+  const sub = await ensureSubaccount(input.userId, client.clientId);
+  if (!sub.ok) {
+    getDb().prepare("UPDATE voip_clients SET last_message = ?, updated_at = ? WHERE user_id = ?").run(sub.message.slice(0, 400), new Date().toISOString(), input.userId);
+    return { ok: false, message: "The phone company line for this customer is not ready yet. An administrator can finish it on the customer page." };
+  }
+  const ordered = await orderDid(input.did, `account:${sub.account}`, sub.account);
   if (!ordered.ok) return { ok: false, message: ordered.message };
   const existing = getDb().prepare("SELECT id FROM phone_lines WHERE request_id = ?").get(input.requestId) as { id: number } | undefined;
   let lineId = existing?.id || 0;
@@ -152,12 +157,11 @@ export async function purchaseNumber(input: { requestId: number; userId: number;
     ).run(input.userId, input.requestId, input.did, new Date().toISOString());
     lineId = Number(info.lastInsertRowid);
   }
-  if (client.ok && sub.ok) await syncCustomerDids(input.userId);
+  await syncCustomerDids(input.userId);
   const trunk = await attachTrunk(lineId);
   const limited = await enforceUser(input.userId);
   const { sendEmergency } = await import("./e911");
   const emergency = await sendEmergency(lineId);
-  const subNote = sub.ok ? "" : ` ${sub.message}`;
-  const message = `${trunk.message}${subNote} ${limited.message} ${emergency.message}`.trim();
+  const message = `${trunk.message} ${limited.message} ${emergency.message}`.trim();
   return { ok: true, message };
 }
