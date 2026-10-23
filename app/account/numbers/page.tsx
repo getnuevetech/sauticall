@@ -6,6 +6,7 @@ import { guardAccount } from "@/lib/guard";
 import { flagOn, getDb } from "@/lib/db";
 import { paidPlan } from "@/lib/pbx";
 import { planAllows } from "@/lib/plan-features";
+import { inventoryReady } from "@/lib/carriers";
 import { formatAddress, getEmergency, unitTypes, type EmergencyAddress } from "@/lib/e911";
 import { loadSite } from "@/lib/site";
 
@@ -70,7 +71,7 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
               </label>
               <button className="btn btn-primary" type="submit">{text("e911Save")}</button>
             </form>
-            {!included ? <div className="contact-form"><p>Business numbers are not included on your plan.</p></div> : open ? <NumberSearch live={flagOn("numbers.live_search")} copy={labels} /> : <div className="contact-form"><p>{text("numbersClosed")}</p></div>}
+            {!included ? <div className="contact-form"><p>Business numbers are not included on your plan.</p></div> : open ? <NumberSearch live={flagOn("numbers.live_search") && inventoryReady()} copy={labels} /> : <div className="contact-form"><p>{text("numbersClosed")}</p></div>}
             <div className="faq-list" style={{ marginTop: 28 }}>
               {lines.map((line) => <p key={line.did}>{line.did} · {E911[line.e911_status] || line.e911_status}{line.e911_message ? ` · ${line.e911_message}` : ""}</p>)}
               {rows.map((row) => {

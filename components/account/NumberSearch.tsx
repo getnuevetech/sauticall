@@ -13,6 +13,7 @@ export function NumberSearch({
   copy: Record<string, string>;
 }) {
   const [dids, setDids] = useState<Did[]>([]);
+  const [country, setCountry] = useState("US");
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -24,6 +25,7 @@ export function NumberSearch({
       region: String(data.get("region") || ""),
       ratecenter: String(data.get("ratecenter") || ""),
     });
+    setCountry(String(data.get("country") || "US"));
     setPending(true);
     const response = await fetch(`/api/numbers/search?${params}`);
     const payload = (await response.json()) as { dids?: Did[]; message?: string };
@@ -50,6 +52,7 @@ export function NumberSearch({
       {dids.map((item) => (
         <form key={item.did} action={saveNumber} className="feature-card">
           <input type="hidden" name="did" value={item.did} />
+          <input type="hidden" name="country" value={country} />
           <input type="hidden" name="region" value={item.state} />
           <input type="hidden" name="ratecenter" value={item.ratecenter} />
           <strong>{item.did}</strong>
@@ -57,10 +60,6 @@ export function NumberSearch({
           <button className="btn btn-secondary" type="submit">{copy.numbersRequest}</button>
         </form>
       ))}
-      <form action={saveNumber}>
-        <label>{copy.numbersDetailLabel} <input name="detail" placeholder={copy.numbersDetailPlaceholder} /></label>
-        <button className="btn btn-secondary" type="submit">Save number request</button>
-      </form>
     </div>
   );
 }

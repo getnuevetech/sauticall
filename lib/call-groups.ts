@@ -1,6 +1,7 @@
 import { pbxRequest } from "./carriers";
 import { flagOn, getDb } from "./db";
 import { nextFreeNumber } from "./group-numbers";
+import { idFromPbx } from "./pbx-id";
 import { updateRouting } from "./pbx";
 
 export const RING_STRATEGIES = [
@@ -49,11 +50,6 @@ function xapiStrategy(kind: string, strategy: string) {
     return "Hunt";
   }
   return strategy === "hunt" ? "PrioritizedHunt" : "RingAll";
-}
-
-function readId(body: unknown) {
-  if (body && typeof body === "object" && "Id" in body) return Number((body as { Id?: unknown }).Id) || 0;
-  return 0;
 }
 
 export function groupMembers(groupId: number) {
@@ -114,7 +110,7 @@ export async function provisionCallGroup(id: number) {
   const created = group.xapi_id
     ? await pbxRequest(`${path}(${group.xapi_id})`, { method: "PATCH", body: { ...body, Id: group.xapi_id } })
     : await pbxRequest(path, { method: "POST", body });
-  const xapiId = group.xapi_id || readId(created.body);
+  const xapiId = group.xapi_id || idFromPbx(created.body, created.location);
   if (!created.ok || !xapiId) {
     const message = created.message || "3CX did not create this group.";
     database.prepare("UPDATE call_groups SET status = 'failed', last_message = ? WHERE id = ?").run(message.slice(0, 400), id);

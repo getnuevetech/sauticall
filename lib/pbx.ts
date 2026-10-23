@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { pbxRequest } from "./carriers";
 import { flagOn, getDb, readDoc } from "./db";
+import { idFromPbx } from "./pbx-id";
 import { extensionCapacity, normalizePlan } from "./plan-features";
 import type { Plan } from "./types";
 
@@ -27,11 +28,6 @@ export function appPassword() {
 type Department = { user_id: number; name: string; xapi_id: number; number_from: string; number_to: string; open_time: string; close_time: string; last_message: string };
 type ExtensionRow = { id: number; user_id: number; number: string; first_name: string; last_name: string; email: string; xapi_id: number; status: string; access_password: string; last_message: string };
 
-function readId(body: unknown) {
-  if (body && typeof body === "object" && "Id" in body) return Number((body as { Id?: unknown }).Id) || 0;
-  return 0;
-}
-
 function readList(body: unknown) {
   if (body && typeof body === "object" && "value" in body && Array.isArray((body as { value?: unknown }).value)) {
     return (body as { value: { Id?: number; EmailAddress?: string }[] }).value;
@@ -54,7 +50,7 @@ async function ensureDepartment(userId: number) {
   const name = `SautiCall ${userId}`;
   if (existing?.xapi_id) return existing;
   const found = await pbxRequest(`Groups?$filter=${encodeURIComponent(`Name eq '${name}'`)}&$select=Id,Name`);
-  const listed = readId(readList(found.body)[0]);
+  const listed = idFromPbx(readList(found.body)[0], found.location);
   if (found.ok && listed) {
     database.prepare(
       `INSERT INTO pbx_departments (user_id, name, xapi_id, number_from, number_to, open_time, close_time, last_message)
@@ -73,7 +69,7 @@ async function ensureDepartment(userId: number) {
       UserNumberTo: String(range.to),
     },
   });
-  const id = readId(created.body);
+  const id = idFromPbx(created.body, created.location);
   if (!created.ok || !id) throw new Error(created.message);
   database.prepare(
     `INSERT INTO pbx_departments (user_id, name, xapi_id, number_from, number_to, open_time, close_time, last_message)
@@ -142,20 +138,27 @@ export async function provisionExtension(id: number) {
         Number: row.number,
         Language: "EN",
         SendEmailMissedCalls: false,
-        VMEmailOptions: "None",
+        VMEmailOptions: "Notification",
         Require2FA: false,
         AccessPassword: row.access_password,
+      },
+    });
+    let xapiId = idFromPbx(created.body, created.location);
+    if (!created.ok && /ALREADY_IN_USE|already exists/i.test(created.message)) {
+      const found = await pbxRequest(`Users?$filter=${encodeURIComponent(`Number eq '${row.number}'`)}&$select=Id,Number,EmailAddress`);
+      const match = readList(found.body).find((item) => !item.EmailAddress || item.EmailAddress.toLowerCase() === row.email.toLowerCase());
+      xapiId = idFromPbx(match);
+    }
+    if (!xapiId) throw new Error(created.message);
+    const assigned = await pbxRequest(`Users(${xapiId})`, {
+      method: "PATCH",
+      body: {
+        Id: xapiId,
         Groups: [{ "@odata.type": "#Pbx.UserGroup", GroupId: department.xapi_id, Rights: { RoleName: "users" } }],
       },
     });
-    let xapiId = readId(created.body);
-    if (!created.ok && created.message.includes("ALREADY_IN_USE")) {
-      const found = await pbxRequest(`Users?$filter=${encodeURIComponent(`Number eq '${row.number}'`)}&$select=Id,Number,EmailAddress`);
-      const match = readList(found.body).find((item) => !item.EmailAddress || item.EmailAddress.toLowerCase() === row.email.toLowerCase());
-      xapiId = readId(match);
-    }
-    if (!xapiId) throw new Error(created.message);
-    database.prepare("UPDATE pbx_extensions SET xapi_id = ?, status = 'created', last_message = ? WHERE id = ?").run(xapiId, "Created on the phone system.", id);
+    const message = assigned.ok ? "Created on the phone system." : `Created on the phone system. Department assignment needs attention: ${assigned.message}`;
+    database.prepare("UPDATE pbx_extensions SET xapi_id = ?, status = 'created', last_message = ? WHERE id = ?").run(xapiId, message.slice(0, 400), id);
     await routeDepartment(department);
     return { ok: true, message: "Created on the phone system." };
   } catch (error) {

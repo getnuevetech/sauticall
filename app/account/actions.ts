@@ -173,19 +173,22 @@ export async function saveNumber(formData: FormData) {
   const { getEmergency } = await import("@/lib/e911");
   const emergency = getEmergency(user.id);
   if (!emergency) redirect("/account/numbers?error=Add%20the%20emergency%20address%20first.");
-  const payload = {
-    did: String(formData.get("did") || "").replace(/\D/g, ""),
-    country: String(formData.get("country") || "US").slice(0, 2).toUpperCase(),
-    region: String(formData.get("region") || "").trim().toUpperCase(),
-    ratecenter: String(formData.get("ratecenter") || "").trim().toUpperCase(),
-    detail: String(formData.get("detail") || "").trim(),
-    emergency,
-  };
-  if (!payload.did && !payload.detail) redirect("/account/numbers?error=Choose%20a%20number%20or%20describe%20the%20one%20you%20want.");
+  if (!flagOn("numbers.live_search")) redirect("/account/numbers?error=Number%20inventory%20search%20is%20turned%20off.");
+  const { normalizeRequestedDid } = await import("@/lib/did-list");
+  const did = normalizeRequestedDid(String(formData.get("did") || ""));
+  if (!did) redirect("/account/numbers?error=Choose%20a%2010-digit%20number%20from%20the%20inventory%20search.");
+  const country = String(formData.get("country") || "US").slice(0, 2).toUpperCase() === "CA" ? "CA" : "US";
+  const region = String(formData.get("region") || "").trim().toUpperCase();
+  const ratecenter = String(formData.get("ratecenter") || "").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(region)) redirect("/account/numbers?error=Choose%20a%20number%20from%20a%20state%20or%20province%20search.");
+  const { findInventoryDid } = await import("@/lib/carriers");
+  const match = await findInventoryDid(country, region, ratecenter, did);
+  if (!match) redirect("/account/numbers?error=That%20number%20is%20not%20in%20the%20current%20inventory.%20Search%20again%20and%20choose%20a%20listed%20number.");
+  const payload = { did: match.did, country, region: (match.state || region).toUpperCase(), ratecenter: (match.ratecenter || ratecenter).toUpperCase(), emergency };
   getDb()
     .prepare("INSERT INTO account_requests (user_id, kind, payload, status, created_at) VALUES (?, 'number', ?, 'requested', ?)")
     .run(user.id, JSON.stringify(payload), new Date().toISOString());
-  audit(user.email, "request.number", payload.did || "described");
+  audit(user.email, "request.number", payload.did);
   redirect("/account/numbers?saved=1");
 }
 

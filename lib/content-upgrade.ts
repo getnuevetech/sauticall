@@ -49,6 +49,16 @@ export function upgradeContent(database: Database.Database) {
         flag.description = "Show the plan picker on the pricing page. The button opens signup for that plan.";
         changed = true;
       }
+      if (flag.key === "pbx.live_provision" && !flag.enabled && String(flag.description).includes("Leave this off until the 3CX connection is checked.")) {
+        flag.enabled = true;
+        flag.description = "Create a department and an extension on 3CX when a customer adds a person.";
+        changed = true;
+      }
+      if (flag.key === "numbers.live_search" && !flag.enabled && flag.description === "Search VoIP.ms inventory when that connection is enabled.") {
+        flag.enabled = true;
+        flag.description = "Search VoIP.ms inventory so a customer can request a real available number.";
+        changed = true;
+      }
     }
     if (changed) writeJson(database, "flags", flags);
   }
@@ -226,6 +236,10 @@ export function upgradeContent(database: Database.Database) {
         "Tell us the number and the details on your current carrier bill. Live submission runs only when an administrator has enabled it.",
       "Search available business numbers when live search is on. A request is saved either way, and an administrator places the carrier order.":
         "Search available business numbers when live search is on. Add the address where emergency services should find you. It is sent to the phone company when the number is bought.",
+      "Search available business numbers when live search is on. Add the address where emergency services should find you. It is sent to the phone company when the number is bought.":
+        "Search the phone company inventory and request one of the numbers listed. Add the address where emergency services should find you. It is sent to the phone company when the number is bought.",
+      "Live inventory search is off. Describe the number you want and the team will handle it.":
+        "Number inventory search is not available until VoIP.ms is connected.",
     };
     let changed = false;
     for (const [from, to] of Object.entries(replacements)) {

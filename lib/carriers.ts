@@ -72,12 +72,31 @@ export async function callVoipms(method: string, params: Record<string, string>)
   return { ok: status === "success", status, message: status, body };
 }
 
-export async function searchDids(country: string, region: string, ratecenter: string): Promise<{ ok: boolean; message: string; dids: ListedDid[] }> {
+export function inventoryReady() {
+  const connection = getConnection("voipms");
+  return Boolean(connection.enabled && connection.hasSecret && connection.public.api_username);
+}
+
+export async function searchDids(country: string, region: string, ratecenter: string, limit = 20): Promise<{ ok: boolean; message: string; dids: ListedDid[] }> {
   const method = country === "CA" ? "getDIDsCAN" : "getDIDsUSA";
   const regionKey = country === "CA" ? "province" : "state";
   const result = await callVoipms(method, { [regionKey]: region.toUpperCase(), ratecenter: ratecenter.toUpperCase() });
   if (!result.ok) return { ok: false, message: result.message, dids: [] };
-  return { ok: true, message: "success", dids: readDids(result.body) };
+  return { ok: true, message: "success", dids: readDids(result.body, limit) };
+}
+
+export async function findInventoryDid(country: string, region: string, ratecenter: string, did: string) {
+  const wanted = did.replace(/\D/g, "");
+  const normalized = wanted.length === 11 && wanted.startsWith("1") ? wanted.slice(1) : wanted;
+  if (!/^[2-9]\d{9}$/.test(normalized)) return null;
+  const centers = ratecenter ? [ratecenter, ""] : [""];
+  for (const center of centers) {
+    const result = await searchDids(country, region, center, 0);
+    const match = result.dids.find((item) => item.did.replace(/\D/g, "").replace(/^1(\d{10})$/, "$1") === normalized);
+    if (match) return { ...match, did: normalized };
+    if (!result.ok && center === "") return null;
+  }
+  return null;
 }
 
 export async function orderDid(did: string, routingOverride?: string) {
@@ -152,7 +171,8 @@ export async function pbxRequest(path: string, init: { method?: string; body?: u
       headers: {
         authorization: `Bearer ${token}`,
         accept: "application/json",
-        ...(init.body ? { "content-type": "application/json" } : {}),
+        "odata-version": "4.0",
+        ...(init.body ? { "content-type": "application/json", prefer: "return=representation" } : {}),
       },
       body: init.body ? JSON.stringify(init.body) : undefined,
       cache: "no-store",
@@ -160,16 +180,19 @@ export async function pbxRequest(path: string, init: { method?: string; body?: u
     });
     const body = await response.json().catch(() => null);
     const message = xapiMessage(body, `3CX answered ${response.status}.`);
-    return { ok: response.ok, status: response.status, body, message };
+    return { ok: response.ok, status: response.status, body, message, location: response.headers.get("location") || "" };
   } catch (error) {
     const message = error instanceof Error ? error.message : "3CX could not be reached.";
-    return { ok: false, status: 0, body: null, message };
+    return { ok: false, status: 0, body: null, message, location: "" };
   }
 }
 
 function xapiMessage(body: unknown, fallback: string) {
-  if (body && typeof body === "object" && "error" in body) {
-    const message = (body as { error?: { message?: string } }).error?.message;
+  if (body && typeof body === "object") {
+    const record = body as { error?: { message?: string }; message?: unknown };
+    const nested = record.error?.message;
+    const top = typeof record.message === "string" ? record.message : "";
+    const message = nested || top;
     if (message) return message.replace(/\s+/g, " ").slice(0, 400);
   }
   return fallback;

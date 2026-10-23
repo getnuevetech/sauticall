@@ -1,17 +1,24 @@
 export type ListedDid = { did: string; ratecenter: string; state: string; monthly: string };
 
-export function readDids(body: unknown): ListedDid[] {
+export function normalizeRequestedDid(raw: string) {
+  const digits = raw.replace(/\D/g, "");
+  const did = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  return /^[2-9]\d{9}$/.test(did) ? did : "";
+}
+
+export function readDids(body: unknown, limit = 20): ListedDid[] {
   if (!body || typeof body !== "object") return [];
   const dids = (body as { dids?: unknown }).dids;
   if (!Array.isArray(dids)) return [];
-  return dids.slice(0, 20).map((item) => {
-    if (typeof item === "string") return { did: item, ratecenter: "", state: "", monthly: "" };
-    const row = item as { did?: unknown; ratecenter?: unknown; state?: unknown; province?: unknown; monthly?: unknown };
+  const rows = dids.map((item) => {
+    if (typeof item === "string") return { did: normalizeRequestedDid(item), ratecenter: "", state: "", monthly: "" };
+    const row = item as { did?: unknown; ratecenter?: unknown; state?: unknown; province?: unknown; monthly?: unknown; perminute_monthly?: unknown };
     return {
-      did: String(row.did || ""),
+      did: normalizeRequestedDid(String(row.did || "")),
       ratecenter: String(row.ratecenter || ""),
       state: String(row.state || row.province || ""),
-      monthly: String(row.monthly || ""),
+      monthly: String(row.monthly || row.perminute_monthly || ""),
     };
   }).filter((item) => item.did);
+  return limit > 0 ? rows.slice(0, limit) : rows;
 }
