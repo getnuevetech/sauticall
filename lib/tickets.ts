@@ -155,6 +155,40 @@ function lastInboundId(ticketId: number) {
   return row?.message_id || "";
 }
 
+export function findCustomersByEmail(query: string) {
+  const needle = query.trim().toLowerCase().replace(/[%_]/g, "");
+  if (needle.length < 2) return [];
+  return getDb()
+    .prepare("SELECT id, name, email FROM users WHERE role = 'customer' AND disabled = 0 AND email LIKE ? ORDER BY email LIMIT 8")
+    .all(`%${needle}%`) as { id: number; name: string; email: string }[];
+}
+
+export async function createStaffTicket(
+  staff: { id: number; email: string; name: string; role: string },
+  input: { customerId: number; topicId: number; subject: string; body: string },
+) {
+  if (staff.role !== "super_admin" && !userCan(staff, "tickets.reply") && !userCan(staff, "tickets.view_all") && !userCan(staff, "tickets.manage")) {
+    return { ok: false as const, message: "You cannot create tickets." };
+  }
+  const customer = getDb().prepare("SELECT id, email, name, disabled FROM users WHERE id = ? AND role = 'customer'").get(input.customerId) as { id: number; email: string; name: string; disabled: number } | undefined;
+  if (!customer || customer.disabled) return { ok: false as const, message: "Choose a registered customer by email." };
+  const topic = getDb().prepare("SELECT id, group_id, name FROM ticket_topics WHERE id = ? AND enabled = 1").get(input.topicId) as { id: number; group_id: number; name: string } | undefined;
+  if (!topic) return { ok: false as const, message: "Choose what the ticket is about." };
+  const subject = input.subject.trim().slice(0, 160);
+  const body = input.body.trim().slice(0, 20000);
+  if (!subject || !body) return { ok: false as const, message: "Add a title and what happened." };
+  const now = new Date().toISOString();
+  const info = getDb()
+    .prepare("INSERT INTO tickets (user_id, requester_email, requester_name, topic_id, group_id, subject, status, priority, assignee_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'open', 'normal', NULL, ?, ?)")
+    .run(customer.id, customer.email, customer.name, topic.id, topic.group_id, subject, now, now);
+  const id = Number(info.lastInsertRowid);
+  addMessage({ ticketId: id, authorId: staff.id, email: staff.email, name: staff.name, body, kind: "public", source: "web" });
+  getDb().prepare("UPDATE tickets SET status = 'open', updated_at = ? WHERE id = ?").run(now, id);
+  const ticket = getDb().prepare("SELECT * FROM tickets WHERE id = ?").get(id) as TicketRow;
+  const notice = await deliver(ticket, `${staff.name} opened this ticket under ${topic.name}.\n\n${body}`, [customer.email]);
+  return { ok: true as const, id, message: notice };
+}
+
 export async function createCustomerTicket(user: { id: number; email: string; name: string }, input: { topicId: number; subject: string; body: string; priority: string }) {
   const topic = getDb().prepare("SELECT id, group_id, name FROM ticket_topics WHERE id = ? AND enabled = 1").get(input.topicId) as { id: number; group_id: number; name: string } | undefined;
   if (!topic) return { ok: false, message: "Choose a topic." };

@@ -8,7 +8,7 @@ import { hashPassword } from "@/lib/auth";
 import { audit, getDb } from "@/lib/db";
 import { slugify } from "@/lib/faq-markdown";
 import { parseMailPayload } from "@/lib/mail-parse";
-import { receiveMail, rotateInboundSecret, saveGroupMembers, saveMail, saveTicketGroup, saveTopic, setTicketFields, staffReply } from "@/lib/tickets";
+import { createStaffTicket, findCustomersByEmail, receiveMail, rotateInboundSecret, saveGroupMembers, saveMail, saveTicketGroup, saveTopic, setTicketFields, staffReply } from "@/lib/tickets";
 
 function back(path: string, error: string): never {
   redirect(`${path}?error=${encodeURIComponent(error)}`);
@@ -128,6 +128,24 @@ export async function saveCustomerUser(formData: FormData) {
   if (disabled) getDb().prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
   audit(actor.email, "customer.update", email);
   redirect(`${path}?saved=Saved.`);
+}
+
+export async function searchTicketCustomers(query: string) {
+  await requireAnyPermission(["tickets.reply", "tickets.view_all", "tickets.manage"]);
+  return findCustomersByEmail(query);
+}
+
+export async function createAdminTicket(formData: FormData) {
+  const user = await requireAnyPermission(["tickets.reply", "tickets.view_all", "tickets.manage"]);
+  const result = await createStaffTicket(user, {
+    customerId: Number(formData.get("customer_id") || 0),
+    topicId: Number(formData.get("topic_id") || 0),
+    subject: String(formData.get("subject") || ""),
+    body: String(formData.get("body") || ""),
+  });
+  if (!result.ok) back("/admin/tickets/new", result.message);
+  audit(user.email, "ticket.create", `SC-${result.id}`);
+  redirect(`/admin/tickets/${result.id}?saved=${encodeURIComponent(`Ticket SC-${result.id} created. ${result.message}`)}`);
 }
 
 export async function replyTicket(formData: FormData) {

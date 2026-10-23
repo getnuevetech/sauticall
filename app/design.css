@@ -136,6 +136,10 @@ body{background:#fff}
 .desk-chip.closed,.desk-chip.priority-low{background:#eef1f6;color:#5c6271}
 .check-list small{display:block;color:#64697a;font-weight:450}
 @media(max-width:900px){.desk{grid-template-columns:1fr}.desk-msg.staff{margin-left:0}}
+.email-picks{list-style:none;margin:6px 0 0;padding:0;border:1px solid #e1e7f2;border-radius:12px;overflow:hidden;background:#fff}
+.email-picks button{width:100%;text-align:left;background:#fff;border:0;border-bottom:1px solid #eef1f6;padding:8px 12px;color:#202b42}
+.email-picks li:last-child button{border-bottom:0}
+.email-picks button:hover{background:#f4f6fb}
 .check-list{display:grid;gap:8px;margin:8px 0 14px}
 .check-list label{display:flex;gap:10px;align-items:flex-start;color:#202b42}
 .check-list input{width:auto;margin-top:4px}

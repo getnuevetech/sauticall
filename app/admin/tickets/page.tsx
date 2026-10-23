@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireAnyPermission } from "@/lib/access";
+import { requireAnyPermission, userCan } from "@/lib/access";
 import { formatWhen } from "@/lib/format-when";
 import { getDb } from "@/lib/db";
 import { listStaffTickets, statusLabel } from "@/lib/tickets";
@@ -22,7 +22,10 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
   const groupFilter = Number(query.group || 0);
   const mine = query.mine === "1";
   const tickets = listStaffTickets(user);
+  const canCreate = userCan(user, "tickets.reply") || userCan(user, "tickets.view_all") || userCan(user, "tickets.manage");
   const groups = getDb().prepare("SELECT id, name FROM ticket_groups ORDER BY name").all() as { id: number; name: string }[];
+  const topics = getDb().prepare("SELECT id, name FROM ticket_topics").all() as { id: number; name: string }[];
+  const topicName = new Map(topics.map((topic) => [topic.id, topic.name]));
   const staff = getDb().prepare("SELECT id, name FROM users WHERE role IN ('staff', 'super_admin')").all() as { id: number; name: string }[];
   const groupName = new Map(groups.map((group) => [group.id, group.name]));
   const staffName = new Map(staff.map((person) => [person.id, person.name]));
@@ -55,6 +58,7 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
     <>
       <span className="eyebrow">Support</span>
       <h2>Ticket desk</h2>
+      {canCreate ? <p><Link className="btn btn-primary" href="/admin/tickets/new">New ticket</Link></p> : null}
       <p>Work the queue for your groups. Open a ticket to reply, leave an internal note, change priority, or move it to another team. Customers see public replies in their account, and email replies stay on the same ticket.</p>
       <nav className="desk-queues" aria-label="Ticket queues">
         {QUEUES.map(([key, label]) => (
@@ -77,13 +81,14 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
         <div className="desk-table-wrap">
           <table className="desk-table">
             <thead>
-              <tr><th>Ticket</th><th>Customer</th><th>Team</th><th>Assignee</th><th>Status</th><th>Priority</th><th>Updated</th></tr>
+              <tr><th>Ticket</th><th>Customer</th><th>Category</th><th>Team</th><th>Assignee</th><th>Status</th><th>Priority</th><th>Updated</th></tr>
             </thead>
             <tbody>
               {visible.map((ticket) => (
                 <tr key={ticket.id}>
                   <td><Link href={`/admin/tickets/${ticket.id}`}><b>SC-{ticket.id}</b> {ticket.subject}</Link></td>
                   <td>{ticket.requester_name}<span>{ticket.requester_email}</span></td>
+                  <td>{topicName.get(ticket.topic_id || 0) || "None"}</td>
                   <td>{groupName.get(ticket.group_id || 0) || "Unassigned"}</td>
                   <td>{staffName.get(ticket.assignee_id || 0) || "Unassigned"}</td>
                   <td><span className={`desk-chip ${ticket.status}`}>{statusLabel(ticket.status)}</span></td>
