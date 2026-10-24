@@ -34,28 +34,44 @@ function nextPage(body: unknown) {
   return link.replace(/^\//, "");
 }
 
-async function collectNumbers(start: string) {
+const PHONE_SYSTEM_PAGE = 100;
+
+function capTop(path: string) {
+  if (!/\$top=/i.test(path)) return path;
+  return path.replace(/(\$top=)\d+/gi, `$1${PHONE_SYSTEM_PAGE}`);
+}
+
+async function collectNumbers(collection: string) {
   const numbers: string[] = [];
-  let path = start;
-  for (let page = 0; page < 10 && path; page += 1) {
-    const result = await pbxRequest(path);
+  let seen = 0;
+  let path = `${collection}?$select=Number&$top=${PHONE_SYSTEM_PAGE}`;
+  for (let page = 0; page < 50 && path; page += 1) {
+    const result = await pbxRequest(capTop(path));
     if (!result.ok) return { ok: false as const, numbers, message: result.message };
-    for (const item of readList(result.body)) {
+    const batch = readList(result.body);
+    seen += batch.length;
+    for (const item of batch) {
       const number = String(item.Number ?? "").trim();
       if (number) numbers.push(number);
     }
-    path = nextPage(result.body);
+    const linked = nextPage(result.body);
+    if (linked) {
+      path = linked;
+      continue;
+    }
+    if (batch.length < PHONE_SYSTEM_PAGE) break;
+    path = `${collection}?$select=Number&$top=${PHONE_SYSTEM_PAGE}&$skip=${seen}`;
   }
   return { ok: true as const, numbers, message: "" };
 }
 
 export async function listPhoneSystemNumbers() {
-  const users = await collectNumbers("Users?$select=Number&$top=500");
+  const users = await collectNumbers("Users");
   if (!users.ok) return { ok: false, numbers: [] as string[], message: users.message || "The phone system could not be read, so a free extension was not assigned." };
   const numbers = [...users.numbers];
-  const groups = await collectNumbers("RingGroups?$select=Number&$top=500");
+  const groups = await collectNumbers("RingGroups");
   if (groups.ok) numbers.push(...groups.numbers);
-  const queues = await collectNumbers("Queues?$select=Number&$top=500");
+  const queues = await collectNumbers("Queues");
   if (queues.ok) numbers.push(...queues.numbers);
   return { ok: true, numbers, message: "" };
 }

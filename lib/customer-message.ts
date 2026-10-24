@@ -1,4 +1,4 @@
-const INTERNAL = /3cx|voip\.?\s*ms|\bxapi\b|\bodata\b|stripe|paypal|square|\bsip\b|api secret|api key|client secret|access token|system owner|invalid_credentials|not_configured|\bbearer\b|econn|fetch failed|https?:\/\/|\btrunk\b|the carrier returned|answered \d{3}|stack trace/i;
+const INTERNAL = /3cx|voip\.?\s*ms|\bxapi\b|\bodata\b|stripe|paypal|square|\bsip\b|api secret|api key|client secret|access token|system owner|invalid_credentials|not_configured|\bbearer\b|econn|fetch failed|https?:\/\/|\btrunk\b|the carrier returned|answered \d{3}|stack trace|query specified in the uri|top query|\$top/i;
 
 export function customerMessage(message: string, fallback: string) {
   const text = message.replace(/\s+/g, " ").trim();

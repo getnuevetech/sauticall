@@ -100,6 +100,10 @@ test("a customer never sees a partner or integration error", () => {
   assert.equal(customerMessage("VoIP.ms rejected the API login.", "The number list is not available right now."), "The number list is not available right now.");
   assert.equal(customerMessage("Stripe did not start checkout.", "Payment could not be started."), "Payment could not be started.");
   assert.equal(customerMessage("Choose a city from the list.", "Try again."), "Choose a city from the list.");
+  assert.equal(
+    customerMessage("The query specified in the URI is not valid. The limit of '100' for Top query has been exceeded. The value from the incoming request is '500'.", "We could not add this person yet. Please try again, or contact support."),
+    "We could not add this person yet. Please try again, or contact support.",
+  );
   assert.equal(customerRequestStatus("exception"), "Needs attention");
   assert.equal(customerRequestStatus("ordered"), "Bought");
 });
