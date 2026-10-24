@@ -1,23 +1,12 @@
 import crypto from "crypto";
 import { pbxRequest } from "./carriers";
 import { flagOn, getDb, readDoc } from "./db";
+import { chooseExtension, extensionRange } from "./extension-numbers";
 import { idFromPbx } from "./pbx-id";
 import { extensionCapacity, normalizePlan } from "./plan-features";
 import type { Plan } from "./types";
 
-export { extensionCapacity };
-
-export function extensionRange(userId: number) {
-  const from = 100 + (Math.max(userId, 1) - 1) * 10;
-  return { from, to: from + 9 };
-}
-
-export function nextExtension(from: number, to: number, used: string[]) {
-  for (let number = from; number <= to; number += 1) {
-    if (!used.includes(String(number))) return String(number);
-  }
-  return "";
-}
+export { extensionCapacity, chooseExtension, extensionRange };
 
 export function appPassword() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#";
@@ -30,9 +19,44 @@ type ExtensionRow = { id: number; user_id: number; number: string; first_name: s
 
 function readList(body: unknown) {
   if (body && typeof body === "object" && "value" in body && Array.isArray((body as { value?: unknown }).value)) {
-    return (body as { value: { Id?: number; EmailAddress?: string }[] }).value;
+    return (body as { value: { Id?: number; EmailAddress?: string; Number?: string | number }[] }).value;
   }
   return [];
+}
+
+function nextPage(body: unknown) {
+  if (!body || typeof body !== "object" || !("@odata.nextLink" in body)) return "";
+  const link = String((body as { "@odata.nextLink"?: unknown })["@odata.nextLink"] || "");
+  const marker = "/xapi/v1/";
+  const index = link.indexOf(marker);
+  if (index >= 0) return link.slice(index + marker.length);
+  return link.replace(/^\//, "");
+}
+
+async function collectNumbers(start: string) {
+  const numbers: string[] = [];
+  let path = start;
+  for (let page = 0; page < 10 && path; page += 1) {
+    const result = await pbxRequest(path);
+    if (!result.ok) return { ok: false as const, numbers, message: result.message };
+    for (const item of readList(result.body)) {
+      const number = String(item.Number ?? "").trim();
+      if (number) numbers.push(number);
+    }
+    path = nextPage(result.body);
+  }
+  return { ok: true as const, numbers, message: "" };
+}
+
+export async function listPhoneSystemNumbers() {
+  const users = await collectNumbers("Users?$select=Number&$top=500");
+  if (!users.ok) return { ok: false, numbers: [] as string[], message: users.message || "The phone system could not be read, so a free extension was not assigned." };
+  const numbers = [...users.numbers];
+  const groups = await collectNumbers("RingGroups?$select=Number&$top=500");
+  if (groups.ok) numbers.push(...groups.numbers);
+  const queues = await collectNumbers("Queues?$select=Number&$top=500");
+  if (queues.ok) numbers.push(...queues.numbers);
+  return { ok: true, numbers, message: "" };
 }
 
 export function paidPlan(userId: number) {
@@ -146,8 +170,9 @@ export async function provisionExtension(id: number) {
     let xapiId = idFromPbx(created.body, created.location);
     if (!created.ok && /ALREADY_IN_USE|already exists/i.test(created.message)) {
       const found = await pbxRequest(`Users?$filter=${encodeURIComponent(`Number eq '${row.number}'`)}&$select=Id,Number,EmailAddress`);
-      const match = readList(found.body).find((item) => !item.EmailAddress || item.EmailAddress.toLowerCase() === row.email.toLowerCase());
+      const match = readList(found.body).find((item) => item.EmailAddress && item.EmailAddress.toLowerCase() === row.email.toLowerCase());
       xapiId = idFromPbx(match);
+      if (!xapiId) throw new Error(`Extension ${row.number} is already used on the phone system.`);
     }
     if (!xapiId) throw new Error(created.message);
     const assigned = await pbxRequest(`Users(${xapiId})`, {

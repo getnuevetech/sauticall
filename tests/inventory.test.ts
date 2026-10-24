@@ -4,6 +4,7 @@ import { clientEmail, clientPlace, personName, readVoipClientId } from "../lib/c
 import { didMatches, parseDigitSearch } from "../lib/did-search.ts";
 import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
 import { numberPurchaseMode } from "../lib/number-order.ts";
+import { chooseExtension, extensionRange } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { pbxAccessMessage, roleFromToken } from "../lib/pbx-access.ts";
 import { readRateCenters, regionAllowed } from "../lib/places.ts";
@@ -67,6 +68,15 @@ test("a 403 from 3CX names the API role that was refused", () => {
   assert.equal(roleFromToken(`aa.${header}.zz`), "users");
   assert.match(pbxAccessMessage(403, "users", "Access denied."), /System Owner/);
   assert.match(pbxAccessMessage(403, "system_owners", ""), /console restrictions/);
+});
+
+test("extension numbers start at 2000 and skip numbers already taken", () => {
+  assert.deepEqual(extensionRange(1), { from: 2000, to: 2009 });
+  assert.deepEqual(extensionRange(3), { from: 2020, to: 2029 });
+  assert.equal(chooseExtension(1, ["2000"], [1]), "2001");
+  const ownBlock = Array.from({ length: 10 }, (_, index) => String(2000 + index));
+  assert.equal(chooseExtension(1, ownBlock, [1, 2]), "2020");
+  assert.equal(chooseExtension(1, [...ownBlock, "2020"], [1, 2, 3]), "2030");
 });
 
 test("a created 3CX user id can come from the Location header", () => {

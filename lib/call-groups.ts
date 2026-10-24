@@ -2,7 +2,7 @@ import { pbxRequest } from "./carriers";
 import { flagOn, getDb } from "./db";
 import { nextFreeNumber } from "./group-numbers";
 import { idFromPbx } from "./pbx-id";
-import { updateRouting } from "./pbx";
+import { listPhoneSystemNumbers, updateRouting } from "./pbx";
 
 export const RING_STRATEGIES = [
   ["ring_all", "Ring everyone at once"],
@@ -139,6 +139,14 @@ export async function createCallGroup(input: { userId: number; kind: "ring" | "q
     ...(database.prepare("SELECT number FROM pbx_extensions").all() as { number: string }[]),
     ...(database.prepare("SELECT number FROM call_groups").all() as { number: string }[]),
   ].map((row) => row.number);
+  if (flagOn("pbx.live_provision")) {
+    const listed = await listPhoneSystemNumbers();
+    if (!listed.ok) {
+      const detail = listed.message ? ` ${listed.message}` : "";
+      return { ok: false, message: `The phone system could not be read, so a free extension was not assigned.${detail}` };
+    }
+    used.push(...listed.numbers);
+  }
   const number = nextFreeNumber(used, input.kind === "queue" ? 900 : 800);
   if (!number) return { ok: false, message: "No free extension number is left for this group." };
   const info = database

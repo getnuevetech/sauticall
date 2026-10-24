@@ -25,6 +25,7 @@ export default async function AdminPhonePage({ searchParams }: { searchParams: P
       <span className="eyebrow">Phone system</span>
       <h2>Extensions, ring groups, and queues</h2>
       <p>Each customer gets a department on 3CX. Daytime calls go to the ring group or queue they chose, once that group is on the phone system. Otherwise they go to the first extension. After hours they go to voicemail. If 3CX does not accept the group, build it on the server with the number and people below, point the department office-hours route at it, and mark it done.</p>
+      <p>A new person gets the next free number in that customer’s block of 10, starting at 2000. Customer 1 is 2000–2009, customer 2 is 2010–2019, and so on. Numbers already on 3CX, and numbers already saved here, are skipped. People already saved keep their current numbers.</p>
       {params.error ? <p className="form-feedback">{params.error}</p> : null}
       <h3>Ring groups and call queues</h3>
       {groups.length === 0 ? <p>No groups yet.</p> : null}
