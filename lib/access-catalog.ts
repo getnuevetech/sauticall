@@ -23,7 +23,7 @@ export const PERMISSIONS: Permission[] = [
   { key: "settings.payments", group: "Integrations", label: "Payment APIs", description: "Add and check Stripe, PayPal, and Square." },
   { key: "settings.connections", group: "Integrations", label: "Phone connections", description: "Save VoIP.ms and 3CX credentials." },
   { key: "settings.flags", group: "Integrations", label: "Live switches", description: "Turn live ordering, provisioning, and other customer features on or off." },
-  { key: "settings.phone", group: "Phone", label: "Extensions and groups", description: "See extensions, ring groups, and call queues, and retry them on 3CX." },
+  { key: "settings.phone", group: "Phone", label: "Extensions and groups", description: "Choose where extension numbers start, and see extensions, ring groups, and call queues." },
   { key: "settings.lines", group: "Phone", label: "Lines and trunks", description: "See purchased numbers, trunks, emergency addresses, and call-minute limits." },
   { key: "users.customers", group: "Customers", label: "Customer accounts", description: "See customer accounts, reset passwords, and turn sign-in on or off." },
   { key: "inbox.messages", group: "Customers", label: "Contact messages", description: "Read contact and custom-plan messages." },

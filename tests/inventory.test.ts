@@ -4,7 +4,7 @@ import { clientEmail, clientPlace, personName, readVoipClientId } from "../lib/c
 import { didMatches, parseDigitSearch } from "../lib/did-search.ts";
 import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
 import { numberPurchaseMode } from "../lib/number-order.ts";
-import { chooseExtension, extensionRange } from "../lib/extension-numbers.ts";
+import { chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, normalizeExtensionPlan } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { pbxAccessMessage, roleFromToken } from "../lib/pbx-access.ts";
 import { readRateCenters, regionAllowed } from "../lib/places.ts";
@@ -77,6 +77,20 @@ test("extension numbers start at 2000 and skip numbers already taken", () => {
   const ownBlock = Array.from({ length: 10 }, (_, index) => String(2000 + index));
   assert.equal(chooseExtension(1, ownBlock, [1, 2]), "2020");
   assert.equal(chooseExtension(1, [...ownBlock, "2020"], [1, 2, 3]), "2030");
+});
+
+test("an admin extension plan replaces the built-in start and block", () => {
+  const plan = { start: 3000, block: 5, span: 100, ringStart: 800, queueStart: 900, groupSpan: 50 };
+  assert.deepEqual(extensionRange(1, plan), { from: 3000, to: 3004 });
+  assert.deepEqual(extensionRange(2, plan), { from: 3005, to: 3009 });
+  assert.equal(chooseExtension(1, ["3000", "3001", "3002", "3003", "3004"], [1, 2], plan), "3010");
+  assert.equal(extensionPlanError(plan), "");
+  assert.match(extensionPlanError({ ...plan, start: 800 }), /different starting numbers/);
+  assert.match(extensionPlanError({ ...plan, block: 0 }), /between 1 and 500/);
+  const saved = extensionPlanFromFields({ start: "4100", block: "20", span: "200", ringStart: "700", queueStart: "750", groupSpan: "40" });
+  assert.equal(saved.ok && saved.plan.start, 4100);
+  assert.equal(saved.ok && saved.plan.block, 20);
+  assert.equal(normalizeExtensionPlan({ start: "nope" }).start, 2000);
 });
 
 test("a created 3CX user id can come from the Location header", () => {

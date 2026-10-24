@@ -1,7 +1,7 @@
 import { getConnection, orderDid, pbxRequest } from "./carriers";
 import { flagOn, getDb } from "./db";
 import { enforceUser } from "./minutes";
-import { extensionRange } from "./pbx";
+import { extensionRange, readExtensionPlan } from "./pbx";
 import { ensureVoipClient, syncCustomerDids } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
 
@@ -20,7 +20,7 @@ function departmentName(userId: number) {
 
 function extensionFor(userId: number) {
   const row = getDb().prepare("SELECT number FROM pbx_extensions WHERE user_id = ? ORDER BY id LIMIT 1").get(userId) as { number: string } | undefined;
-  return row?.number || String(extensionRange(userId).from);
+  return row?.number || String(extensionRange(userId, readExtensionPlan()).from);
 }
 
 function hideSecret(message: string, secret: string) {

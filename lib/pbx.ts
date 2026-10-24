@@ -2,11 +2,12 @@ import crypto from "crypto";
 import { pbxRequest } from "./carriers";
 import { flagOn, getDb, readDoc } from "./db";
 import { chooseExtension, extensionRange } from "./extension-numbers";
+import { readExtensionPlan } from "./extension-plan";
 import { idFromPbx } from "./pbx-id";
 import { extensionCapacity, normalizePlan } from "./plan-features";
 import type { Plan } from "./types";
 
-export { extensionCapacity, chooseExtension, extensionRange };
+export { extensionCapacity, chooseExtension, extensionRange, readExtensionPlan };
 
 export function appPassword() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#";
@@ -70,7 +71,7 @@ export function paidPlan(userId: number) {
 async function ensureDepartment(userId: number) {
   const database = getDb();
   const existing = database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department | undefined;
-  const range = extensionRange(userId);
+  const range = extensionRange(userId, readExtensionPlan());
   const name = `SautiCall ${userId}`;
   if (existing?.xapi_id) return existing;
   const found = await pbxRequest(`Groups?$filter=${encodeURIComponent(`Name eq '${name}'`)}&$select=Id,Name`);

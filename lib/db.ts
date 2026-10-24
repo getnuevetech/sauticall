@@ -4,6 +4,7 @@ import Database from "better-sqlite3";
 import { hashPassword } from "./auth";
 import { upgradeContent } from "./content-upgrade";
 import { seedDesk } from "./desk-seed";
+import { defaultExtensionPlan } from "./extension-numbers";
 import { dataDir } from "./paths";
 import {
   defaultFaqs,
@@ -384,6 +385,7 @@ function seed(database: Database.Database) {
   put(database, "minute_bundles", defaultMinuteBundles);
   put(database, "faqs", defaultFaqs);
   put(database, "personas", defaultPersonas);
+  put(database, "extension_plan", defaultExtensionPlan);
   for (const [key, value] of Object.entries(defaultPages)) put(database, `page.${key}`, value);
   upgradeContent(database);
 

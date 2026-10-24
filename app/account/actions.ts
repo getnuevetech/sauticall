@@ -312,7 +312,7 @@ export async function savePort(formData: FormData) {
 export async function addPerson(formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
-  const { appPassword, chooseExtension, extensionCapacity, listPhoneSystemNumbers, paidPlan, provisionExtension } = await import("@/lib/pbx");
+  const { appPassword, chooseExtension, extensionCapacity, listPhoneSystemNumbers, paidPlan, provisionExtension, readExtensionPlan } = await import("@/lib/pbx");
   const plan = paidPlan(user.id);
   if (!plan) redirect("/account/phone?error=Pay%20for%20a%20plan%20before%20adding%20people.");
   const first = String(formData.get("first_name") || "").trim().slice(0, 40);
@@ -334,7 +334,7 @@ export async function addPerson(formData: FormData) {
     used.push(...listed.numbers);
   }
   const customers = getDb().prepare("SELECT id FROM users WHERE role = 'customer'").all() as { id: number }[];
-  const number = chooseExtension(user.id, used, customers.map((row) => row.id));
+  const number = chooseExtension(user.id, used, customers.map((row) => row.id), readExtensionPlan());
   if (!number) redirect("/account/phone?error=No%20free%20extension%20is%20left%20on%20the%20phone%20system.");
   const info = getDb()
     .prepare("INSERT INTO pbx_extensions (user_id, number, first_name, last_name, email, status, access_password, created_at) VALUES (?, ?, ?, ?, ?, 'waiting', ?, ?)")
