@@ -6,11 +6,11 @@ import { parseDigitSearch } from "@/lib/did-search";
 import { regionAllowed } from "@/lib/places";
 
 function inventoryMessage(status: string) {
-  if (status === "not_configured") return "VoIP.ms is not connected, so inventory cannot be searched.";
-  if (status === "invalid_credentials") return "VoIP.ms rejected the API login.";
-  if (status === "invalid_ratecenter" || status === "missing_ratecenter") return "That city is not in the carrier list. Choose another city.";
+  if (status === "invalid_ratecenter" || status === "missing_ratecenter") return "Choose another city.";
   if (status === "missing_state" || status === "invalid_state" || status === "invalid_province") return "Choose a state or province from the list.";
-  return status === "success" ? "" : `The carrier returned ${status}.`;
+  if (status === "success" || status.startsWith("no_")) return "";
+  console.error(`[sauticall] inventory ${status}`);
+  return "The number list is not available right now. Try again shortly.";
 }
 
 export async function GET(request: Request) {
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
     const result = pattern && pattern.ok ? await searchPatternDids(country, region, pattern.search) : await searchDids(country, region, ratecenter);
     return NextResponse.json({ available: true, dids: result.dids, message: result.ok ? "" : inventoryMessage(result.message) });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The carrier could not be reached.";
-    return NextResponse.json({ available: true, dids: [], message }, { status: 502 });
+    console.error(`[sauticall] inventory ${error instanceof Error ? error.message : "unreachable"}`);
+    return NextResponse.json({ available: true, dids: [], message: "The number list is not available right now. Try again shortly." }, { status: 502 });
   }
 }

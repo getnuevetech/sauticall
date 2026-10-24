@@ -5,6 +5,7 @@ import { guardAccount } from "@/lib/guard";
 import { flagOn, getDb } from "@/lib/db";
 import { paidPlan } from "@/lib/pbx";
 import { planAllows } from "@/lib/plan-features";
+import { customerMessage, customerRequestStatus } from "@/lib/customer-message";
 import { loadSite } from "@/lib/site";
 
 export default async function PortingPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
@@ -38,12 +39,13 @@ export default async function PortingPage({ searchParams }: { searchParams: Prom
           <div className="wrap">
             <AccountNav pathname="/account/porting" />
             {params.saved ? <p className="form-feedback">{text("portingSaved")}</p> : null}
-            {params.error ? <p className="form-feedback">{params.error}</p> : null}
+            {params.error ? <p className="form-feedback">{customerMessage(params.error, "Something went wrong. Please try again, or contact support.")}</p> : null}
             {!included ? <div className="contact-form"><p>Number transfer is not included on your plan.</p></div> : open ? <PortForm labels={labels} /> : <div className="contact-form"><p>{text("portingClosed")}</p></div>}
             <div style={{ marginTop: 28 }}>
               {rows.map((row) => {
                 const payload = JSON.parse(row.payload) as { numbers?: string };
-                return <p key={row.created_at}>{row.status} · {payload.numbers}{row.provider_ref ? ` · ${row.provider_ref}` : ""}{row.staff_note ? ` · ${row.staff_note}` : ""}</p>;
+                const reference = /^[A-Za-z0-9._:-]{1,40}$/.test(row.provider_ref) ? ` · Reference ${row.provider_ref}` : "";
+                return <p key={row.created_at}>{customerRequestStatus(row.status)} · {payload.numbers}{reference}</p>;
               })}
             </div>
           </div>

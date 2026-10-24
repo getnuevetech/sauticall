@@ -3,6 +3,7 @@ import { AccountHero, AccountNav } from "@/components/account/Portal";
 import { openTicket } from "../../desk-actions";
 import { guardAccount } from "@/lib/guard";
 import { getDb } from "@/lib/db";
+import { customerMessage } from "@/lib/customer-message";
 import { loadSite } from "@/lib/site";
 
 export default async function NewTicketPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
@@ -18,7 +19,7 @@ export default async function NewTicketPage({ searchParams }: { searchParams: Pr
         <section className="section">
           <div className="wrap">
             <AccountNav pathname="/account/tickets" />
-            {params.error ? <p className="form-feedback">{params.error}</p> : null}
+            {params.error ? <p className="form-feedback">{customerMessage(params.error, "The ticket could not be sent. Please try again, or contact support.")}</p> : null}
             {topics.length === 0 ? <p>{text("ticketsClosed")}</p> : (
               <form className="contact-form" action={openTicket}>
                 <label>{text("ticketsTopic")}

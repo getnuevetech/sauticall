@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { clientEmail, clientPlace, personName, readVoipClientId } from "../lib/client-profile.ts";
+import { customerMessage, customerRequestStatus } from "../lib/customer-message.ts";
 import { didMatches, parseDigitSearch } from "../lib/did-search.ts";
 import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
 import { numberPurchaseMode } from "../lib/number-order.ts";
@@ -91,6 +92,16 @@ test("an admin extension plan replaces the built-in start and block", () => {
   assert.equal(saved.ok && saved.plan.start, 4100);
   assert.equal(saved.ok && saved.plan.block, 20);
   assert.equal(normalizeExtensionPlan({ start: "nope" }).start, 2000);
+});
+
+test("a customer never sees a partner or integration error", () => {
+  const hidden = "3CX signed this client in as App, then refused the call. In 3CX Admin, open Integrations, then API.";
+  assert.equal(customerMessage(hidden, "We could not finish this yet. The team has the details."), "We could not finish this yet. The team has the details.");
+  assert.equal(customerMessage("VoIP.ms rejected the API login.", "The number list is not available right now."), "The number list is not available right now.");
+  assert.equal(customerMessage("Stripe did not start checkout.", "Payment could not be started."), "Payment could not be started.");
+  assert.equal(customerMessage("Choose a city from the list.", "Try again."), "Choose a city from the list.");
+  assert.equal(customerRequestStatus("exception"), "Needs attention");
+  assert.equal(customerRequestStatus("ordered"), "Bought");
 });
 
 test("a created 3CX user id can come from the Location header", () => {

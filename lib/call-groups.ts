@@ -142,8 +142,8 @@ export async function createCallGroup(input: { userId: number; kind: "ring" | "q
   if (flagOn("pbx.live_provision")) {
     const listed = await listPhoneSystemNumbers();
     if (!listed.ok) {
-      const detail = listed.message ? ` ${listed.message}` : "";
-      return { ok: false, message: `The phone system could not be read, so a free extension was not assigned.${detail}` };
+      console.error(`[sauticall] ${listed.message}`);
+      return { ok: false, message: "We could not save this group yet. Please try again, or contact support." };
     }
     used.push(...listed.numbers);
   }
@@ -188,7 +188,7 @@ export async function removeCallGroup(userId: number, groupId: number) {
   database.prepare("DELETE FROM call_group_tasks WHERE group_id = ?").run(groupId);
   database.prepare("DELETE FROM call_groups WHERE id = ?").run(groupId);
   if (group.answers) await updateRouting(userId);
-  return { ok: true, message: manual ? "Removed here. If you also built it on the 3CX server, remove it there too." : "Removed." };
+  return { ok: true, message: "Removed." };
 }
 
 export async function markGroupDone(groupId: number, note: string) {

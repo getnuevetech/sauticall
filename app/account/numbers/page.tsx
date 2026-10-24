@@ -10,13 +10,14 @@ import { planAllows } from "@/lib/plan-features";
 import { inventoryReady } from "@/lib/carriers";
 import { numberPurchaseMode } from "@/lib/number-order";
 import { formatAddress, getEmergency, unitTypes, type EmergencyAddress } from "@/lib/e911";
+import { customerMessage, customerRequestStatus } from "@/lib/customer-message";
 import { loadSite } from "@/lib/site";
 
 const E911: Record<string, string> = {
   missing: "Emergency address missing",
   saved: "Emergency address saved",
-  sent: "Emergency address sent to the phone company",
-  needs_person: "Emergency address needs a person",
+  sent: "Emergency address sent",
+  needs_person: "The emergency address needs another look. The team has the details.",
   done: "Emergency address marked done",
 };
 
@@ -43,7 +44,7 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
             {params.saved === "held" ? <p className="form-feedback">{text("numbersHeld")}</p> : null}
             {params.saved === "1" ? <p className="form-feedback">{text("numbersSaved")}</p> : null}
             {params.address ? <p className="form-feedback">{text("e911Saved")}</p> : null}
-            {params.error ? <p className="form-feedback">{params.error}</p> : null}
+            {params.error ? <p className="form-feedback">{customerMessage(params.error, "Something went wrong. Please try again, or contact support.")}</p> : null}
             <form action={saveEmergencyAddress} className="contact-form">
               <h3>{text("e911Title")}</h3>
               <p>{text("e911Body")}</p>
@@ -79,11 +80,11 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
             </form>
             {!included ? <div className="contact-form"><p>Business numbers are not included on your plan.</p></div> : open ? <NumberSearch live={flagOn("numbers.live_search") && inventoryReady()} automatic={purchase === "automatic"} copy={labels} /> : <div className="contact-form"><p>{text("numbersClosed")}</p></div>}
             <div className="faq-list" style={{ marginTop: 28 }}>
-              {lines.map((line) => <p key={line.did}>{line.did} · {E911[line.e911_status] || line.e911_status}{line.e911_message ? ` · ${line.e911_message}` : ""}</p>)}
+              {lines.map((line) => <p key={line.did}>{line.did} · {E911[line.e911_status] || "In progress"}</p>)}
               {rows.map((row) => {
                 const payload = JSON.parse(row.payload) as { did?: string; detail?: string; emergency?: EmergencyAddress };
                 const where = payload.emergency ? formatAddress(payload.emergency) : "No emergency address";
-                return <p key={row.id}>{row.status} · {payload.did || payload.detail} · {where}{row.staff_note ? ` · ${row.staff_note}` : ""}</p>;
+                return <p key={row.id}>{customerRequestStatus(row.status)} · {payload.did || payload.detail} · {where}</p>;
               })}
             </div>
           </div>

@@ -5,6 +5,7 @@ import { replyToTicket } from "../../desk-actions";
 import { guardAccount } from "@/lib/guard";
 import { formatWhen } from "@/lib/format-when";
 import { loadSite } from "@/lib/site";
+import { customerMessage } from "@/lib/customer-message";
 import { customerTicket, statusLabel } from "@/lib/tickets";
 
 export default async function AccountTicketPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; saved?: string }> }) {
@@ -22,8 +23,8 @@ export default async function AccountTicketPage({ params, searchParams }: { para
         <section className="section">
           <div className="wrap">
             <AccountNav pathname="/account/tickets" />
-            {query.error ? <p className="form-feedback">{query.error}</p> : null}
-            {query.saved ? <p className="form-feedback">{query.saved}</p> : null}
+            {query.error ? <p className="form-feedback">{customerMessage(query.error, "The reply could not be sent. Please try again, or contact support.")}</p> : null}
+            {query.saved ? <p className="form-feedback">{customerMessage(query.saved, "Saved.")}</p> : null}
             <div className="ticket-thread">
               {found.messages.map((message) => (
                 <article key={message.id}>

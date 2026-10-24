@@ -10,6 +10,7 @@ import {
   totpMatches,
   verifyPassword,
 } from "@/lib/auth";
+import { safeCustomerError } from "@/lib/customer-message";
 import { audit, flagOn, getDb } from "@/lib/db";
 
 type UserRow = {
@@ -120,7 +121,7 @@ export async function startCheckout(formData: FormData) {
   const gateway = getDb().prepare("SELECT id, currencies, secret FROM gateways WHERE id = ? AND enabled = 1").get(gatewayId) as { id: number; currencies: string; secret: string } | undefined;
   if (!gateway) return { error: "That way to pay is not available." };
   const { readGatewaySecret } = await import("@/lib/payment-keys");
-  if (!readGatewaySecret(gateway.secret).key) return { error: "That way to pay is missing its API secret." };
+  if (!readGatewaySecret(gateway.secret).key) return { error: "That way to pay is not ready yet." };
   const amount = Math.round(plan.price * 100);
   const minutes = Math.max(0, Math.round(Number(plan.includedMinutes) || 0));
   const currency = (gateway.currencies || "USD").split(",")[0].trim().toUpperCase() || "USD";
@@ -131,7 +132,7 @@ export async function startCheckout(formData: FormData) {
   audit(user.email, "billing.checkout", `${gateway.id}:${plan.name}`);
   const { beginCheckout, requestOrigin } = await import("@/lib/payments");
   const started = await beginCheckout(attemptId, await requestOrigin());
-  if (!started.ok) redirect(`/pay/${attemptId}?error=${encodeURIComponent(started.message)}`);
+  if (!started.ok) redirect(`/pay/${attemptId}?error=${encodeURIComponent(safeCustomerError(started.message, "Payment could not be started. Please try again, or contact support."))}`);
   redirect(started.url);
 }
 
@@ -147,7 +148,7 @@ export async function startBundleCheckout(formData: FormData) {
   const gateway = getDb().prepare("SELECT id, currencies, secret FROM gateways WHERE id = ? AND enabled = 1").get(gatewayId) as { id: number; currencies: string; secret: string } | undefined;
   if (!gateway) redirect("/account/minutes?error=That%20way%20to%20pay%20is%20not%20available.");
   const { readGatewaySecret } = await import("@/lib/payment-keys");
-  if (!readGatewaySecret(gateway.secret).key) redirect("/account/minutes?error=That%20way%20to%20pay%20is%20missing%20its%20API%20secret.");
+  if (!readGatewaySecret(gateway.secret).key) redirect("/account/minutes?error=That%20way%20to%20pay%20is%20not%20ready%20yet.");
   const currency = (gateway.currencies || "USD").split(",")[0].trim().toUpperCase() || "USD";
   const info = getDb()
     .prepare("INSERT INTO payment_attempts (user_id, gateway_id, amount_cents, currency, description, status, plan_name, product_kind, product_minutes, bundle_name, created_at) VALUES (?, ?, ?, ?, ?, 'pending', '', 'bundle', ?, ?, ?)")
@@ -155,7 +156,7 @@ export async function startBundleCheckout(formData: FormData) {
   audit(user.email, "billing.bundle", bundle.name);
   const { beginCheckout, requestOrigin } = await import("@/lib/payments");
   const started = await beginCheckout(Number(info.lastInsertRowid), await requestOrigin());
-  if (!started.ok) redirect(`/pay/${info.lastInsertRowid}?error=${encodeURIComponent(started.message)}`);
+  if (!started.ok) redirect(`/pay/${info.lastInsertRowid}?error=${encodeURIComponent(safeCustomerError(started.message, "Payment could not be started. Please try again, or contact support."))}`);
   redirect(started.url);
 }
 
@@ -165,7 +166,7 @@ export async function refreshMinutes() {
   const { syncUserMinutes } = await import("@/lib/minutes");
   const result = await syncUserMinutes(user.id);
   audit(user.email, "minutes.sync", result.ok ? "ok" : "failed");
-  if (!result.ok) redirect(`/account/minutes?error=${encodeURIComponent(result.message)}`);
+  if (!result.ok) redirect(`/account/minutes?error=${encodeURIComponent(safeCustomerError(result.message, "Call minutes could not be updated. Please try again, or contact support."))}`);
   redirect("/account/minutes?saved=1");
 }
 
@@ -190,7 +191,7 @@ export async function saveNumber(formData: FormData) {
   if (!/^[A-Z]{2}$/.test(region) || !regionAllowed(country, region)) redirect("/account/numbers?error=Choose%20a%20state%20or%20province%20from%20the%20list.");
   const { findInventoryDid, listedCity } = await import("@/lib/carriers");
   const city = await listedCity(country, region, ratecenter);
-  if (!city.ok) redirect(`/account/numbers?error=${encodeURIComponent(city.message)}`);
+  if (!city.ok) redirect(`/account/numbers?error=${encodeURIComponent(safeCustomerError(city.message, "The city list is not available right now. Try again shortly."))}`);
   const match = await findInventoryDid(country, region, city.city, did);
   if (!match) redirect("/account/numbers?error=That%20number%20is%20not%20in%20the%20current%20inventory.%20Search%20again%20and%20choose%20a%20listed%20number.");
   const payload = { did: match.did, country, region: (match.state || region).toUpperCase(), ratecenter: (match.ratecenter || city.city).toUpperCase(), emergency };
@@ -208,7 +209,7 @@ export async function saveNumber(formData: FormData) {
   const status = result.ok ? "ordered" : "exception";
   getDb().prepare("UPDATE account_requests SET status = ?, staff_note = ? WHERE id = ?").run(status, result.message, requestId);
   audit(user.email, "request.order", `${requestId}:${status}`);
-  if (!result.ok) redirect(`/account/numbers?error=${encodeURIComponent(result.message)}`);
+  if (!result.ok) redirect(`/account/numbers?error=${encodeURIComponent(safeCustomerError(result.message, "We could not buy that number. Please try again, or contact support."))}`);
   redirect("/account/numbers?saved=ordered");
 }
 
@@ -231,14 +232,14 @@ export async function saveEmergencyAddress(formData: FormData) {
   if (!parsed.ok) redirect(`/account/numbers?error=${encodeURIComponent(parsed.message)}`);
   const { listedCity } = await import("@/lib/carriers");
   const city = await listedCity(parsed.address.country, parsed.address.state, parsed.address.city);
-  if (!city.ok) redirect(`/account/numbers?error=${encodeURIComponent(city.message)}`);
+  if (!city.ok) redirect(`/account/numbers?error=${encodeURIComponent(safeCustomerError(city.message, "The city list is not available right now. Try again shortly."))}`);
   parsed.address.city = city.city;
   saveEmergency(user.id, parsed.address);
   const { ensureVoipClient } = await import("@/lib/voip-client");
   await ensureVoipClient(user.id, true);
   const result = await syncEmergency(user.id);
   audit(user.email, "e911.save", result.ok ? "ok" : "needs-person");
-  if (!result.ok) redirect(`/account/numbers?error=${encodeURIComponent(result.message)}`);
+  if (!result.ok) redirect(`/account/numbers?error=${encodeURIComponent(safeCustomerError(result.message, "The emergency address was saved. The team will finish sending it."))}`);
   redirect("/account/numbers?address=1");
 }
 
@@ -300,6 +301,7 @@ export async function savePort(formData: FormData) {
     } else {
       status = "exception";
       note = result.message;
+      console.error(`[sauticall] ${result.message}`);
     }
   }
   getDb()
@@ -328,8 +330,8 @@ export async function addPerson(formData: FormData) {
   if (flagOn("pbx.live_provision")) {
     const listed = await listPhoneSystemNumbers();
     if (!listed.ok) {
-      const detail = listed.message ? ` ${listed.message}` : "";
-      redirect(`/account/phone?error=${encodeURIComponent(`The phone system could not be read, so a free extension was not assigned.${detail}`)}`);
+      audit(user.email, "pbx.extension.list", listed.message.slice(0, 400));
+      redirect(`/account/phone?error=${encodeURIComponent(safeCustomerError(listed.message, "We could not add this person yet. Please try again, or contact support."))}`);
     }
     used.push(...listed.numbers);
   }
@@ -342,7 +344,7 @@ export async function addPerson(formData: FormData) {
   audit(user.email, "pbx.person", number);
   if (flagOn("pbx.live_provision")) {
     const result = await provisionExtension(Number(info.lastInsertRowid));
-    if (!result.ok) redirect(`/account/phone?error=${encodeURIComponent(result.message)}`);
+    if (!result.ok) redirect(`/account/phone?error=${encodeURIComponent(safeCustomerError(result.message, "We could not add this person yet. Please try again, or contact support."))}`);
   }
   redirect("/account/phone?saved=1");
 }
@@ -364,6 +366,6 @@ export async function savePhoneHours(formData: FormData) {
   const { updateRouting } = await import("@/lib/pbx");
   const result = await updateRouting(user.id);
   audit(user.email, "pbx.hours", `${open}-${close}`);
-  if (!result.ok) redirect(`/account/phone?error=${encodeURIComponent(result.message)}`);
+  if (!result.ok) redirect(`/account/phone?error=${encodeURIComponent(safeCustomerError(result.message, "Hours were saved. Call routing still needs attention."))}`);
   redirect("/account/phone?saved=1");
 }

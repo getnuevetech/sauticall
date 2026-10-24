@@ -4,6 +4,7 @@ import { refreshMinutes, startBundleCheckout } from "../actions";
 import { guardAccount } from "@/lib/guard";
 import { flagOn, getDb, readDoc } from "@/lib/db";
 import { minuteBalance } from "@/lib/minutes";
+import { customerMessage } from "@/lib/customer-message";
 import { loadSite } from "@/lib/site";
 import { readGatewaySecret } from "@/lib/payment-keys";
 
@@ -24,7 +25,7 @@ export default async function MinutesPage({ searchParams }: { searchParams: Prom
         <section className="section">
           <div className="wrap" style={{ maxWidth: 760 }}>
             <AccountNav pathname="/account/minutes" />
-            {params.error ? <p className="form-feedback">{params.error}</p> : null}
+            {params.error ? <p className="form-feedback">{customerMessage(params.error, "Call minutes could not be updated. Please try again, or contact support.")}</p> : null}
             {params.saved ? <p>Minutes updated from the phone company.</p> : null}
             <div className="features-grid" style={{ marginBottom: 24 }}>
               <article className="feature-card"><h3>{text("minutesPlan")}</h3><p>{balance.planMinutesLeft}</p></article>

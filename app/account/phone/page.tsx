@@ -7,9 +7,16 @@ import { QUEUE_STRATEGIES, RING_STRATEGIES, groupMembers, strategyLabel, type Ca
 import { getDb } from "@/lib/db";
 import { extensionCapacity, paidPlan } from "@/lib/pbx";
 import { planAllows } from "@/lib/plan-features";
+import { customerMessage } from "@/lib/customer-message";
 import { loadSite } from "@/lib/site";
 
 type Extension = { id: number; number: string; first_name: string; last_name: string; email: string; status: string; access_password: string; last_message: string };
+
+function setupStatus(status: string) {
+  if (status === "created" || status === "manual") return "Ready";
+  if (status === "failed") return "We could not finish this yet. The team has the details.";
+  return "Waiting to be set up.";
+}
 
 function PeopleFields({ rows, label }: { rows: Extension[]; label: string }) {
   return (
@@ -42,8 +49,8 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
         <section className="section">
           <div className="wrap">
             <AccountNav pathname="/account/phone" />
-            {saved ? <p className="form-feedback">{saved}{params.note ? ` ${params.note}` : ""}</p> : null}
-            {params.error ? <p className="form-feedback">{params.error}</p> : null}
+            {saved ? <p className="form-feedback">{saved}{params.note ? ` ${customerMessage(params.note, "")}` : ""}</p> : null}
+            {params.error ? <p className="form-feedback">{customerMessage(params.error, "Something went wrong. Please try again, or contact support.")}</p> : null}
             {!plan ? <div className="contact-form"><p>{text("phoneClosed")}</p></div> : (
               <>
                 <p>{plan.name} includes {limit} {limit === 1 ? "person" : "people"}. {rows.length} added.</p>
@@ -67,7 +74,7 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
                     <label>{text("phoneClose")} <input name="close_time" type="time" defaultValue={hours?.close_time || "17:00"} required /></label>
                   </div>
                   <button className="btn btn-secondary" type="submit">{text("phoneRoute")}</button>
-                  {hours?.last_message ? <p>{hours.last_message}</p> : null}
+                  {hours?.last_message && customerMessage(hours.last_message, "") ? <p>{customerMessage(hours.last_message, "")}</p> : null}
                 </form> : null}
                 {rows.length ? (
                   <>
@@ -105,8 +112,8 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
                 <article key={row.id} className="feature-card" style={{ marginBottom: 12 }}>
                   <h3>Extension {row.number} · {row.first_name} {row.last_name}</h3>
                   <p>{row.email}</p>
-                  <p>{row.status === "created" ? "On the phone system" : row.status === "failed" ? "Needs attention" : "Waiting"}{row.last_message ? ` · ${row.last_message}` : ""}</p>
-                  {row.status === "created" ? <p>3CX app password: {row.access_password}</p> : null}
+                  <p>{setupStatus(row.status)}</p>
+                  {row.status === "created" ? <p>App password: {row.access_password}</p> : null}
                 </article>
               ))}
               {groups.length === 0 && plan ? <p>{text("phoneGroupEmpty")}</p> : null}
@@ -116,7 +123,7 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
                   <article key={group.id} className="feature-card" style={{ marginBottom: 12 }}>
                     <h3>{group.kind === "queue" ? text("phoneQueue") : text("phoneRing")} {group.number} · {group.name}</h3>
                     <p>{strategyLabel(group.kind, group.strategy)} · {people.map((person) => person.first_name).join(", ") || "No people"}</p>
-                    <p>{group.answers ? "Daytime destination" : "Not the daytime destination"} · {group.status === "created" ? "On the phone system" : group.status === "manual" ? "Finished on the server" : group.status === "failed" ? "Needs attention" : "Waiting"}{group.last_message ? ` · ${group.last_message}` : ""}</p>
+                    <p>{group.answers ? "Daytime destination" : "Not the daytime destination"} · {setupStatus(group.status)}</p>
                     <div className="cta-pair">
                       {group.answers ? (
                         <form action={chooseDaytimeGroup}><input type="hidden" name="group_id" value="0" /><button className="btn btn-secondary" type="submit">{text("phoneAnswerClear")}</button></form>

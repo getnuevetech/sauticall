@@ -91,12 +91,8 @@ export async function listRateCenters(country: string, region: string) {
 export async function listedCity(country: string, region: string, city: string) {
   const listed = await listRateCenters(country, region);
   if (!listed.ok) {
-    const message = listed.message === "not_configured"
-      ? "VoIP.ms is not connected, so the city list cannot be loaded."
-      : listed.message === "invalid_credentials"
-        ? "VoIP.ms rejected the API login."
-        : `The carrier returned ${listed.message}.`;
-    return { ok: false as const, message, city: "" };
+    console.error(`[sauticall] cities ${listed.message}`);
+    return { ok: false as const, message: "The city list is not available right now. Try again shortly.", city: "" };
   }
   const match = listed.places.find((place) => place.toUpperCase() === city.trim().toUpperCase());
   if (!match) return { ok: false as const, message: "Choose a city from the list.", city: "" };

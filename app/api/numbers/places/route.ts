@@ -4,10 +4,10 @@ import { listRateCenters } from "@/lib/carriers";
 import { regionAllowed } from "@/lib/places";
 
 function placesMessage(status: string) {
-  if (status === "not_configured") return "VoIP.ms is not connected, so the city list cannot be loaded.";
-  if (status === "invalid_credentials") return "VoIP.ms rejected the API login.";
   if (status === "invalid_state" || status === "invalid_province" || status === "missing_state") return "Choose a state or province from the list.";
-  return status === "success" ? "" : `The carrier returned ${status}.`;
+  if (status === "success") return "";
+  console.error(`[sauticall] cities ${status}`);
+  return "The city list is not available right now. Try again shortly.";
 }
 
 export async function GET(request: Request) {
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     const result = await listRateCenters(country, region);
     return NextResponse.json({ places: result.places, message: result.ok ? "" : placesMessage(result.message) });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The carrier could not be reached.";
-    return NextResponse.json({ places: [], message }, { status: 502 });
+    console.error(`[sauticall] cities ${error instanceof Error ? error.message : "unreachable"}`);
+    return NextResponse.json({ places: [], message: "The city list is not available right now. Try again shortly." }, { status: 502 });
   }
 }

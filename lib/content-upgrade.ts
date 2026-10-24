@@ -239,7 +239,11 @@ export function upgradeContent(database: Database.Database) {
       "Search available business numbers when live search is on. Add the address where emergency services should find you. It is sent to the phone company when the number is bought.":
         "Search the phone company inventory and request one of the numbers listed. Add the address where emergency services should find you. It is sent to the phone company when the number is bought.",
       "Live inventory search is off. Describe the number you want and the team will handle it.":
-        "Number inventory search is not available until VoIP.ms is connected.",
+        "Number search is not available right now.",
+      "Number inventory search is not available until VoIP.ms is connected.":
+        "Number search is not available right now.",
+      "Email for the 3CX apps":
+        "Email for the phone apps",
     };
     let changed = false;
     for (const [from, to] of Object.entries(replacements)) {
@@ -319,4 +323,70 @@ export function upgradeContent(database: Database.Database) {
     faqExplore.links.push({ label: "FAQ", href: "/faq" });
     writeJson(database, "footer", withFaq);
   }
+
+  for (const key of ["page.home", "page.solutions", "page.ai", "page.how", "page.about", "page.pricing", "page.contact", "page.custom", "page.account", "services", "faqs"]) {
+    const current = readJson<unknown>(database, key);
+    if (!current) continue;
+    const cleaned = scrubCustomerValue(current);
+    if (cleaned.changed) writeJson(database, key, cleaned.value);
+  }
+  const faqCols = new Set((database.prepare("PRAGMA table_info(faq_posts)").all() as { name: string }[]).map((column) => column.name));
+  if (faqCols.has("body")) {
+    const posts = database.prepare("SELECT id, title, excerpt, body FROM faq_posts").all() as { id: number; title: string; excerpt: string; body: string }[];
+    for (const post of posts) {
+      const title = cleanCustomerString(post.title);
+      const excerpt = cleanCustomerString(post.excerpt);
+      const body = cleanCustomerString(post.body);
+      if (title !== post.title || excerpt !== post.excerpt || body !== post.body) {
+        database.prepare("UPDATE faq_posts SET title = ?, excerpt = ?, body = ? WHERE id = ?").run(title, excerpt, body, post.id);
+      }
+    }
+  }
+}
+
+function cleanCustomerString(text: string) {
+  const known: Record<string, string> = {
+    "Connect supported office IP phones, or call from the familiar 3CX desktop, browser, and mobile apps. Mix devices to fit your team.": "Connect supported office IP phones, or call from desktop, browser, and mobile apps. Mix devices to fit your team.",
+    "Employees can use compatible IP desk phones in the office or 3CX apps on their computers and smartphones. Calls stay associated with your business phone setup, not a personal device number.": "Employees can use compatible IP desk phones in the office or phone apps on their computers and smartphones. Calls stay associated with your business phone setup, not a personal device number.",
+    "Search and request available VoIP.ms numbers. SautiCall connects the acquired number to the appropriate inbound and outbound 3CX trunk configuration after validating capacity and authorization.": "Search for an available business number. SautiCall connects it for inbound and outbound calls after the request is approved.",
+    "Start a transfer in your dashboard, upload your authorization and carrier details, and follow every state. VoIP.ms is the primary porting route when its API supports the case, with staff intervention for exceptions.": "Start a transfer in your account, add the details from your current phone bill, and follow each step. The team steps in when a transfer needs a person.",
+    "AI handling is configured from your SautiCall account, within supported 3CX capabilities and approved access permissions.": "AI handling is configured from your SautiCall account, with the permissions an administrator has approved.",
+    "Supported 3CX users, departments, extensions, and route configuration via APIs.": "People, departments, extensions, and call routing are set up for you.",
+    "DID requests and number ports progress through defined statuses in your account.": "Number requests and transfers move through clear statuses in your account.",
+    "The proposed service combines SautiCall software with a SautiCall-managed 3CX cloud environment and VoIP.ms number acquisition and porting workflows. These providers remain infrastructure—not separate products customers have to manage.": "SautiCall brings calling, business numbers, and number transfers into one account. You do not manage the providers behind it.",
+    "3CX-based calling, supported devices, extensions and call routing.": "Calling, supported devices, extensions, and call routing.",
+    "New numbers and port requests via VoIP.ms, with tracked manual exceptions.": "New numbers and number transfers, with a person available when a request needs one.",
+    "Number inventory search is not available until VoIP.ms is connected.": "Number search is not available right now.",
+    "Email for the 3CX apps": "Email for the phone apps",
+  };
+  if (known[text]) return known[text];
+  if (!/3CX|VoIP\.ms/.test(text)) return text;
+  return text.replace(/3CX apps/g, "phone apps").replace(/VoIP\.ms/g, "the phone company").replace(/3CX/g, "the phone system");
+}
+
+function scrubCustomerValue(value: unknown): { value: unknown; changed: boolean } {
+  if (typeof value === "string") {
+    const next = cleanCustomerString(value);
+    return { value: next, changed: next !== value };
+  }
+  if (Array.isArray(value)) {
+    let changed = false;
+    const next = value.map((item) => {
+      const result = scrubCustomerValue(item);
+      changed = changed || result.changed;
+      return result.value;
+    });
+    return { value: next, changed };
+  }
+  if (value && typeof value === "object") {
+    let changed = false;
+    const next: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      const result = scrubCustomerValue(item);
+      next[key] = result.value;
+      changed = changed || result.changed;
+    }
+    return { value: next, changed };
+  }
+  return { value, changed: false };
 }

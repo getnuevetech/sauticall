@@ -1,4 +1,5 @@
 import { callVoipms } from "./carriers";
+import { customerMessage } from "./customer-message";
 import { flagOn, getDb } from "./db";
 import { regionAllowed } from "./places";
 
@@ -155,16 +156,18 @@ export async function sendEmergency(lineId: number) {
   const did = didForCarrier(line.did);
   const checked = await callVoipms("e911Validate", carrierParams(address, did, false));
   if (!checked.ok) {
-    const message = plainStatus(checked.status);
-    getDb().prepare("UPDATE phone_lines SET e911_status = 'needs_person', e911_message = ? WHERE id = ?").run(message, line.id);
-    return { ok: false, message };
+    const detail = plainStatus(checked.status);
+    console.error(`[sauticall] e911 ${detail}`);
+    getDb().prepare("UPDATE phone_lines SET e911_status = 'needs_person', e911_message = ? WHERE id = ?").run(detail, line.id);
+    return { ok: false, message: customerMessage(detail, "The emergency address was saved. The team will finish sending it.") };
   }
   const update = line.e911_status === "sent" || line.e911_status === "done";
   let result = await callVoipms(update ? "e911Update" : "e911Provision", carrierParams(address, did, update));
   if (!result.ok && update) result = await callVoipms("e911Provision", carrierParams(address, did, false));
-  const message = result.ok ? "Emergency address sent to the phone company." : plainStatus(result.status);
-  getDb().prepare("UPDATE phone_lines SET e911_status = ?, e911_message = ? WHERE id = ?").run(result.ok ? "sent" : "needs_person", message, line.id);
-  return { ok: result.ok, message };
+  const detail = result.ok ? "Emergency address sent to the phone company." : plainStatus(result.status);
+  if (!result.ok) console.error(`[sauticall] e911 ${detail}`);
+  getDb().prepare("UPDATE phone_lines SET e911_status = ?, e911_message = ? WHERE id = ?").run(result.ok ? "sent" : "needs_person", detail, line.id);
+  return { ok: result.ok, message: result.ok ? detail : customerMessage(detail, "The emergency address was saved. The team will finish sending it.") };
 }
 
 export async function syncEmergency(userId: number) {

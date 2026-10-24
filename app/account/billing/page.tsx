@@ -4,6 +4,7 @@ import { AuthForm } from "@/components/account/AuthForm";
 import { startCheckout } from "../actions";
 import { guardAccount } from "@/lib/guard";
 import { flagOn, getDb, readDoc } from "@/lib/db";
+import { customerMessage } from "@/lib/customer-message";
 import { loadSite } from "@/lib/site";
 import { readGatewaySecret } from "@/lib/payment-keys";
 import { featureLabels, normalizePlan } from "@/lib/plan-features";
@@ -25,9 +26,9 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         <section className="section">
           <div className="wrap" style={{ maxWidth: 760 }}>
             <AccountNav pathname="/account/billing" />
-            {params.error ? <p className="form-feedback">{params.error}</p> : null}
+            {params.error ? <p className="form-feedback">{customerMessage(params.error, "Payment could not be started. Please try again, or contact support.")}</p> : null}
             {!open ? <div className="contact-form"><p>{text("billingClosed")}</p></div> : null}
-            {open && ready.length === 0 ? <div className="contact-form"><p>{gateways.length ? "A way to pay is turned on, but its API secret is not saved yet." : text("billingEmpty")}</p></div> : null}
+            {open && ready.length === 0 ? <div className="contact-form"><p>{gateways.length ? "A way to pay is turned on, but it is not ready yet." : text("billingEmpty")}</p></div> : null}
             <div className="faq-list">
               {plans.map((raw) => {
                 const plan = normalizePlan(raw);

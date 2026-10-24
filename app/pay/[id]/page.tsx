@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { Frame } from "@/components/site/Frame";
 import { currentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { customerMessage } from "@/lib/customer-message";
 import { confirmReturn } from "@/lib/payments";
 
 export default async function PayPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ session_id?: string; token?: string; orderId?: string; cancelled?: string; error?: string }> }) {
@@ -31,7 +32,7 @@ export default async function PayPage({ params, searchParams }: { params: Promis
         <section className="section">
           <div className="wrap" style={{ maxWidth: 720 }}>
             <div className="contact-form">
-              {query.error ? <p className="form-feedback">{query.error}</p> : null}
+              {query.error ? <p className="form-feedback">{customerMessage(query.error, "Payment could not be started. Please try again, or contact support.")}</p> : null}
               <p>Status: {attempt.status === "paid" ? "Paid" : attempt.status === "cancelled" ? "Cancelled" : attempt.status === "failed" ? "Could not start" : "Waiting for payment"}</p>
               {attempt.status === "pending" && attempt.checkout_url ? <a className="btn btn-primary" href={attempt.checkout_url}>Continue to payment</a> : null}
               {attempt.status === "paid" ? <p>Payment received. This charge will not be taken again.{attempt.product_minutes > 0 ? ` ${attempt.product_minutes} outbound minutes are on the account.` : ""}</p> : null}
