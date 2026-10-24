@@ -1,6 +1,7 @@
 import { getDb } from "./db";
 import { carrierSearchType, didMatches, type DigitSearch } from "./did-search";
 import { readDids, type ListedDid } from "./did-list";
+import { pbxAccessMessage, roleFromToken } from "./pbx-access";
 import { readRateCenters } from "./places";
 
 export type PublicConfig = Record<string, string>;
@@ -223,7 +224,8 @@ export async function pbxRequest(path: string, init: { method?: string; body?: u
       signal: AbortSignal.timeout(20000),
     });
     const body = await response.json().catch(() => null);
-    const message = xapiMessage(body, `3CX answered ${response.status}.`);
+    const detail = xapiMessage(body, "");
+    const message = response.ok ? detail || "ok" : pbxAccessMessage(response.status, roleFromToken(token), detail);
     return { ok: response.ok, status: response.status, body, message, location: response.headers.get("location") || "" };
   } catch (error) {
     const message = error instanceof Error ? error.message : "3CX could not be reached.";
@@ -251,8 +253,12 @@ export async function test3cx() {
       signal: AbortSignal.timeout(20000),
     });
     const version = defs.headers.get("x-3cx-version") || "";
-    if (!defs.ok) throw new Error(`3CX answered ${defs.status}.`);
-    const message = `Connected${version ? `. Version ${version}` : ""}.`;
+    if (!defs.ok) {
+      const body = await defs.json().catch(() => null);
+      throw new Error(pbxAccessMessage(defs.status, roleFromToken(token), xapiMessage(body, "")));
+    }
+    const role = roleFromToken(token);
+    const message = `Connected${version ? `. Version ${version}` : ""}${role ? `. Role ${role.replace(/_/g, " ")}` : ""}.`;
     recordCheck("3cx", true, message);
     return { ok: true, message };
   } catch (error) {

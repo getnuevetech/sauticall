@@ -71,7 +71,7 @@ function PbxForm() {
   return (
     <form className="contact-form" action={saveConnection}>
       <h3>3CX</h3>
-      <p>The check asks 3CX for an access token at /connect/token, then reads the system version. Use the client ID and client secret from the 3CX API integration.</p>
+      <p>The check asks 3CX for an access token, then reads the system version. In 3CX Admin, open Integrations, then API. Add a client, choose the default department, and set the role to System Owner. System-wide leaves the role as User, and 3CX answers 403. Paste the client ID and the API key here.</p>
       <input type="hidden" name="provider" value="3cx" />
       <label className="check-option"><input type="checkbox" name="enabled" defaultChecked={connection.enabled === 1} /> Use this connection</label>
       <label>API base URL <input name="base_url" defaultValue={config.base_url || ""} placeholder="https://pbx.example.com" autoComplete="off" /></label>

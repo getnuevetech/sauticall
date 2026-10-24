@@ -5,6 +5,7 @@ import { didMatches, parseDigitSearch } from "../lib/did-search.ts";
 import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
 import { numberPurchaseMode } from "../lib/number-order.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
+import { pbxAccessMessage, roleFromToken } from "../lib/pbx-access.ts";
 import { readRateCenters, regionAllowed } from "../lib/places.ts";
 
 test("a number request has to be a full 10-digit inventory number", () => {
@@ -59,6 +60,13 @@ test("state and city lists reject a typed code that is not a real place", () => 
   assert.equal(regionAllowed("CA", "ON"), true);
   assert.equal(regionAllowed("US", "ON"), false);
   assert.deepEqual(readRateCenters({ ratecenters: [{ ratecenter: "HOUSTON" }, { ratecenter: "AUSTIN" }, "DALLAS"] }), ["AUSTIN", "DALLAS", "HOUSTON"]);
+});
+
+test("a 403 from 3CX names the API role that was refused", () => {
+  const header = Buffer.from(JSON.stringify({ MaxRole: "users" })).toString("base64url");
+  assert.equal(roleFromToken(`aa.${header}.zz`), "users");
+  assert.match(pbxAccessMessage(403, "users", "Access denied."), /System Owner/);
+  assert.match(pbxAccessMessage(403, "system_owners", ""), /console restrictions/);
 });
 
 test("a created 3CX user id can come from the Location header", () => {
