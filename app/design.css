@@ -166,3 +166,4 @@ body{background:#fff}
 .nav-actions form{margin:0;display:inline-flex}
 .mobile-nav form{margin:0}
 .mobile-nav button.nav-menu-action{background:none;border:0;color:inherit;text-align:left;width:100%;padding:11px 0;border-bottom:1px solid #233a4a;cursor:pointer}
+.nav-account{display:inline-flex;align-items:center}

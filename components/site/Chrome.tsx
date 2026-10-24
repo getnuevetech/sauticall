@@ -33,6 +33,8 @@ export function SiteHeader({
   pathname,
   showSignIn,
   signedIn,
+  accountHref,
+  accountLabel,
   talkLabel,
   talkHref,
 }: {
@@ -41,6 +43,8 @@ export function SiteHeader({
   pathname: string;
   showSignIn: boolean;
   signedIn: boolean;
+  accountHref: string;
+  accountLabel: string;
   talkLabel: string;
   talkHref: string;
 }) {
@@ -56,7 +60,7 @@ export function SiteHeader({
           ))}
         </nav>
         <div className="nav-actions">
-          {signedIn || !showSignIn ? null : <Link className="nav-sign" href="/account/login">Sign in</Link>}
+          {signedIn ? <Link className="nav-sign nav-account" href={accountHref}>{accountLabel}</Link> : showSignIn ? <Link className="nav-sign" href="/account/login">Sign in</Link> : null}
           <Link className="nav-sign" href={talkHref}>{talkLabel}</Link>
           {signedIn ? (
             <SignOut className="btn btn-primary nav-cta" />
@@ -67,8 +71,8 @@ export function SiteHeader({
         </div>
       </div>
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {signedIn ? <SignOut className="nav-menu-action" /> : <Link href="/account/register">Create account</Link>}
-        {signedIn || !showSignIn ? null : <Link href="/account/login">Sign in</Link>}
+        {signedIn ? <Link href={accountHref}>{accountLabel}</Link> : <Link href="/account/register">Create account</Link>}
+        {signedIn ? <SignOut className="nav-menu-action" /> : showSignIn ? <Link href="/account/login">Sign in</Link> : null}
         {mobile.map((item) => <Link key={`m-${item.href}-${item.label}`} href={item.href}>{item.label}</Link>)}
       </nav>
     </header>

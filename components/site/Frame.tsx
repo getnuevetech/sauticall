@@ -19,6 +19,8 @@ export async function Frame({ pathname, children }: { pathname: string; children
         pathname={pathname}
         showSignIn={enabled(site.flags, "auth.show_sign_in")}
         signedIn={Boolean(user)}
+        accountHref={user?.role === "customer" ? "/account" : "/admin"}
+        accountLabel={user?.role === "customer" ? "Account" : "Admin"}
         talkLabel={talk}
         talkHref={talkHref}
       />
