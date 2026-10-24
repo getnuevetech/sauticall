@@ -38,15 +38,16 @@ export default async function AdminPhonePage({ searchParams }: { searchParams: P
         <p>These apply the next time someone is added. Extensions, ring groups, and queues already saved stay as they are. A department already created on 3CX keeps the number range it was given.</p>
         <div className="form-grid">
           <label>First extension for a person <input name="start" type="number" min={100} max={90000} required defaultValue={plan.start} /></label>
-          <label>Extensions in each customer’s block <input name="block" type="number" min={1} max={500} required defaultValue={plan.block} /></label>
+          <label>Extensions reserved for each customer <input name="block" type="number" min={1} max={500} required defaultValue={plan.block} /></label>
           <label>First ring group <input name="ring_start" type="number" min={100} max={90000} required defaultValue={plan.ringStart} /></label>
           <label>First call queue <input name="queue_start" type="number" min={100} max={90000} required defaultValue={plan.queueStart} /></label>
         </div>
         <details className="admin-more">
-          <summary>How far to search</summary>
+          <summary>If those extension numbers are already taken</summary>
           <div className="admin-more-body">
-            <label>Numbers to search for a person when the block is full <input name="span" type="number" min={1} max={50000} required defaultValue={plan.span} /></label>
-            <label>Numbers to search for a ring group or queue <input name="group_span" type="number" min={1} max={50000} required defaultValue={plan.groupSpan} /></label>
+            <p>These choose the next extension number inside SautiCall. They are not sent to 3CX. 3CX is read 100 records at a time, whatever numbers are saved here.</p>
+            <label>Extension numbers to try for a person after that customer’s block is full <input name="span" type="number" min={1} max={50000} required defaultValue={plan.span} /></label>
+            <label>Extension numbers to try for a ring group or queue <input name="group_span" type="number" min={1} max={50000} required defaultValue={plan.groupSpan} /></label>
           </div>
         </details>
         <button className="btn btn-primary" type="submit">Save extension numbers</button>
