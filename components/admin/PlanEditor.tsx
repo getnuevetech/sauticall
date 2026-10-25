@@ -51,13 +51,14 @@ export function PlanEditor({ initial }: { initial: Plan[] }) {
 
   return (
     <form action={async () => { setPending(true); await savePlans(JSON.stringify(plans)); }}>
+      <p>Extensions included is how many people that plan can add, and how many extension numbers are reserved for each customer on it. The most is 500. This is not the list size sent to 3CX.</p>
       {plans.map((plan, index) => (
         <fieldset key={`${plan.name}-${index}`} className="plan-editor">
           <legend>{plan.name || `Plan ${index + 1}`}</legend>
           <div className="form-grid">
             <label>Name <input value={plan.name} onChange={(event) => update(index, { name: event.target.value })} required /></label>
             <label>Monthly price <input type="number" min={0} step="1" value={plan.custom ? 0 : plan.price} disabled={plan.custom} onChange={(event) => update(index, { price: Number(event.target.value) })} /></label>
-            <label>People included <input type="number" min={0} step="1" value={plan.seats ?? 1} onChange={(event) => update(index, { seats: Number(event.target.value) })} /></label>
+            <label>Extensions included <input type="number" min={0} max={500} step="1" value={plan.seats ?? 1} onChange={(event) => update(index, { seats: Number(event.target.value) })} /></label>
             <label>Outbound minutes each month <input type="number" min={0} step="1" value={plan.includedMinutes} onChange={(event) => update(index, { includedMinutes: Number(event.target.value) })} /></label>
           </div>
           <label>Short description <input value={plan.desc} onChange={(event) => update(index, { desc: event.target.value })} /></label>

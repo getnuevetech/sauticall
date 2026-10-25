@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { anyLanguageFeature, defaultPlans } from "../lib/seed-data.ts";
-import { featureLabels, normalizePlans, planAllows } from "../lib/plan-features.ts";
+import { extensionCapacity, featureLabels, normalizePlans, planAllows } from "../lib/plan-features.ts";
 import type { Plan } from "../lib/types.ts";
 
 test("checkbox features replace text lists and inheritance", () => {
@@ -20,6 +20,15 @@ test("checkbox features replace text lists and inheritance", () => {
   assert.equal(plans[1].seats, 5);
   assert.equal(planAllows(plans[1], "ai"), true);
   assert.equal(planAllows(plans[1], "queues"), false);
+});
+
+test("a plan cannot include more than 500 extensions", () => {
+  const capped = normalizePlans([{ ...defaultPlans[2], seats: 900 }])[0];
+  assert.equal(capped.seats, 500);
+  assert.equal(extensionCapacity(capped), 500);
+  const custom = normalizePlans([{ ...defaultPlans[3], seats: 0 }])[0];
+  assert.equal(custom.seats, 0);
+  assert.equal(extensionCapacity({ seats: 10 }), 10);
 });
 
 test("saved checkbox plans stay as the admin left them", () => {

@@ -213,18 +213,20 @@ export async function setRequestStatus(formData: FormData) {
   redirect("/admin/requests");
 }
 
-export async function saveExtensionPlan(formData: FormData) {
+export async function saveExtensionPlan(formData: FormData): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
   const user = await staff("settings.phone");
   const { extensionPlanFromFields } = await import("@/lib/extension-numbers");
+  const { readExtensionPlan } = await import("@/lib/extension-plan");
+  const current = readExtensionPlan();
   const parsed = extensionPlanFromFields({
     start: String(formData.get("start") || ""),
-    block: String(formData.get("block") || ""),
+    block: String(formData.get("block") || current.block),
     span: String(formData.get("span") || ""),
     ringStart: String(formData.get("ring_start") || ""),
     queueStart: String(formData.get("queue_start") || ""),
     groupSpan: String(formData.get("group_span") || ""),
   });
-  if (!parsed.ok) redirect(`/admin/phone?error=${encodeURIComponent(parsed.message)}`);
+  if (!parsed.ok) return { ok: false, message: parsed.message };
   const exists = getDb().prepare("SELECT key FROM documents WHERE key = ?").get("extension_plan");
   if (!exists) {
     getDb().prepare("INSERT INTO documents (key, json, updated_at) VALUES (?, ?, ?)").run("extension_plan", JSON.stringify(parsed.plan), new Date().toISOString());
@@ -233,7 +235,10 @@ export async function saveExtensionPlan(formData: FormData) {
     writeDoc("extension_plan", parsed.plan, user.email);
   }
   revalidatePath("/admin/phone");
-  redirect("/admin/phone?saved=1");
+  return {
+    ok: true,
+    message: `Extension numbers saved. People start at ${parsed.plan.start}. Ring groups start at ${parsed.plan.ringStart}. Queues start at ${parsed.plan.queueStart}.`,
+  };
 }
 
 export async function provisionPerson(formData: FormData) {

@@ -1,5 +1,7 @@
 import { pbxRequest } from "./carriers";
 import { flagOn, getDb } from "./db";
+import { planExtensionRanges } from "./extension-plan";
+import { numbersInRanges } from "./extension-numbers";
 import { nextFreeNumber } from "./group-numbers";
 import { idFromPbx } from "./pbx-id";
 import { listPhoneSystemNumbers, readExtensionPlan, updateRouting } from "./pbx";
@@ -148,6 +150,7 @@ export async function createCallGroup(input: { userId: number; kind: "ring" | "q
     used.push(...listed.numbers);
   }
   const plan = readExtensionPlan();
+  used.push(...numbersInRanges(planExtensionRanges().ranges));
   const number = nextFreeNumber(used, input.kind === "queue" ? plan.queueStart : plan.ringStart, plan.groupSpan);
   if (!number) return { ok: false, message: "No free extension number is left for this group." };
   const info = database

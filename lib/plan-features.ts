@@ -64,13 +64,15 @@ function directKeys(plan: Plan) {
   return [...keys];
 }
 
+export const MAX_PLAN_EXTENSIONS = 500;
+
 export function extensionCapacity(plan: { seats?: number; base?: boolean; units?: string } | null | undefined) {
   if (!plan) return 1;
   const seats = Number(plan.seats);
-  if (Number.isFinite(seats) && seats > 0) return Math.round(seats);
+  if (Number.isFinite(seats) && seats > 0) return Math.min(MAX_PLAN_EXTENSIONS, Math.round(seats));
   if (plan.base) return 1;
   const match = String(plan.units || "").match(/(\d+)/);
-  return match ? Number(match[1]) : 1;
+  return match ? Math.min(MAX_PLAN_EXTENSIONS, Number(match[1])) : 1;
 }
 
 export function normalizePlans(plans: Plan[]) {
@@ -88,8 +90,9 @@ export function normalizePlans(plans: Plan[]) {
     const features = [...new Set<FeatureKey>([...inherited, ...own])];
     if (features.includes("ai_any_language") && !features.includes("ai")) features.push("ai");
     byName.set(plan.name.trim().toLowerCase(), features);
-    const seats = seatsFrom(plan);
+    const counted = seatsFrom(plan);
     const custom = Boolean(plan.custom);
+    const seats = custom && counted <= 0 ? 0 : Math.min(MAX_PLAN_EXTENSIONS, Math.max(1, counted));
     return {
       ...plan,
       custom,

@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { pbxRequest } from "./carriers";
 import { flagOn, getDb, readDoc } from "./db";
 import { chooseExtension, extensionRange } from "./extension-numbers";
-import { readExtensionPlan } from "./extension-plan";
+import { persistNewExtensionRanges, planExtensionRanges, readExtensionPlan } from "./extension-plan";
 import { idFromPbx } from "./pbx-id";
 import { extensionCapacity, normalizePlan } from "./plan-features";
 import type { Plan } from "./types";
@@ -87,9 +87,13 @@ export function paidPlan(userId: number) {
 async function ensureDepartment(userId: number) {
   const database = getDb();
   const existing = database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department | undefined;
-  const range = extensionRange(userId, readExtensionPlan());
-  const name = `SautiCall ${userId}`;
   if (existing?.xapi_id) return existing;
+  const reserved = planExtensionRanges();
+  persistNewExtensionRanges(reserved.ranges);
+  const match = reserved.ranges.find((range) => range.id === userId);
+  const fallback = extensionRange(userId, reserved.plan);
+  const range = match || fallback;
+  const name = `SautiCall ${userId}`;
   const found = await pbxRequest(`Groups?$filter=${encodeURIComponent(`Name eq '${name}'`)}&$select=Id,Name`);
   const listed = idFromPbx(readList(found.body)[0], found.location);
   if (found.ok && listed) {

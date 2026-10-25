@@ -1,9 +1,11 @@
-import { completeGroup, provisionPerson, retryGroup, saveExtensionPlan } from "../actions";
+import { completeGroup, provisionPerson, retryGroup } from "../actions";
+import { ExtensionPlanForm } from "@/components/admin/ExtensionPlanForm";
 import { requirePermission } from "@/lib/access";
 import { groupMembers, strategyLabel } from "@/lib/call-groups";
-import { flagOn, getDb } from "@/lib/db";
-import { extensionRange } from "@/lib/extension-numbers";
+import { flagOn, getDb, readDoc } from "@/lib/db";
 import { readExtensionPlan } from "@/lib/extension-plan";
+import { extensionCapacity, normalizePlans } from "@/lib/plan-features";
+import type { Plan } from "@/lib/types";
 
 type Row = { id: number; email: string; number: string; first_name: string; last_name: string; status: string; xapi_id: number; last_message: string };
 type GroupRow = { id: number; email: string; kind: string; name: string; number: string; strategy: string; answers: number; status: string; xapi_id: number; last_message: string; task_status: string | null; members: string | null; department_name: string | null };
@@ -13,8 +15,14 @@ export default async function AdminPhonePage({ searchParams }: { searchParams: P
   const params = await searchParams;
   const live = flagOn("pbx.live_provision");
   const plan = readExtensionPlan();
-  const first = extensionRange(1, plan);
-  const second = extensionRange(2, plan);
+  const plans = normalizePlans(readDoc<Plan[]>("plans")).filter((item) => !item.custom);
+  const planLine = plans.map((item) => `${item.name} includes ${extensionCapacity(item)}`).join(", ");
+  const reserved = getDb().prepare(
+    `SELECT u.email, d.number_from, d.number_to FROM pbx_departments d
+     JOIN users u ON u.id = d.user_id
+     WHERE d.number_from != '' AND d.number_to != ''
+     ORDER BY CAST(d.number_from AS INTEGER)`,
+  ).all() as { email: string; number_from: string; number_to: string }[];
   const rows = getDb().prepare(
     `SELECT e.id, u.email, e.number, e.first_name, e.last_name, e.status, e.xapi_id, e.last_message
      FROM pbx_extensions e JOIN users u ON u.id = e.user_id ORDER BY e.id DESC LIMIT 100`,
@@ -30,28 +38,11 @@ export default async function AdminPhonePage({ searchParams }: { searchParams: P
       <span className="eyebrow">Phone system</span>
       <h2>Extensions, ring groups, and queues</h2>
       <p>Each customer gets a department on 3CX. Daytime calls go to the ring group or queue they chose, once that group is on the phone system. Otherwise they go to the first extension. After hours they go to voicemail. If 3CX does not accept the group, build it on the server with the number and people below, point the department office-hours route at it, and mark it done.</p>
-      <p>A new person gets the next free number in that customer’s block. Customer 1 is {first.from}–{first.to}. Customer 2 is {second.from}–{second.to}. Numbers already on 3CX, and numbers already saved here, are skipped. People already saved keep their current numbers.</p>
-      {params.saved ? <p className="form-feedback">Extension numbers saved. The next person, ring group, or queue uses these numbers.</p> : null}
+      <p>How many extensions a customer can add is set on that customer’s plan. {planLine}. The most any plan can include is 500. Change those under Plans. A customer cannot add more people than their plan includes.</p>
+      <p>The message that said 3CX received 500 was a list of existing numbers, 500 records in one request. 3CX accepts 100 records per request, so that list is read 100 at a time. That 500 is not an extension number and it is not a plan limit.</p>
+      {reserved.length ? <p>Ranges already given stay as they are: {reserved.map((row) => `${row.email} ${row.number_from}–${row.number_to}`).join(". ")}. A department already created on 3CX keeps its range. People already saved keep their numbers. The next customer with no range is reserved as many numbers as their plan includes, starting at {plan.start}.</p> : <p>No range has been given out yet. The next customer is reserved as many numbers as their plan includes, starting at {plan.start}. Numbers already on 3CX are skipped. People already saved keep their numbers.</p>}
       {params.error ? <p className="form-feedback">{params.error}</p> : null}
-      <form className="contact-form" action={saveExtensionPlan}>
-        <h3>Extension numbers</h3>
-        <p>These apply the next time someone is added. Extensions, ring groups, and queues already saved stay as they are. A department already created on 3CX keeps the number range it was given.</p>
-        <div className="form-grid">
-          <label>First extension for a person <input name="start" type="number" min={100} max={90000} required defaultValue={plan.start} /></label>
-          <label>Extensions reserved for each customer <input name="block" type="number" min={1} max={500} required defaultValue={plan.block} /></label>
-          <label>First ring group <input name="ring_start" type="number" min={100} max={90000} required defaultValue={plan.ringStart} /></label>
-          <label>First call queue <input name="queue_start" type="number" min={100} max={90000} required defaultValue={plan.queueStart} /></label>
-        </div>
-        <details className="admin-more">
-          <summary>If those extension numbers are already taken</summary>
-          <div className="admin-more-body">
-            <p>These choose the next extension number inside SautiCall. They are not sent to 3CX. 3CX is read 100 records at a time, whatever numbers are saved here.</p>
-            <label>Extension numbers to try for a person after that customer’s block is full <input name="span" type="number" min={1} max={50000} required defaultValue={plan.span} /></label>
-            <label>Extension numbers to try for a ring group or queue <input name="group_span" type="number" min={1} max={50000} required defaultValue={plan.groupSpan} /></label>
-          </div>
-        </details>
-        <button className="btn btn-primary" type="submit">Save extension numbers</button>
-      </form>
+      <ExtensionPlanForm plan={plan} />
       <h3>Ring groups and call queues</h3>
       {groups.length === 0 ? <p>No groups yet.</p> : null}
       {groups.map((group) => {

@@ -5,7 +5,7 @@ import { customerMessage, customerRequestStatus } from "../lib/customer-message.
 import { didMatches, parseDigitSearch } from "../lib/did-search.ts";
 import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
 import { numberPurchaseMode } from "../lib/number-order.ts";
-import { chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, normalizeExtensionPlan } from "../lib/extension-numbers.ts";
+import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, normalizeExtensionPlan } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { pbxAccessMessage, roleFromToken } from "../lib/pbx-access.ts";
 import { readRateCenters, regionAllowed } from "../lib/places.ts";
@@ -92,6 +92,30 @@ test("an admin extension plan replaces the built-in start and block", () => {
   assert.equal(saved.ok && saved.plan.start, 4100);
   assert.equal(saved.ok && saved.plan.block, 20);
   assert.equal(normalizeExtensionPlan({ start: "nope" }).start, 2000);
+});
+
+test("each plan reserves its own extension count, and an existing range stays put", () => {
+  const ranges = assignBlocks(510, [
+    { id: 1, seats: 1 },
+    { id: 2, seats: 5 },
+    { id: 3, seats: 10 },
+  ]);
+  assert.deepEqual(ranges, [
+    { id: 1, from: 510, to: 510 },
+    { id: 2, from: 511, to: 515 },
+    { id: 3, from: 516, to: 525 },
+  ]);
+  const kept = assignBlocks(510, [
+    { id: 1, seats: 1, from: 510, to: 514, locked: true },
+    { id: 2, seats: 10 },
+  ]);
+  assert.deepEqual(kept[0], { id: 1, from: 510, to: 514 });
+  assert.deepEqual(kept[1], { id: 2, from: 515, to: 524 });
+  const plan = { start: 510, block: 5, span: 100, ringStart: 100, queueStart: 101, groupSpan: 10 };
+  assert.equal(chooseExtension(2, [], [], plan, kept), "515");
+  assert.equal(chooseExtension(1, ["510", "511", "512", "513", "514"], [], plan, kept), "525");
+  const grown = assignBlocks(510, [{ id: 1, seats: 10, from: 510, to: 514 }]);
+  assert.deepEqual(grown, [{ id: 1, from: 510, to: 519 }]);
 });
 
 test("a customer never sees a partner or integration error", () => {

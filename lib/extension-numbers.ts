@@ -66,18 +66,74 @@ export function extensionRange(userId: number, plan: ExtensionPlan = defaultExte
   return { from, to: from + plan.block - 1 };
 }
 
-export function chooseExtension(userId: number, taken: string[], customerIds: number[], plan: ExtensionPlan = defaultExtensionPlan) {
+export type AssignedRange = { id: number; from: number; to: number };
+
+export type RangeCustomer = {
+  id: number;
+  seats: number;
+  from?: number;
+  to?: number;
+  locked?: boolean;
+};
+
+function overlaps(from: number, to: number, ranges: AssignedRange[]) {
+  return ranges.some((range) => from <= range.to && range.from <= to);
+}
+
+export function assignBlocks(start: number, customers: RangeCustomer[]): AssignedRange[] {
+  const placed: AssignedRange[] = [];
+  const saved = customers
+    .filter((customer) => Number.isInteger(customer.from) && Number.isInteger(customer.to) && (customer.to as number) >= (customer.from as number) && (customer.from as number) > 0)
+    .sort((left, right) => left.id - right.id);
+  for (const customer of saved) {
+    let from = customer.from as number;
+    let to = customer.to as number;
+    const seats = Math.max(customer.seats, 1);
+    if (!customer.locked && seats > to - from + 1) {
+      const grownTo = from + seats - 1;
+      if (!overlaps(from, grownTo, placed)) to = grownTo;
+    }
+    placed.push({ id: customer.id, from, to });
+  }
+  const pending = customers
+    .filter((customer) => customer.seats > 0 && !placed.some((range) => range.id === customer.id))
+    .sort((left, right) => left.id - right.id);
+  for (const customer of pending) {
+    const width = customer.seats;
+    let from = Math.max(start, 1);
+    for (let guard = 0; guard < 100000 && overlaps(from, from + width - 1, placed); guard += 1) {
+      const hit = placed.find((range) => from <= range.to && from + width - 1 >= range.from);
+      const next = (hit?.to ?? from) + 1;
+      from = next > from ? next : from + 1;
+    }
+    placed.push({ id: customer.id, from, to: from + width - 1 });
+  }
+  return placed.sort((left, right) => left.id - right.id);
+}
+
+export function numbersInRanges(ranges: { from: number; to: number }[]) {
+  const numbers: string[] = [];
+  for (const range of ranges) {
+    const last = Math.min(range.to, range.from + 499);
+    for (let number = range.from; number <= last; number += 1) numbers.push(String(number));
+  }
+  return numbers;
+}
+
+export function chooseExtension(userId: number, taken: string[], customerIds: number[], plan: ExtensionPlan = defaultExtensionPlan, ranges?: AssignedRange[]) {
   const used = new Set(taken);
+  const list = ranges ?? customerIds.map((id) => ({ id, ...extensionRange(id, plan) }));
   const reserved = new Set<string>();
-  for (const id of customerIds) {
-    if (id === userId) continue;
-    const range = extensionRange(id, plan);
+  for (const range of list) {
+    if (range.id === userId) continue;
     for (let number = range.from; number <= range.to; number += 1) reserved.add(String(number));
   }
-  const own = extensionRange(userId, plan);
-  for (let number = own.from; number <= own.to; number += 1) {
-    const value = String(number);
-    if (!used.has(value)) return value;
+  const own = list.find((range) => range.id === userId);
+  if (own) {
+    for (let number = own.from; number <= own.to; number += 1) {
+      const value = String(number);
+      if (!used.has(value)) return value;
+    }
   }
   for (let number = plan.start; number < plan.start + plan.span; number += 1) {
     const value = String(number);
