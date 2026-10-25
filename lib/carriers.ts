@@ -1,7 +1,7 @@
 import { getDb } from "./db";
 import { carrierSearchType, didMatches, type DigitSearch } from "./did-search";
 import { readDids, type ListedDid } from "./did-list";
-import { adminPbxError, pbxAccessMessage, roleFromToken } from "./pbx-access";
+import { adminPbxError, pbxAccessMessage, pbxErrorText, roleFromToken } from "./pbx-access";
 import { readRateCenters } from "./places";
 
 export type PublicConfig = Record<string, string>;
@@ -241,14 +241,7 @@ function parseBody(text: string) {
 }
 
 function xapiError(body: unknown, text: string) {
-  if (body && typeof body === "object") {
-    const record = body as { error?: { code?: unknown; message?: unknown }; code?: unknown; message?: unknown };
-    const nested = record.error && typeof record.error === "object" ? record.error : record;
-    const code = typeof nested.code === "string" ? nested.code : "";
-    const message = typeof nested.message === "string" ? nested.message : "";
-    if (code || message) return { code, message: message.replace(/\s+/g, " ").trim().slice(0, 800) };
-  }
-  return { code: "", message: text.replace(/\s+/g, " ").trim().slice(0, 800) };
+  return pbxErrorText(body, text);
 }
 
 function xapiMessage(body: unknown, fallback: string) {

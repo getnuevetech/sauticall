@@ -3,7 +3,7 @@ import { pbxRequest } from "./carriers";
 import { flagOn, getDb, readDoc } from "./db";
 import { chooseExtension, extensionRange, replacementExtension } from "./extension-numbers";
 import { persistNewExtensionRanges, planExtensionRanges, readExtensionPlan, shiftPendingExtensions } from "./extension-plan";
-import { describeExtensionFailure } from "./pbx-access";
+import { describeExtensionFailure, numberAlreadyUsed } from "./pbx-access";
 import { idFromPbx } from "./pbx-id";
 import { extensionCapacity, normalizePlan } from "./plan-features";
 import type { Plan } from "./types";
@@ -65,23 +65,29 @@ function capTop(path: string) {
 async function collectNumbers(collection: string) {
   const numbers: string[] = [];
   let seen = 0;
+  let previousPage = "";
   let path = `${collection}?$select=Number&$top=${PHONE_SYSTEM_PAGE}`;
   for (let page = 0; page < 50 && path; page += 1) {
     const result = await pbxRequest(capTop(path));
     if (!result.ok) return { ok: false as const, numbers, message: result.message };
     const batch = readList(result.body);
+    const signature = batch.map((item) => String(item.Number ?? "").trim()).join(",");
+    if (page > 0 && signature === previousPage) break;
+    previousPage = signature;
     seen += batch.length;
     for (const item of batch) {
       const number = String(item.Number ?? "").trim();
       if (number) numbers.push(number);
     }
     const linked = nextPage(result.body);
-    if (linked) {
+    if (linked && linked !== path) {
       path = linked;
       continue;
     }
     if (batch.length < PHONE_SYSTEM_PAGE) break;
-    path = `${collection}?$select=Number&$top=${PHONE_SYSTEM_PAGE}&$skip=${seen}`;
+    const skipped = `${collection}?$select=Number&$top=${PHONE_SYSTEM_PAGE}&$skip=${seen}`;
+    if (skipped === path) break;
+    path = skipped;
   }
   return { ok: true as const, numbers, message: "" };
 }
@@ -95,6 +101,41 @@ export async function listPhoneSystemNumbers() {
   const queues = await collectNumbers("Queues");
   if (queues.ok) numbers.push(...queues.numbers);
   return { ok: true, numbers, message: "" };
+}
+
+const NUMBER_COLLECTIONS = ["Users", "RingGroups", "Queues", "Receptionists", "Fax", "Parkings"];
+
+export async function extensionNumberUsed(number: string) {
+  const safe = number.replace(/'/g, "''");
+  let denied = "";
+  for (const collection of NUMBER_COLLECTIONS) {
+    const result = await pbxRequest(`${collection}?$filter=${encodeURIComponent(`Number eq '${safe}'`)}&$select=Number&$top=1`);
+    if (result.status === 400 || result.status === 404 || result.status === 501) continue;
+    if (!result.ok) {
+      if (collection === "Users") denied = result.message;
+      continue;
+    }
+    const hit = readList(result.body).some((item) => String(item.Number ?? "").trim() === number);
+    if (hit) return { ok: true as const, used: true, message: "" };
+  }
+  if (denied) return { ok: false as const, used: false, message: denied };
+  return { ok: true as const, used: false, message: "" };
+}
+
+export async function allocateExtension(userId: number, used: string[], plan = readExtensionPlan(), ranges?: { id: number; from: number; to: number }[]) {
+  const reserved = ranges ? { plan, ranges } : planExtensionRanges();
+  const taken = [...used];
+  const live = flagOn("pbx.live_provision");
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const candidate = chooseExtension(userId, taken, [], reserved.plan, reserved.ranges);
+    if (!candidate) return { ok: false as const, number: "", message: "No free extension is left from the starting number." };
+    if (!live) return { ok: true as const, number: candidate, message: "" };
+    const check = await extensionNumberUsed(candidate);
+    if (!check.ok) return { ok: false as const, number: "", message: check.message };
+    if (!check.used) return { ok: true as const, number: candidate, message: "" };
+    taken.push(candidate);
+  }
+  return { ok: false as const, number: "", message: "No free extension is left from the starting number." };
 }
 
 export function paidPlan(userId: number) {
@@ -196,6 +237,23 @@ async function routeDepartment(department: Department) {
   return result;
 }
 
+function savedNumbers() {
+  const database = getDb();
+  return [
+    ...(database.prepare("SELECT number FROM pbx_extensions").all() as { number: string }[]),
+    ...(database.prepare("SELECT number FROM call_groups").all() as { number: string }[]),
+  ].map((item) => item.number);
+}
+
+async function moveExtension(row: ExtensionRow, plan: ReturnType<typeof readExtensionPlan>, rejected: string[], known: string[]) {
+  const taken = [...savedNumbers(), ...rejected, ...known, row.number];
+  const reserved = planExtensionRanges();
+  const next = replacementExtension(row.number, plan.start, taken, row.user_id, reserved.ranges, reserved.plan);
+  if (!next || next === row.number) return null;
+  getDb().prepare("UPDATE pbx_extensions SET number = ? WHERE id = ? AND xapi_id = 0").run(next, row.id);
+  return { ...row, number: next };
+}
+
 export async function provisionExtension(id: number) {
   const database = getDb();
   let row = database.prepare("SELECT * FROM pbx_extensions WHERE id = ?").get(id) as ExtensionRow | undefined;
@@ -215,52 +273,73 @@ export async function provisionExtension(id: number) {
     }
     if (!(Number(row.number) >= plan.start)) return { ok: false, message: "No free extension is left from the starting number." };
     const department = await ensureDepartment(row.user_id);
-    const userBody = (number: string) => ({
-      Id: 0,
-      FirstName: row.first_name,
-      LastName: row.last_name,
-      EmailAddress: row.email,
-      Number: number,
-      Language: "EN",
-      SendEmailMissedCalls: false,
-      VMEmailOptions: "Notification",
-      Require2FA: false,
-      AccessPassword: row.access_password,
-    });
-    let created = await pbxRequest("Users", { method: "POST", body: userBody(row.number) });
-    let xapiId = idFromPbx(created.body, created.location);
+    const listed = await listPhoneSystemNumbers();
+    const known = listed.ok ? listed.numbers : [];
+    const rejected: string[] = [];
+    let movedFrom = "";
+    let xapiId = 0;
     let linkedExisting = "";
-    if (!created.ok) {
+    let posts = 0;
+    for (let attempt = 0; attempt < 30 && posts < 8; attempt += 1) {
       const lookup = await findUserByNumber(row.number);
-      const sameEmail = lookup.user && lookup.user.email.toLowerCase() === row.email.toLowerCase();
-      if (sameEmail && lookup.user?.id) {
+      const sameEmail = Boolean(lookup.user && lookup.user.email.toLowerCase() === row.email.toLowerCase() && lookup.user.id);
+      if (sameEmail && lookup.user) {
         xapiId = lookup.user.id;
         linkedExisting = `Extension ${row.number} already exists on 3CX for ${lookup.user.email}, so that user was linked.`;
-      } else if (lookup.user || /ALREADY_IN_USE|already exists|already in use/i.test(`${created.code || ""} ${created.detail || created.message}`)) {
-        const taken = [
-          ...(database.prepare("SELECT number FROM pbx_extensions").all() as { number: string }[]),
-          ...(database.prepare("SELECT number FROM call_groups").all() as { number: string }[]),
-        ].map((item) => item.number);
-        const listed = await listPhoneSystemNumbers();
-        if (listed.ok) taken.push(...listed.numbers);
-        const reserved = planExtensionRanges();
-        const previous = row.number;
-        const next = replacementExtension(previous, plan.start, taken, row.user_id, reserved.ranges, reserved.plan);
-        if (!next || next === previous) throw new Error(extensionFailure(previous, created, lookup));
-        database.prepare("UPDATE pbx_extensions SET number = ? WHERE id = ? AND xapi_id = 0").run(next, id);
-        row = { ...row, number: next };
-        created = await pbxRequest("Users", { method: "POST", body: userBody(next) });
-        xapiId = idFromPbx(created.body, created.location);
-        if (!xapiId) {
-          const again = await findUserByNumber(next);
-          throw new Error(`Extension ${previous} already exists on 3CX. ${extensionFailure(next, created, again)}`);
-        }
-        linkedExisting = `Extension ${previous} already exists on 3CX, so this person was created as ${next}.`;
-      } else {
-        throw new Error(extensionFailure(row.number, created, lookup));
+        break;
       }
+      const occupied = await extensionNumberUsed(row.number);
+      if ((occupied.ok && occupied.used) || lookup.user) {
+        const moved = await moveExtension(row, plan, rejected, known);
+        if (!moved) throw new Error(lookup.user ? extensionFailure(row.number, { status: 409, code: "ALREADY_IN_USE", detail: "This extension number is already used on 3CX." }, lookup) : "No free extension is left from the starting number.");
+        rejected.push(row.number);
+        movedFrom = movedFrom || row.number;
+        row = moved;
+        continue;
+      }
+      posts += 1;
+      const created = await pbxRequest("Users", {
+        method: "POST",
+        body: {
+          Id: 0,
+          FirstName: row.first_name,
+          LastName: row.last_name,
+          EmailAddress: row.email,
+          Number: row.number,
+          Language: "EN",
+          SendEmailMissedCalls: false,
+          VMEmailOptions: "Notification",
+          Require2FA: false,
+          AccessPassword: row.access_password,
+        },
+      });
+      xapiId = idFromPbx(created.body, created.location);
+      if (created.ok) {
+        if (!xapiId) {
+          const found = await findUserByNumber(row.number);
+          if (found.user?.id && found.user.email.toLowerCase() === row.email.toLowerCase()) xapiId = found.user.id;
+        }
+        if (!xapiId) throw new Error(created.detail || created.message || "3CX did not return an extension id.");
+        linkedExisting = movedFrom ? `Extension ${movedFrom} already exists on 3CX, so this person was created as ${row.number}.` : "";
+        break;
+      }
+      const again = await findUserByNumber(row.number);
+      const againSame = Boolean(again.user && again.user.email.toLowerCase() === row.email.toLowerCase() && again.user.id);
+      if (againSame && again.user) {
+        xapiId = again.user.id;
+        linkedExisting = `Extension ${row.number} already exists on 3CX for ${again.user.email}, so that user was linked.`;
+        break;
+      }
+      const collision = Boolean(again.user) || numberAlreadyUsed(created.code || "", `${created.detail || ""} ${created.message || ""}`, created.status);
+      if (!collision) throw new Error(extensionFailure(row.number, created, again.ok ? again : lookup));
+      const moved = await moveExtension(row, plan, rejected, known);
+      if (!moved) throw new Error(extensionFailure(row.number, created, again));
+      rejected.push(row.number);
+      movedFrom = movedFrom || row.number;
+      row = moved;
+      xapiId = 0;
     }
-    if (!xapiId) throw new Error(created.detail || created.message || "3CX did not return an extension id.");
+    if (!xapiId) throw new Error(movedFrom ? `Extension ${movedFrom} already exists on 3CX, and no free extension is left from the starting number.` : "3CX did not return an extension id.");
     const assigned = await pbxRequest(`Users(${xapiId})`, {
       method: "PATCH",
       body: {

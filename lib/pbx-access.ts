@@ -29,6 +29,38 @@ export function adminPbxError(status: number, role: string, code: string, detail
   return `${head} ${pbxAccessMessage(403, role, "")}`;
 }
 
+export function pbxErrorText(body: unknown, fallback: string) {
+  const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const nested = record.error && typeof record.error === "object" ? (record.error as Record<string, unknown>) : record;
+  const code = typeof nested.code === "string" ? nested.code : "";
+  const messages: string[] = [];
+  const add = (value: unknown) => {
+    if (typeof value === "string" && value.trim()) messages.push(value.replace(/\s+/g, " ").trim());
+  };
+  add(nested.message);
+  add(record.Message);
+  const odata = record["odata.error"];
+  if (odata && typeof odata === "object") {
+    const message = (odata as { message?: unknown }).message;
+    if (typeof message === "string") add(message);
+    else if (message && typeof message === "object") add((message as { value?: unknown }).value);
+  }
+  const model = record.ModelState || nested.ModelState;
+  if (model && typeof model === "object") {
+    for (const value of Object.values(model as Record<string, unknown>)) {
+      if (Array.isArray(value)) value.forEach(add);
+      else add(value);
+    }
+  }
+  const message = [...new Set(messages)].join(" ").slice(0, 800);
+  return { code, message: message || fallback.replace(/\s+/g, " ").trim().slice(0, 800) };
+}
+
+export function numberAlreadyUsed(code: string, detail: string, status = 0) {
+  if (status === 409) return true;
+  return /ALREADY_IN_USE|already exists|already in use|already used|already assigned|already taken|already been|number is in use|\bused by\b|is not unique|must be unique|duplicate|objectalreadyexists|\bdn already\b|extension already/i.test(`${code} ${detail}`);
+}
+
 export function describeExtensionFailure(input: {
   number: string;
   status: number;
@@ -38,7 +70,7 @@ export function describeExtensionFailure(input: {
   existing?: { email: string } | null;
   lookupFailed?: string;
 }) {
-  const collision = /ALREADY_IN_USE|already exists|already in use/i.test(`${input.code} ${input.detail}`);
+  const collision = numberAlreadyUsed(input.code, input.detail, input.status);
   let existence: string;
   if (input.existing || collision) {
     const email = input.existing?.email ? ` for ${input.existing.email}` : "";

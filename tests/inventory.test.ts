@@ -7,7 +7,7 @@ import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
 import { numberPurchaseMode } from "../lib/number-order.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
-import { describeExtensionFailure, pbxAccessMessage, roleFromToken } from "../lib/pbx-access.ts";
+import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
 import { readRateCenters, regionAllowed } from "../lib/places.ts";
 
 test("a number request has to be a full 10-digit inventory number", () => {
@@ -162,6 +162,29 @@ test("a starting number of 500 skips extensions already used below it", () => {
   assert.equal(replacementExtension("122", 500, ["122", "123"], 3, ranges, plan), "500");
   assert.equal(chooseExtension(3, ["122", "123", "500"], [], plan, ranges), "501");
   assert.equal(replacementExtension("501", 500, ["122"], 3, ranges, plan), "501");
+  assert.equal(chooseExtension(1, ["122", "123", "124"], [], plan, [{ id: 1, from: 120, to: 600 }]), "500");
+});
+
+test("a 3CX reply that the number is already used counts as a collision", () => {
+  const error = pbxErrorText({
+    Message: "The request is invalid.",
+    ModelState: { "user.Number": ["Number '124' is already used."] },
+  }, "");
+  assert.match(error.message, /already used/);
+  assert.equal(numberAlreadyUsed(error.code, error.message, 400), true);
+  assert.equal(numberAlreadyUsed("", "The extension number is already assigned to another user."), true);
+  assert.equal(numberAlreadyUsed("ALREADY_IN_USE", ""), true);
+  assert.equal(numberAlreadyUsed("", "", 409), true);
+  assert.equal(numberAlreadyUsed("", "Access denied", 403), false);
+  const message = describeExtensionFailure({
+    number: "124",
+    status: 400,
+    code: error.code,
+    detail: error.message,
+    role: "system_owners",
+    existing: null,
+  });
+  assert.match(message, /Extension 124 already exists on 3CX/);
 });
 
 test("a customer never sees a partner or integration error", () => {

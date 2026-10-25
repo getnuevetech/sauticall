@@ -314,7 +314,7 @@ export async function savePort(formData: FormData) {
 export async function addPerson(formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
-  const { appPassword, chooseExtension, extensionCapacity, listPhoneSystemNumbers, paidPlan, provisionExtension } = await import("@/lib/pbx");
+  const { allocateExtension, appPassword, extensionCapacity, listPhoneSystemNumbers, paidPlan, provisionExtension } = await import("@/lib/pbx");
   const plan = paidPlan(user.id);
   if (!plan) redirect("/account/phone?error=Pay%20for%20a%20plan%20before%20adding%20people.");
   const first = String(formData.get("first_name") || "").trim().slice(0, 40);
@@ -329,17 +329,18 @@ export async function addPerson(formData: FormData) {
   ].map((row) => row.number);
   if (flagOn("pbx.live_provision")) {
     const listed = await listPhoneSystemNumbers();
-    if (!listed.ok) {
-      audit(user.email, "pbx.extension.list", listed.message.slice(0, 400));
-      redirect(`/account/phone?error=${encodeURIComponent(safeCustomerError(listed.message, "We could not add this person yet. Please try again, or contact support."))}`);
-    }
-    used.push(...listed.numbers);
+    if (listed.ok) used.push(...listed.numbers);
+    else audit(user.email, "pbx.extension.list", listed.message.slice(0, 400));
   }
   const { persistNewExtensionRanges, planExtensionRanges } = await import("@/lib/extension-plan");
   const reserved = planExtensionRanges();
   persistNewExtensionRanges(reserved.ranges);
-  const number = chooseExtension(user.id, used, [], reserved.plan, reserved.ranges);
-  if (!number) redirect("/account/phone?error=No%20free%20extension%20is%20left%20on%20the%20phone%20system.");
+  const allocated = await allocateExtension(user.id, used, reserved.plan, reserved.ranges);
+  if (!allocated.ok) {
+    audit(user.email, "pbx.extension.allocate", allocated.message.slice(0, 400));
+    redirect(`/account/phone?error=${encodeURIComponent(safeCustomerError(allocated.message, "We could not add this person yet. Please try again, or contact support."))}`);
+  }
+  const number = allocated.number;
   const info = getDb()
     .prepare("INSERT INTO pbx_extensions (user_id, number, first_name, last_name, email, status, access_password, created_at) VALUES (?, ?, ?, ?, ?, 'waiting', ?, ?)")
     .run(user.id, number, first, last, email, appPassword(), new Date().toISOString());

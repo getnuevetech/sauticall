@@ -4,7 +4,8 @@ import { planExtensionRanges } from "./extension-plan";
 import { numbersInRanges } from "./extension-numbers";
 import { nextFreeNumber } from "./group-numbers";
 import { idFromPbx } from "./pbx-id";
-import { listPhoneSystemNumbers, readExtensionPlan, updateRouting } from "./pbx";
+import { numberAlreadyUsed } from "./pbx-access";
+import { extensionNumberUsed, listPhoneSystemNumbers, readExtensionPlan, updateRouting } from "./pbx";
 
 export const RING_STRATEGIES = [
   ["ring_all", "Ring everyone at once"],
@@ -93,10 +94,10 @@ export async function provisionCallGroup(id: number) {
   }
   const path = group.kind === "queue" ? "Queues" : "RingGroups";
   const strategy = xapiStrategy(group.kind, group.strategy);
-  const body = group.kind === "queue"
+  const bodyFor = (number: string) => group.kind === "queue"
     ? {
         Name: group.name,
-        Number: group.number,
+        Number: number,
         PollingStrategy: strategy,
         MasterTimeout: 180,
         RingTimeout: 20,
@@ -104,23 +105,42 @@ export async function provisionCallGroup(id: number) {
       }
     : {
         Name: group.name,
-        Number: group.number,
+        Number: number,
         RingStrategy: strategy,
         RingTime: 20,
         Members: members.map((member) => ({ Number: member.number })),
       };
-  const created = group.xapi_id
-    ? await pbxRequest(`${path}(${group.xapi_id})`, { method: "PATCH", body: { ...body, Id: group.xapi_id } })
-    : await pbxRequest(path, { method: "POST", body });
+  let number = group.number;
+  let created = group.xapi_id
+    ? await pbxRequest(`${path}(${group.xapi_id})`, { method: "PATCH", body: { ...bodyFor(number), Id: group.xapi_id } })
+    : await pbxRequest(path, { method: "POST", body: bodyFor(number) });
+  if (!group.xapi_id && !created.ok && numberAlreadyUsed(created.code || "", `${created.detail || ""} ${created.message || ""}`, created.status)) {
+    const plan = readExtensionPlan();
+    const used = [
+      ...(database.prepare("SELECT number FROM pbx_extensions").all() as { number: string }[]),
+      ...(database.prepare("SELECT number FROM call_groups").all() as { number: string }[]),
+    ].map((item) => item.number);
+    const listed = await listPhoneSystemNumbers();
+    if (listed.ok) used.push(...listed.numbers);
+    for (let attempt = 0; attempt < 8 && !created.ok; attempt += 1) {
+      used.push(number);
+      const next = nextFreeNumber(used, group.kind === "queue" ? plan.queueStart : plan.ringStart, plan.groupSpan);
+      if (!next || next === number) break;
+      number = next;
+      database.prepare("UPDATE call_groups SET number = ? WHERE id = ? AND xapi_id = 0").run(number, id);
+      created = await pbxRequest(path, { method: "POST", body: bodyFor(number) });
+      if (created.ok || !numberAlreadyUsed(created.code || "", `${created.detail || ""} ${created.message || ""}`, created.status)) break;
+    }
+  }
   const xapiId = group.xapi_id || idFromPbx(created.body, created.location);
   if (!created.ok || !xapiId) {
     const message = created.message || "3CX did not create this group.";
     database.prepare("UPDATE call_groups SET status = 'failed', last_message = ? WHERE id = ?").run(message.slice(0, 1200), id);
-    saveTask({ ...group }, members, "open", message);
+    saveTask({ ...group, number }, members, "open", message);
     return { ok: false, message };
   }
   database.prepare("UPDATE call_groups SET xapi_id = ?, status = 'created', last_message = ? WHERE id = ?").run(xapiId, "Created on the phone system.", id);
-  saveTask(group, members, "done", "Created on the phone system.");
+  saveTask({ ...group, number }, members, "done", "Created on the phone system.");
   if (group.answers) await updateRouting(group.user_id);
   return { ok: true, message: "Created on the phone system." };
 }
@@ -143,15 +163,28 @@ export async function createCallGroup(input: { userId: number; kind: "ring" | "q
   ].map((row) => row.number);
   if (flagOn("pbx.live_provision")) {
     const listed = await listPhoneSystemNumbers();
-    if (!listed.ok) {
-      console.error(`[sauticall] ${listed.message}`);
-      return { ok: false, message: "We could not save this group yet. Please try again, or contact support." };
-    }
-    used.push(...listed.numbers);
+    if (listed.ok) used.push(...listed.numbers);
+    else console.error(`[sauticall] ${listed.message}`);
   }
   const plan = readExtensionPlan();
   used.push(...numbersInRanges(planExtensionRanges().ranges));
-  const number = nextFreeNumber(used, input.kind === "queue" ? plan.queueStart : plan.ringStart, plan.groupSpan);
+  const start = input.kind === "queue" ? plan.queueStart : plan.ringStart;
+  let number = "";
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const candidate = nextFreeNumber(used, start, plan.groupSpan);
+    if (!candidate) break;
+    if (!flagOn("pbx.live_provision")) {
+      number = candidate;
+      break;
+    }
+    const check = await extensionNumberUsed(candidate);
+    if (!check.ok) return { ok: false, message: "We could not save this group yet. Please try again, or contact support." };
+    if (!check.used) {
+      number = candidate;
+      break;
+    }
+    used.push(candidate);
+  }
   if (!number) return { ok: false, message: "No free extension number is left for this group." };
   const info = database
     .prepare("INSERT INTO call_groups (user_id, kind, name, number, strategy, answers, status, created_at) VALUES (?, ?, ?, ?, ?, 0, 'waiting', ?)")

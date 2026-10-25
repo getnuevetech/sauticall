@@ -142,7 +142,7 @@ export function chooseExtension(userId: number, taken: string[], customerIds: nu
   }
   const own = list.find((range) => range.id === userId);
   if (own) {
-    for (let number = own.from; number <= own.to; number += 1) {
+    for (let number = Math.max(own.from, plan.start); number <= own.to; number += 1) {
       const value = String(number);
       if (!used.has(value)) return value;
     }
