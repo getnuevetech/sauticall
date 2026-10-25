@@ -221,9 +221,12 @@ export async function saveNumber(formData: FormData) {
   if (mode !== "automatic") redirect("/account/numbers?saved=1");
   const { purchaseNumber } = await import("@/lib/lines");
   const result = await purchaseNumber({ requestId, userId: user.id, did: payload.did });
-  const status = result.ok ? "ordered" : "exception";
-  getDb().prepare("UPDATE account_requests SET status = ?, staff_note = ? WHERE id = ?").run(status, result.message, requestId);
+  const { carrierDidRef } = await import("@/lib/number-order");
+  const status = result.ok || result.pending ? "ordered" : "exception";
+  const ref = result.ok ? carrierDidRef(payload.did) : "";
+  getDb().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(status, result.message, ref, requestId);
   audit(user.email, "request.order", `${requestId}:${status}`);
+  if (result.pending) redirect("/account/numbers?saved=pending");
   if (!result.ok) redirect(`/account/numbers?error=${encodeURIComponent(safeCustomerError(result.message, "We could not buy that number. Please try again, or contact support."))}`);
   redirect("/account/numbers?saved=ordered");
 }

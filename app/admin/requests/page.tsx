@@ -3,12 +3,14 @@ import { requirePermission } from "@/lib/access";
 import { formatAddress, parseEmergency } from "@/lib/e911";
 import { requestStatusLabel, requestStatuses } from "@/lib/admin-labels";
 import { flagOn, getDb } from "@/lib/db";
-import { numberPurchaseMode } from "@/lib/number-order";
+import { numberIsBought, numberPurchaseMode } from "@/lib/number-order";
+import { reconcileBoughtNumbers } from "@/lib/number-purchase";
 
 type Row = { id: number; email: string; kind: string; payload: string; status: string; provider_ref: string; staff_note: string; created_at: string };
 
 export default async function RequestsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   await requirePermission("inbox.requests");
+  await reconcileBoughtNumbers();
   const params = await searchParams;
   const rows = getDb().prepare(
     `SELECT r.id, u.email, r.kind, r.payload, r.status, r.provider_ref, r.staff_note, r.created_at
@@ -17,10 +19,10 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
   const ordering = flagOn("numbers.live_order");
   const purchase = numberPurchaseMode(ordering, flagOn("numbers.auto_order"));
   const intro = purchase === "automatic"
-    ? "Automatic buying is on. A customer request is sent to the phone company immediately. Use this list for transfers and for an order the carrier rejected."
+    ? "Automatic buying is on. A customer request is sent to the phone company immediately. Bought means that company has the number. Changing the status does not buy it."
     : purchase === "manual"
-      ? "Automatic buying is off. Buying a number happens when you press the button."
-      : "Buying numbers is turned off. Requests stay here until live number ordering is on.";
+      ? "Automatic buying is off. Buying a number happens when you press the button. Bought means the phone company has the number. Changing the status does not buy it."
+      : "Buying numbers is turned off. Requests stay here until live number ordering is on. Changing the status does not buy a number.";
   return (
     <>
       <span className="eyebrow">Customers</span>
@@ -37,7 +39,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
             <h3>{kind} · {payload.plan || payload.did || payload.numbers || payload.detail || "Request"}</h3>
             {payload.prompt ? <p>{payload.prompt}</p> : null}
             {emergency?.ok ? <p>Emergency address: {formatAddress(emergency.address)}</p> : row.kind === "number" ? <p>No emergency address on this request.</p> : null}
-            <p>{row.email} · {requestStatusLabel(row.status)}{row.provider_ref ? ` · ${row.provider_ref}` : ""}</p>
+            <p>{row.email} · {row.kind === "number" && payload.did && (row.status === "ordered" || row.status === "completed") && !numberIsBought(row.status, row.provider_ref, payload.did) ? "Not confirmed on the phone company" : requestStatusLabel(row.status)}{row.provider_ref ? ` · ${row.provider_ref}` : ""}</p>
             {row.staff_note ? <p>{row.staff_note}</p> : null}
             <form action={setRequestStatus} className="form-grid">
               <input type="hidden" name="id" value={row.id} />
@@ -49,7 +51,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
               <label>Note for the team <input name="staff_note" defaultValue={row.staff_note} /></label>
               <button className="btn btn-secondary" type="submit">Save</button>
             </form>
-            {row.kind === "number" && payload.did && row.status !== "ordered" && row.status !== "completed" && row.status !== "cancelled" ? (
+            {row.kind === "number" && payload.did && row.status !== "cancelled" && !numberIsBought(row.status, row.provider_ref, payload.did) ? (
               <form action={orderSavedNumber}>
                 <input type="hidden" name="id" value={row.id} />
                 <button className="btn btn-primary" type="submit" disabled={!ordering}>{ordering ? "Buy this number" : "Buying numbers is turned off"}</button>

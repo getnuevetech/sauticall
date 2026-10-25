@@ -4,7 +4,7 @@ import { clientEmail, clientPlace, personName, readVoipClientId } from "../lib/c
 import { customerMessage, customerRequestStatus } from "../lib/customer-message.ts";
 import { didMatches, parseDigitSearch } from "../lib/did-search.ts";
 import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
-import { numberPurchaseMode } from "../lib/number-order.ts";
+import { carrierDidRef, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
@@ -27,6 +27,7 @@ test("inventory results keep real DIDs and can return the whole list", () => {
   const many = { dids: Array.from({ length: 25 }, (_, index) => ({ did: `832555${String(index).padStart(4, "0")}` })) };
   assert.equal(readDids(many, 20).length, 20);
   assert.equal(readDids(many, 0).length, 25);
+  assert.deepEqual(readDids({ dids: { did: "3612267988", ratecenter: "HOUSTON", state: "TX" } }, 0), [{ did: "3612267988", ratecenter: "HOUSTON", state: "TX", monthly: "" }]);
 });
 
 test("number buying is manual until automatic buying is switched on", () => {
@@ -34,6 +35,11 @@ test("number buying is manual until automatic buying is switched on", () => {
   assert.equal(numberPurchaseMode(false, true), "off");
   assert.equal(numberPurchaseMode(true, false), "manual");
   assert.equal(numberPurchaseMode(true, true), "automatic");
+  assert.equal(customerNumberStatus("ordered", "", "3612267988"), "Needs attention");
+  assert.equal(customerNumberStatus("completed", "", "3612267988"), "Needs attention");
+  assert.equal(customerNumberStatus("ordered", carrierDidRef("3612267988"), "3612267988"), "Bought");
+  assert.equal(numberIsBought("ordered", "voipms:3612267988", "1-361-226-7988"), true);
+  assert.equal(numberIsBought("ordered", "voipms:2393827119", "3612267988"), false);
 });
 
 test("a number search can target the whole number, its start, or its end", () => {

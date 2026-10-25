@@ -8,8 +8,8 @@ export function normalizeRequestedDid(raw: string) {
 
 export function readDids(body: unknown, limit = 20): ListedDid[] {
   if (!body || typeof body !== "object") return [];
-  const dids = (body as { dids?: unknown }).dids;
-  if (!Array.isArray(dids)) return [];
+  const listed = (body as { dids?: unknown }).dids;
+  const dids = Array.isArray(listed) ? listed : listed && typeof listed === "object" ? [listed] : [];
   const rows = dids.map((item) => {
     if (typeof item === "string") return { did: normalizeRequestedDid(item), ratecenter: "", state: "", monthly: "" };
     const row = item as { did?: unknown; ratecenter?: unknown; state?: unknown; province?: unknown; monthly?: unknown; perminute_monthly?: unknown };

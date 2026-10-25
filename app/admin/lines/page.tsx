@@ -24,6 +24,7 @@ type LineRow = {
 
 const STATUS: Record<string, string> = {
   ordered: "Number bought",
+  not_on_carrier: "Not on the phone company",
   trunk_live: "Trunk added on the phone system",
   trunk_waiting: "Waiting for the trunk to be finished",
   trunk_done: "Marked done on the 3CX server",

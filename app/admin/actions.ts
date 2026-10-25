@@ -182,8 +182,10 @@ export async function orderSavedNumber(formData: FormData) {
   if (!payload.did) redirect("/admin/requests?error=This%20request%20has%20no%20specific%20number%20to%20order.");
   const { purchaseNumber } = await import("@/lib/lines");
   const result = await purchaseNumber({ requestId: id, userId: row.user_id, did: payload.did });
-  const status = result.ok ? "ordered" : "exception";
-  database().prepare("UPDATE account_requests SET status = ?, staff_note = ? WHERE id = ?").run(status, result.message, id);
+  const { carrierDidRef } = await import("@/lib/number-order");
+  const status = result.ok || result.pending ? "ordered" : "exception";
+  const ref = result.ok ? carrierDidRef(payload.did) : "";
+  database().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(status, result.message, ref, id);
   audit(user.email, "request.order", `${id}:${status}`);
   redirect("/admin/requests");
 }
@@ -208,7 +210,24 @@ export async function setRequestStatus(formData: FormData) {
   const note = String(formData.get("staff_note") || "").slice(0, 400);
   const allowed = new Set(["requested", "submitted", "ordered", "completed", "exception", "cancelled"]);
   if (!allowed.has(status)) redirect("/admin/requests?error=Unknown%20status.");
-  getDb().prepare("UPDATE account_requests SET status = ?, staff_note = ? WHERE id = ?").run(status, note, id);
+  const row = getDb().prepare("SELECT kind, payload, provider_ref FROM account_requests WHERE id = ?").get(id) as { kind: string; payload: string; provider_ref: string } | undefined;
+  if (!row) redirect("/admin/requests?error=That%20request%20was%20not%20found.");
+  let providerRef = row.provider_ref;
+  if (row.kind === "number" && (status === "ordered" || status === "completed")) {
+    let did = "";
+    try {
+      did = String((JSON.parse(row.payload) as { did?: string }).did || "");
+    } catch {
+      did = "";
+    }
+    const { lookupOwnedDid } = await import("@/lib/carriers");
+    const { carrierDidRef } = await import("@/lib/number-order");
+    const owned = await lookupOwnedDid(did);
+    if (!owned.ok) redirect(`/admin/requests?error=${encodeURIComponent(`VoIP.ms could not be checked (${owned.message}). The status was not changed.`)}`);
+    if (!owned.owned || !carrierDidRef(did)) redirect(`/admin/requests?error=${encodeURIComponent("VoIP.ms does not have this number. The status was not changed. Use Buy this number.")}`);
+    providerRef = carrierDidRef(did);
+  }
+  getDb().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(status, note, providerRef, id);
   audit(user.email, "request.status", `${id}:${status}`);
   redirect("/admin/requests");
 }

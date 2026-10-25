@@ -8,9 +8,10 @@ import { flagOn, getDb } from "@/lib/db";
 import { paidPlan } from "@/lib/pbx";
 import { planAllows } from "@/lib/plan-features";
 import { inventoryReady } from "@/lib/carriers";
-import { numberPurchaseMode } from "@/lib/number-order";
+import { customerNumberStatus, numberPurchaseMode } from "@/lib/number-order";
 import { formatAddress, getEmergency, unitTypes, type EmergencyAddress } from "@/lib/e911";
-import { customerMessage, customerRequestStatus } from "@/lib/customer-message";
+import { customerMessage } from "@/lib/customer-message";
+import { reconcileBoughtNumbers } from "@/lib/number-purchase";
 import { loadSite } from "@/lib/site";
 
 const E911: Record<string, string> = {
@@ -29,8 +30,9 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
   const open = flagOn("numbers.search");
   const included = planAllows(paidPlan(user.id), "numbers");
   const address = getEmergency(user.id);
-  const rows = getDb().prepare("SELECT id, payload, status, staff_note, created_at FROM account_requests WHERE user_id = ? AND kind = 'number' ORDER BY id DESC").all(user.id) as { id: number; payload: string; status: string; staff_note: string; created_at: string }[];
-  const lines = getDb().prepare("SELECT did, e911_status, e911_message FROM phone_lines WHERE user_id = ? ORDER BY id DESC").all(user.id) as { did: string; e911_status: string; e911_message: string }[];
+  await reconcileBoughtNumbers(user.id);
+  const rows = getDb().prepare("SELECT id, payload, status, provider_ref, created_at FROM account_requests WHERE user_id = ? AND kind = 'number' ORDER BY id DESC").all(user.id) as { id: number; payload: string; status: string; provider_ref: string; created_at: string }[];
+  const lines = getDb().prepare("SELECT did, status, e911_status, e911_message FROM phone_lines WHERE user_id = ? ORDER BY id DESC").all(user.id) as { did: string; status: string; e911_status: string; e911_message: string }[];
   const labels = Object.fromEntries(["numbersCountryLabel", "numbersStateLabel", "numbersRateLabel", "numbersRatePlaceholder", "numbersSearchLabel", "numbersEmpty", "numbersRequest", "numbersBuy", "numbersLiveOff", "numbersDetailLabel", "numbersDetailPlaceholder", "numbersModeLabel", "numbersQueryNumber", "numbersQueryPrefix", "numbersQuerySuffix"].map((key) => [key, text(key)]));
   const purchase = numberPurchaseMode(flagOn("numbers.live_order"), flagOn("numbers.auto_order"));
   return (
@@ -41,6 +43,7 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
           <div className="wrap" style={{ maxWidth: 760 }}>
             <AccountNav pathname="/account/numbers" />
             {params.saved === "ordered" ? <p className="form-feedback">{text("numbersOrdered")}</p> : null}
+            {params.saved === "pending" ? <p className="form-feedback">The order was sent. This number stays unmarked until the phone company lists it.</p> : null}
             {params.saved === "held" ? <p className="form-feedback">{text("numbersHeld")}</p> : null}
             {params.saved === "1" ? <p className="form-feedback">{text("numbersSaved")}</p> : null}
             {params.address ? <p className="form-feedback">{text("e911Saved")}</p> : null}
@@ -80,11 +83,11 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
             </form>
             {!included ? <div className="contact-form"><p>Business numbers are not included on your plan.</p></div> : open ? <NumberSearch live={flagOn("numbers.live_search") && inventoryReady()} automatic={purchase === "automatic"} copy={labels} /> : <div className="contact-form"><p>{text("numbersClosed")}</p></div>}
             <div className="faq-list" style={{ marginTop: 28 }}>
-              {lines.map((line) => <p key={line.did}>{line.did} · {E911[line.e911_status] || "In progress"}</p>)}
+              {lines.map((line) => <p key={line.did}>{line.did} · {line.status === "not_on_carrier" ? "Not on the phone company" : (E911[line.e911_status] || "In progress")}</p>)}
               {rows.map((row) => {
                 const payload = JSON.parse(row.payload) as { did?: string; detail?: string; emergency?: EmergencyAddress };
                 const where = payload.emergency ? formatAddress(payload.emergency) : "No emergency address";
-                return <p key={row.id}>{customerRequestStatus(row.status)} · {payload.did || payload.detail} · {where}</p>;
+                return <p key={row.id}>{customerNumberStatus(row.status, row.provider_ref, payload.did || "")} · {payload.did || payload.detail} · {where}</p>;
               })}
             </div>
           </div>
