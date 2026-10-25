@@ -120,6 +120,18 @@ export function numbersInRanges(ranges: { from: number; to: number }[]) {
   return numbers;
 }
 
+export function keptRange(start: number, from?: number, to?: number) {
+  if (!Number.isInteger(from) || !Number.isInteger(to) || (to as number) < (from as number) || (from as number) <= 0) return undefined;
+  if ((to as number) < start) return undefined;
+  return { from: Math.max(from as number, start), to: to as number };
+}
+
+export function replacementExtension(current: string, start: number, taken: string[], userId: number, ranges: AssignedRange[], plan: ExtensionPlan) {
+  const numeric = Number(current);
+  if (Number.isInteger(numeric) && numeric >= start && !taken.includes(current)) return current;
+  return chooseExtension(userId, [...taken, current], [], plan, ranges);
+}
+
 export function chooseExtension(userId: number, taken: string[], customerIds: number[], plan: ExtensionPlan = defaultExtensionPlan, ranges?: AssignedRange[]) {
   const used = new Set(taken);
   const list = ranges ?? customerIds.map((id) => ({ id, ...extensionRange(id, plan) }));

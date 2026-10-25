@@ -5,7 +5,7 @@ import { customerMessage, customerRequestStatus } from "../lib/customer-message.
 import { didMatches, parseDigitSearch } from "../lib/did-search.ts";
 import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
 import { numberPurchaseMode } from "../lib/number-order.ts";
-import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, normalizeExtensionPlan } from "../lib/extension-numbers.ts";
+import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { pbxAccessMessage, roleFromToken } from "../lib/pbx-access.ts";
 import { readRateCenters, regionAllowed } from "../lib/places.ts";
@@ -116,6 +116,18 @@ test("each plan reserves its own extension count, and an existing range stays pu
   assert.equal(chooseExtension(1, ["510", "511", "512", "513", "514"], [], plan, kept), "525");
   const grown = assignBlocks(510, [{ id: 1, seats: 10, from: 510, to: 514 }]);
   assert.deepEqual(grown, [{ id: 1, from: 510, to: 519 }]);
+});
+
+test("a starting number of 500 skips extensions already used below it", () => {
+  assert.equal(keptRange(500, 100, 123), undefined);
+  assert.deepEqual(keptRange(500, 510, 514), { from: 510, to: 514 });
+  assert.deepEqual(keptRange(500, 490, 510), { from: 500, to: 510 });
+  const plan = { start: 500, block: 5, span: 50, ringStart: 800, queueStart: 900, groupSpan: 20 };
+  const ranges = assignBlocks(500, [{ id: 3, seats: 5 }]);
+  assert.deepEqual(ranges, [{ id: 3, from: 500, to: 504 }]);
+  assert.equal(replacementExtension("122", 500, ["122", "123"], 3, ranges, plan), "500");
+  assert.equal(chooseExtension(3, ["122", "123", "500"], [], plan, ranges), "501");
+  assert.equal(replacementExtension("501", 500, ["122"], 3, ranges, plan), "501");
 });
 
 test("a customer never sees a partner or integration error", () => {

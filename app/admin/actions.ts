@@ -216,7 +216,7 @@ export async function setRequestStatus(formData: FormData) {
 export async function saveExtensionPlan(formData: FormData): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
   const user = await staff("settings.phone");
   const { extensionPlanFromFields } = await import("@/lib/extension-numbers");
-  const { readExtensionPlan } = await import("@/lib/extension-plan");
+  const { readExtensionPlan, shiftPendingExtensions } = await import("@/lib/extension-plan");
   const current = readExtensionPlan();
   const parsed = extensionPlanFromFields({
     start: String(formData.get("start") || ""),
@@ -234,10 +234,12 @@ export async function saveExtensionPlan(formData: FormData): Promise<{ ok: true;
   } else {
     writeDoc("extension_plan", parsed.plan, user.email);
   }
+  const moved = shiftPendingExtensions(parsed.plan);
   revalidatePath("/admin/phone");
+  const shifted = moved.length ? ` ${moved.length} ${moved.length === 1 ? "person was" : "people were"} not on the phone system yet and now ${moved.length === 1 ? "starts" : "start"} at ${parsed.plan.start} or the next free number.` : "";
   return {
     ok: true,
-    message: `Extension numbers saved. People start at ${parsed.plan.start}. Ring groups start at ${parsed.plan.ringStart}. Queues start at ${parsed.plan.queueStart}.`,
+    message: `Extension numbers saved. People start at ${parsed.plan.start}. Ring groups start at ${parsed.plan.ringStart}. Queues start at ${parsed.plan.queueStart}.${shifted}`,
   };
 }
 

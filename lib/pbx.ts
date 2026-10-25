@@ -1,8 +1,8 @@
 import crypto from "crypto";
 import { pbxRequest } from "./carriers";
 import { flagOn, getDb, readDoc } from "./db";
-import { chooseExtension, extensionRange } from "./extension-numbers";
-import { persistNewExtensionRanges, planExtensionRanges, readExtensionPlan } from "./extension-plan";
+import { chooseExtension, extensionRange, replacementExtension } from "./extension-numbers";
+import { persistNewExtensionRanges, planExtensionRanges, readExtensionPlan, shiftPendingExtensions } from "./extension-plan";
 import { idFromPbx } from "./pbx-id";
 import { extensionCapacity, normalizePlan } from "./plan-features";
 import type { Plan } from "./types";
@@ -87,12 +87,25 @@ export function paidPlan(userId: number) {
 async function ensureDepartment(userId: number) {
   const database = getDb();
   const existing = database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department | undefined;
-  if (existing?.xapi_id) return existing;
   const reserved = planExtensionRanges();
   persistNewExtensionRanges(reserved.ranges);
   const match = reserved.ranges.find((range) => range.id === userId);
   const fallback = extensionRange(userId, reserved.plan);
   const range = match || fallback;
+  if (existing?.xapi_id) {
+    const currentFrom = Number(existing.number_from);
+    const currentTo = Number(existing.number_to);
+    const nextFrom = Number.isInteger(currentFrom) && currentFrom > 0 ? Math.min(currentFrom, range.from) : range.from;
+    const nextTo = Number.isInteger(currentTo) && currentTo >= nextFrom ? Math.max(currentTo, range.to) : range.to;
+    if (String(nextFrom) !== existing.number_from || String(nextTo) !== existing.number_to) {
+      const widened = await pbxRequest(`Groups(${existing.xapi_id})`, {
+        method: "PATCH",
+        body: { Id: existing.xapi_id, UserNumberFrom: String(nextFrom), UserNumberTo: String(nextTo) },
+      });
+      if (widened.ok) database.prepare("UPDATE pbx_departments SET number_from = ?, number_to = ? WHERE user_id = ?").run(String(nextFrom), String(nextTo), userId);
+    }
+    return database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department;
+  }
   const name = `SautiCall ${userId}`;
   const found = await pbxRequest(`Groups?$filter=${encodeURIComponent(`Name eq '${name}'`)}&$select=Id,Name`);
   const listed = idFromPbx(readList(found.body)[0], found.location);
@@ -164,7 +177,7 @@ async function routeDepartment(department: Department) {
 
 export async function provisionExtension(id: number) {
   const database = getDb();
-  const row = database.prepare("SELECT * FROM pbx_extensions WHERE id = ?").get(id) as ExtensionRow | undefined;
+  let row = database.prepare("SELECT * FROM pbx_extensions WHERE id = ?").get(id) as ExtensionRow | undefined;
   if (!row) return { ok: false, message: "That person was not found." };
   if (row.xapi_id) return { ok: true, message: "Already on the phone system." };
   if (!flagOn("pbx.live_provision")) {
@@ -172,8 +185,16 @@ export async function provisionExtension(id: number) {
     return { ok: false, message: "Creating people on the phone system is turned off." };
   }
   try {
+    const plan = readExtensionPlan();
+    if (!(Number(row.number) >= plan.start)) {
+      shiftPendingExtensions(plan);
+      const refreshed = database.prepare("SELECT * FROM pbx_extensions WHERE id = ?").get(id) as ExtensionRow | undefined;
+      if (!refreshed) return { ok: false, message: "That person was not found." };
+      row = refreshed;
+    }
+    if (!(Number(row.number) >= plan.start)) return { ok: false, message: "No free extension is left from the starting number." };
     const department = await ensureDepartment(row.user_id);
-    const created = await pbxRequest("Users", {
+    let created = await pbxRequest("Users", {
       method: "POST",
       body: {
         Id: 0,
@@ -193,7 +214,36 @@ export async function provisionExtension(id: number) {
       const found = await pbxRequest(`Users?$filter=${encodeURIComponent(`Number eq '${row.number}'`)}&$select=Id,Number,EmailAddress`);
       const match = readList(found.body).find((item) => item.EmailAddress && item.EmailAddress.toLowerCase() === row.email.toLowerCase());
       xapiId = idFromPbx(match);
-      if (!xapiId) throw new Error(`Extension ${row.number} is already used on the phone system.`);
+      if (!xapiId) {
+        const taken = [
+          ...(database.prepare("SELECT number FROM pbx_extensions").all() as { number: string }[]),
+          ...(database.prepare("SELECT number FROM call_groups").all() as { number: string }[]),
+        ].map((item) => item.number);
+        const listed = await listPhoneSystemNumbers();
+        if (listed.ok) taken.push(...listed.numbers);
+        const reserved = planExtensionRanges();
+        const next = replacementExtension(row.number, plan.start, taken, row.user_id, reserved.ranges, reserved.plan);
+        if (!next || next === row.number) throw new Error(`Extension ${row.number} is already used on the phone system.`);
+        database.prepare("UPDATE pbx_extensions SET number = ? WHERE id = ? AND xapi_id = 0").run(next, id);
+        row = { ...row, number: next };
+        created = await pbxRequest("Users", {
+          method: "POST",
+          body: {
+            Id: 0,
+            FirstName: row.first_name,
+            LastName: row.last_name,
+            EmailAddress: row.email,
+            Number: row.number,
+            Language: "EN",
+            SendEmailMissedCalls: false,
+            VMEmailOptions: "Notification",
+            Require2FA: false,
+            AccessPassword: row.access_password,
+          },
+        });
+        xapiId = idFromPbx(created.body, created.location);
+        if (!xapiId) throw new Error(created.message || `Extension ${next} is already used on the phone system.`);
+      }
     }
     if (!xapiId) throw new Error(created.message);
     const assigned = await pbxRequest(`Users(${xapiId})`, {

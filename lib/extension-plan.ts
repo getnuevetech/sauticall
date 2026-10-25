@@ -1,5 +1,5 @@
 import { getDb, readDoc } from "./db";
-import { assignBlocks, defaultExtensionPlan, normalizeExtensionPlan, type AssignedRange, type ExtensionPlan, type RangeCustomer } from "./extension-numbers";
+import { assignBlocks, defaultExtensionPlan, keptRange, normalizeExtensionPlan, replacementExtension, type AssignedRange, type ExtensionPlan, type RangeCustomer } from "./extension-numbers";
 import { extensionCapacity, normalizePlans } from "./plan-features";
 import type { Plan } from "./types";
 
@@ -44,13 +44,14 @@ export function planExtensionRanges(): { plan: ExtensionPlan; ranges: AssignedRa
     const numbers = extensions
       .filter((row) => row.user_id === id)
       .map((row) => Number(row.number))
-      .filter((number) => Number.isInteger(number) && number > 0);
-    const knownFrom = saved ? from : numbers.length ? Math.min(...numbers) : undefined;
-    const knownTo = saved ? to : numbers.length ? Math.max(...numbers) : undefined;
-    const width = knownFrom && knownTo ? knownTo - knownFrom + 1 : 0;
+      .filter((number) => Number.isInteger(number) && number >= plan.start);
+    const rawFrom = saved ? from : numbers.length ? Math.min(...numbers) : undefined;
+    const rawTo = saved ? to : numbers.length ? Math.max(...numbers) : undefined;
+    const kept = keptRange(plan.start, rawFrom, rawTo);
+    const width = kept ? kept.to - kept.from + 1 : 0;
     const seats = seatsByUser.get(id) || width;
-    if (seats < 1 && !knownFrom) return [];
-    return [{ id, seats, from: knownFrom, to: knownTo, locked: Boolean(department?.xapi_id) }];
+    if (seats < 1 && !kept) return [];
+    return [{ id, seats, from: kept?.from, to: kept?.to, locked: Boolean(department?.xapi_id && kept) }];
   });
   return { plan, ranges: assignBlocks(plan.start, customers) };
 }
@@ -67,4 +68,31 @@ export function persistNewExtensionRanges(ranges: AssignedRange[]) {
     for (const range of rows) write.run(range.id, `SautiCall ${range.id}`, String(range.from), String(range.to));
   });
   save(ranges);
+}
+
+export function shiftPendingExtensions(plan = readExtensionPlan()) {
+  const database = getDb();
+  const pending = database.prepare(
+    "SELECT id, user_id, number FROM pbx_extensions WHERE xapi_id = 0 AND status NOT IN ('created', 'manual') ORDER BY id",
+  ).all() as { id: number; user_id: number; number: string }[];
+  const below = pending.filter((row) => !(Number(row.number) >= plan.start));
+  if (!below.length) return [] as { id: number; from: string; to: string }[];
+  const reserved = planExtensionRanges();
+  const taken = new Set<string>([
+    ...(database.prepare("SELECT number FROM pbx_extensions").all() as { number: string }[]).map((row) => row.number),
+    ...(database.prepare("SELECT number FROM call_groups").all() as { number: string }[]).map((row) => row.number),
+  ]);
+  const update = database.prepare("UPDATE pbx_extensions SET number = ? WHERE id = ? AND xapi_id = 0");
+  const moved: { id: number; from: string; to: string }[] = [];
+  database.transaction(() => {
+    for (const row of below) {
+      const next = replacementExtension(row.number, plan.start, [...taken], row.user_id, reserved.ranges, reserved.plan);
+      if (!next || next === row.number) continue;
+      update.run(next, row.id);
+      taken.delete(row.number);
+      taken.add(next);
+      moved.push({ id: row.id, from: row.number, to: next });
+    }
+  })();
+  return moved;
 }

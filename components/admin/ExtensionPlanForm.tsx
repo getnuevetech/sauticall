@@ -56,7 +56,7 @@ export function ExtensionPlanForm({ plan }: { plan: ExtensionPlan }) {
   return (
     <form className="contact-form" autoComplete="off" onSubmit={onSubmit}>
       <h3>Extension numbers</h3>
-      <p>These are the next extension numbers. The lowest number that can be saved is 100. People, ring groups, and queues need three different starting numbers. The numbers stay in the boxes until you change them again.</p>
+      <p>The next person is numbered from the first extension. Set that to 500 when 3CX already uses lower numbers such as 122. The lowest number that can be saved is 100. People, ring groups, and queues need three different starting numbers.</p>
       {notice ? <p className="form-feedback">{notice}</p> : null}
       {error ? <p className="form-feedback">{error}</p> : null}
       {clashes.length ? <p className="form-feedback">Person extensions are chosen from {values.start || "the first person number"} upward. Starting {clashes.join(" and ")} can take a number a person would use. Use a ring group and queue number below {values.start}.</p> : null}
