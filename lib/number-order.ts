@@ -19,6 +19,14 @@ export function numberIsBought(status: string, providerRef: string, did: string)
   return (status === "ordered" || status === "completed") && Boolean(ref) && providerRef === ref;
 }
 
+export function customerLineStatus(status: string) {
+  if (status === "trunk_live" || status === "trunk_done") return "Connected for calls";
+  if (status === "trunk_waiting") return "Bought. Connecting this number for calls still needs the team.";
+  if (status === "not_on_carrier") return "Not on the phone company";
+  if (status === "ordered") return "Bought. Connecting this number for calls.";
+  return "In progress";
+}
+
 export function customerNumberStatus(status: string, providerRef: string, did: string) {
   if (status === "ordered" || status === "completed") return numberIsBought(status, providerRef, did) ? "Bought" : "Needs attention";
   const labels: Record<string, string> = {

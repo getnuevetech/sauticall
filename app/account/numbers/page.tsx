@@ -8,7 +8,7 @@ import { flagOn, getDb } from "@/lib/db";
 import { paidPlan } from "@/lib/pbx";
 import { planAllows } from "@/lib/plan-features";
 import { inventoryReady } from "@/lib/carriers";
-import { customerNumberStatus, numberPurchaseMode } from "@/lib/number-order";
+import { customerLineStatus, customerNumberStatus, numberPurchaseMode } from "@/lib/number-order";
 import { formatAddress, getEmergency, unitTypes, type EmergencyAddress } from "@/lib/e911";
 import { customerMessage } from "@/lib/customer-message";
 import { reconcileBoughtNumbers } from "@/lib/number-purchase";
@@ -83,7 +83,7 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
             </form>
             {!included ? <div className="contact-form"><p>Business numbers are not included on your plan.</p></div> : open ? <NumberSearch live={flagOn("numbers.live_search") && inventoryReady()} automatic={purchase === "automatic"} copy={labels} /> : <div className="contact-form"><p>{text("numbersClosed")}</p></div>}
             <div className="faq-list" style={{ marginTop: 28 }}>
-              {lines.map((line) => <p key={line.did}>{line.did} · {line.status === "not_on_carrier" ? "Not on the phone company" : (E911[line.e911_status] || "In progress")}</p>)}
+              {lines.map((line) => <p key={line.did}>{line.did} · {customerLineStatus(line.status)}{line.status === "not_on_carrier" ? "" : ` · ${E911[line.e911_status] || "In progress"}`}</p>)}
               {rows.map((row) => {
                 const payload = JSON.parse(row.payload) as { did?: string; detail?: string; emergency?: EmergencyAddress };
                 const where = payload.emergency ? formatAddress(payload.emergency) : "No emergency address";

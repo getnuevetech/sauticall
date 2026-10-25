@@ -4,7 +4,9 @@ import { clientEmail, clientPlace, personName, readVoipClientId } from "../lib/c
 import { customerMessage, customerRequestStatus } from "../lib/customer-message.ts";
 import { didMatches, parseDigitSearch } from "../lib/did-search.ts";
 import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
-import { carrierDidRef, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
+import { openingBalance, readClientBalance } from "../lib/client-funding.ts";
+import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
+import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
@@ -210,6 +212,8 @@ test("an extension welcome explains 3CX sign-in and keeps the app password off t
   assert.match(text, /3CX phone app/);
   assert.match(text, /desk phone/);
   assert.match(text, /SautiCall support/);
+  assert.match(text, /buy a business number/i);
+  assert.match(text, /inbound and outbound calls/);
   assert.equal(text.includes("u2dPtRSyZ"), false);
   assert.equal(welcomeCustomerNote(true), "A setup email was sent to this address.");
   assert.match(welcomeCustomerNote(false), /could not be sent/);
@@ -269,8 +273,29 @@ test("a customer never sees a partner or integration error", () => {
   assert.equal(customerRequestStatus("ordered"), "Bought");
 });
 
+test("opening balances match the plan, and an outbound rule stays limited to that customer", () => {
+  assert.equal(openingBalance("Solo"), 5);
+  assert.equal(openingBalance("small business"), 10);
+  assert.equal(openingBalance("Team"), 15);
+  assert.equal(openingBalance("Custom"), 0);
+  assert.equal(readClientBalance({ balance: "12.50" }), 12.5);
+  assert.equal(readClientBalance({}), null);
+  const rule = outboundRuleBody({ name: "SautiCall 3612267988", trunkId: 4, callerId: "+13612267988", from: "514", to: "523", priority: 3 });
+  assert.deepEqual(rule.DNRanges, [{ From: "514", To: "523" }]);
+  assert.equal(rule.Routes[0].TrunkId, 4);
+  assert.equal(nextOutboundPriority({ value: [{ Priority: 2 }, { Priority: 8 }] }), 9);
+  assert.equal(outboundScopeVerdict(rule, "514", "523"), "scoped");
+  assert.equal(outboundScopeVerdict({ DNRanges: [] }, "514", "523"), "open");
+  assert.equal(outboundScopeVerdict({ Name: "SautiCall" }, "514", "523"), "unknown");
+  assert.equal(customerLineStatus("ordered"), "Bought. Connecting this number for calls.");
+  assert.equal(customerLineStatus("trunk_waiting"), "Bought. Connecting this number for calls still needs the team.");
+  assert.equal(customerLineStatus("trunk_live"), "Connected for calls");
+});
+
 test("a created 3CX user id can come from the Location header", () => {
   assert.equal(idFromPbx({}, "https://pbx.example.com/xapi/v1/Users(38)"), 38);
+  assert.equal(idFromPbx({}, "https://pbx.example.com/xapi/v1/OutboundRules(19)"), 19);
+  assert.equal(idFromPbx({}, "https://pbx.example.com/xapi/v1/Trunks(7)"), 7);
   assert.equal(idFromPbx({ Id: 12 }, ""), 12);
   assert.equal(idFromPbx(null, ""), 0);
 });

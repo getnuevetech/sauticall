@@ -141,6 +141,9 @@ function migrate(database: Database.Database) {
   if (lineCols.size && !lineCols.has("e911_json")) database.exec("ALTER TABLE phone_lines ADD COLUMN e911_json TEXT NOT NULL DEFAULT ''");
   if (lineCols.size && !lineCols.has("e911_status")) database.exec("ALTER TABLE phone_lines ADD COLUMN e911_status TEXT NOT NULL DEFAULT 'missing'");
   if (lineCols.size && !lineCols.has("e911_message")) database.exec("ALTER TABLE phone_lines ADD COLUMN e911_message TEXT NOT NULL DEFAULT ''");
+  const clientCols = new Set((database.prepare("PRAGMA table_info(voip_clients)").all() as { name: string }[]).map((column) => column.name));
+  if (clientCols.size && !clientCols.has("funded_cents")) database.exec("ALTER TABLE voip_clients ADD COLUMN funded_cents INTEGER NOT NULL DEFAULT 0");
+  if (clientCols.size && !clientCols.has("funded_plan")) database.exec("ALTER TABLE voip_clients ADD COLUMN funded_plan TEXT NOT NULL DEFAULT ''");
   database.exec(`
     CREATE TABLE IF NOT EXISTS pbx_departments (
       user_id INTEGER PRIMARY KEY,
@@ -202,7 +205,9 @@ function migrate(database: Database.Database) {
       email TEXT NOT NULL DEFAULT '',
       password TEXT NOT NULL DEFAULT '',
       last_message TEXT NOT NULL DEFAULT '',
-      updated_at TEXT NOT NULL DEFAULT ''
+      updated_at TEXT NOT NULL DEFAULT '',
+      funded_cents INTEGER NOT NULL DEFAULT 0,
+      funded_plan TEXT NOT NULL DEFAULT ''
     );
     CREATE TABLE IF NOT EXISTS voip_subaccounts (
       user_id INTEGER PRIMARY KEY,

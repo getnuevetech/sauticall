@@ -6,6 +6,6 @@ function readId(body: unknown) {
 export function idFromPbx(body: unknown, location = "") {
   const direct = readId(body);
   if (direct) return direct;
-  const match = /(?:Users|Groups|RingGroups|Queues)\((\d+)\)/i.exec(location);
+  const match = /(?:Users|Groups|RingGroups|Queues|Trunks|OutboundRules|InboundRules)\((\d+)\)/i.exec(location);
   return match ? Number(match[1]) : 0;
 }

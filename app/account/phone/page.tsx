@@ -51,6 +51,9 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
   const activeRows = rows.filter((row) => row.status !== "removed");
   const hours = getDb().prepare("SELECT name, open_time, close_time, last_message FROM pbx_departments WHERE user_id = ?").get(user.id) as { name: string; open_time: string; close_time: string; last_message: string } | undefined;
   const companyName = acceptedDepartmentName(hours?.name || "");
+  const lines = getDb().prepare("SELECT status FROM phone_lines WHERE user_id = ?").all(user.id) as { status: string }[];
+  const connected = lines.some((line) => line.status === "trunk_live" || line.status === "trunk_done");
+  const bought = lines.some((line) => line.status !== "not_on_carrier");
   const groups = getDb().prepare("SELECT * FROM call_groups WHERE user_id = ? ORDER BY kind, id").all(user.id) as CallGroup[];
   const saved = params.saved === "department" ? "Company name saved. People are added to this department." : params.saved === "group" ? text("phoneGroupSaved") : params.saved === "hours" ? text("phoneHoursSaved") : params.saved === "removed" ? "This person was removed. Their name, email, and extension stay in the record." : params.saved ? text("phoneSaved") : "";
   return (
@@ -62,6 +65,7 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
             <AccountNav pathname="/account/phone" />
             {saved ? <p className="form-feedback">{saved}{params.note ? ` ${customerMessage(params.note, "")}` : ""}</p> : null}
             {params.error ? <p className="form-feedback">{customerMessage(params.error, "Something went wrong. Please try again, or contact support.")}</p> : null}
+            {plan && !connected ? <p className="form-feedback">{bought ? "Your number is bought. Connecting it for calls is still being finished." : "Buy a business number before these extensions can make or receive calls."} {bought ? null : <a href="/account/numbers">Buy a number</a>}</p> : null}
             {!plan ? <div className="contact-form"><p>{text("phoneClosed")}</p></div> : (
               <>
                 <p>{plan.name} includes {limit} {limit === 1 ? "person" : "people"}. {activeRows.length} added.</p>

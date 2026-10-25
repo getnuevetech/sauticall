@@ -18,6 +18,9 @@ export default async function AccountHome() {
   const setupPayload = setup ? JSON.parse(setup.payload) as { plan?: string; prompt?: string } : null;
   const minutes = minuteBalance(user.id);
   const plan = paidPlan(user.id);
+  const lines = getDb().prepare("SELECT status FROM phone_lines WHERE user_id = ?").all(user.id) as { status: string }[];
+  const connected = lines.some((line) => line.status === "trunk_live" || line.status === "trunk_done");
+  const bought = lines.some((line) => line.status !== "not_on_carrier");
   return (
     <Frame pathname="/account">
       <main>
@@ -25,6 +28,12 @@ export default async function AccountHome() {
         <section className="section">
           <div className="wrap">
             <AccountNav pathname="/account" />
+            {connected ? null : (
+              <p className="form-feedback">
+                {bought ? "Your number is bought. Connecting it for calls is still being finished." : "Buy a business number before this account can make or receive calls. An extension by itself cannot place or receive calls."}
+                {bought ? null : <> <Link className="text-link" href="/account/numbers">Buy a number</Link></>}
+              </p>
+            )}
             <div className="cta-pair" style={{ marginBottom: 28 }}>
               <Link className="btn btn-primary" href="/account/billing">Choose a plan</Link>
               <Link className="btn btn-secondary" href="/account/phone">Phone system</Link>

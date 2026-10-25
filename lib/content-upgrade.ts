@@ -63,6 +63,22 @@ export function upgradeContent(database: Database.Database) {
         flag.description = "Search VoIP.ms inventory so a customer can request a real available number.";
         changed = true;
       }
+      if (flag.key === "numbers.live_order" && !flag.enabled && flag.description === "Allow a VoIP.ms order for a saved number request. This spends carrier balance.") {
+        flag.enabled = true;
+        flag.description = "Number search and buying stay live. A saved number can be ordered from VoIP.ms. This spends carrier balance.";
+        changed = true;
+      }
+      if (flag.key === "numbers.auto_order" && !flag.enabled && flag.description === "When live number ordering is on, buy the number as soon as the customer requests it. Leave this off and staff buy it from Number and transfer requests.") {
+        flag.enabled = true;
+        flag.label = "Customers buy numbers themselves";
+        flag.description = "Customers buy a number themselves, with no admin step. Turn this off and staff buy it from Number and transfer requests. Live number ordering stays on either way.";
+        changed = true;
+      }
+      if (flag.key === "pbx.live_trunk" && !flag.enabled && flag.description === "When a number is bought, try to add it as a SIP trunk on that customer's department in 3CX. If this is off, or 3CX does not accept the trunk, the team finishes it on the 3CX server.") {
+        flag.enabled = true;
+        flag.description = "When a number is bought, route it through the customer's VoIP.ms SIP account and try to add the 3CX trunk, the inbound route, and an outbound rule limited to that customer's extensions. If a step is not accepted, it is logged for the team.";
+        changed = true;
+      }
     }
     if (changed) writeJson(database, "flags", flags);
   }
@@ -352,7 +368,8 @@ function cleanCustomerString(text: string) {
   const known: Record<string, string> = {
     "Connect supported office IP phones, or call from the familiar 3CX desktop, browser, and mobile apps. Mix devices to fit your team.": "Connect supported office IP phones, or call from desktop, browser, and mobile apps. Mix devices to fit your team.",
     "Employees can use compatible IP desk phones in the office or 3CX apps on their computers and smartphones. Calls stay associated with your business phone setup, not a personal device number.": "Employees can use compatible IP desk phones in the office or phone apps on their computers and smartphones. Calls stay associated with your business phone setup, not a personal device number.",
-    "Search and request available VoIP.ms numbers. SautiCall connects the acquired number to the appropriate inbound and outbound 3CX trunk configuration after validating capacity and authorization.": "Search for an available business number. SautiCall connects it for inbound and outbound calls after the request is approved.",
+    "Search and request available VoIP.ms numbers. SautiCall connects the acquired number to the appropriate inbound and outbound 3CX trunk configuration after validating capacity and authorization.": "Search for an available business number. When direct buying is on, it is bought right away and connected for inbound and outbound calls.",
+    "Search for an available business number. SautiCall connects it for inbound and outbound calls after the request is approved.": "Search for an available business number. When direct buying is on, it is bought right away and connected for inbound and outbound calls.",
     "Start a transfer in your dashboard, upload your authorization and carrier details, and follow every state. VoIP.ms is the primary porting route when its API supports the case, with staff intervention for exceptions.": "Start a transfer in your account, add the details from your current phone bill, and follow each step. The team steps in when a transfer needs a person.",
     "AI handling is configured from your SautiCall account, within supported 3CX capabilities and approved access permissions.": "AI handling is configured from your SautiCall account, with the permissions an administrator has approved.",
     "Supported 3CX users, departments, extensions, and route configuration via APIs.": "People, departments, extensions, and call routing are set up for you.",

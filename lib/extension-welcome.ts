@@ -19,6 +19,8 @@ export function extensionWelcomeText(input: { firstName: string; number: string;
     `3. Your extension is ${input.number}.`,
     "",
     "For a 3CX desk phone, contact SautiCall support and we will help you set it up.",
+    "",
+    "This extension cannot make or receive calls until you buy a business number in your SautiCall account. After that number is bought, it is connected for inbound and outbound calls.",
   ].join("\n");
 }
 

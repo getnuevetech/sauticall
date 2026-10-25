@@ -22,7 +22,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
   if (!person) notFound();
   const plan = paidPlan(person.id);
   const lines = getDb().prepare("SELECT did, status, e911_status FROM phone_lines WHERE user_id = ? ORDER BY id").all(person.id) as { did: string; status: string; e911_status: string }[];
-  const voipClient = getDb().prepare("SELECT client_id, email, last_message FROM voip_clients WHERE user_id = ?").get(person.id) as { client_id: string; email: string; last_message: string } | undefined;
+  const voipClient = getDb().prepare("SELECT client_id, email, last_message, funded_cents, funded_plan FROM voip_clients WHERE user_id = ?").get(person.id) as { client_id: string; email: string; last_message: string; funded_cents: number; funded_plan: string } | undefined;
   const lineAccount = getDb().prepare("SELECT account FROM voip_subaccounts WHERE user_id = ?").get(person.id) as { account: string } | undefined;
   const people = getDb().prepare("SELECT number, former_number, first_name, last_name, email, status FROM pbx_extensions WHERE user_id = ? ORDER BY id").all(person.id) as { number: string; former_number: string; first_name: string; last_name: string; email: string; status: string }[];
   const seeTickets = userCan(actor, "tickets.view") || userCan(actor, "tickets.view_all") || userCan(actor, "tickets.reply");
@@ -56,6 +56,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
           <h3>VoIP.ms client</h3>
           <p>{voipClient?.client_id ? `Client ${voipClient.client_id}` : "No client yet."}{lineAccount?.account ? ` · Line ${lineAccount.account}` : ""}</p>
           {voipClient?.email ? <p>{voipClient.email}</p> : null}
+          {voipClient?.funded_cents ? <p>Opening balance ${voipClient.funded_cents / 100} for {voipClient.funded_plan}.</p> : <p>No opening balance has been added yet. Solo is $5, Small Business is $10, and Team is $15.</p>}
           {voipClient?.last_message ? <p>{voipClient.last_message}</p> : null}
           <p>This client is created when the customer signs up. Customers do not see it. Their numbers are bought onto the line account linked to this client.</p>
           <form action={provisionVoipClient}><input type="hidden" name="id" value={person.id} /><button className="btn btn-secondary" type="submit">{voipClient?.client_id ? "Refresh the VoIP.ms client" : "Create the VoIP.ms client"}</button></form>

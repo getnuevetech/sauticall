@@ -137,11 +137,12 @@ export async function provisionVoipClient(formData: FormData) {
   const path = accountPath(id, "customers");
   const target = getDb().prepare("SELECT id FROM users WHERE id = ? AND role = 'customer'").get(id);
   if (!target) back("/admin/customers", "That customer was not found.");
-  const { ensureVoipClient } = await import("@/lib/voip-client");
+  const { ensureVoipClient, fundOpeningBalance } = await import("@/lib/voip-client");
   const result = await ensureVoipClient(id, true);
+  const funded = result.ok ? await fundOpeningBalance(id, result.clientId) : null;
   audit(actor.email, "voip.client", `${id}:${result.ok ? result.clientId : "failed"}`);
   if (!result.ok) back(path, result.message);
-  redirect(`${path}?saved=${encodeURIComponent(`VoIP.ms client ${result.clientId} is linked.`)}`);
+  redirect(`${path}?saved=${encodeURIComponent(`VoIP.ms client ${result.clientId} is linked. ${funded?.message || ""}`.trim())}`);
 }
 
 export async function searchTicketCustomers(query: string) {
