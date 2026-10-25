@@ -20,6 +20,7 @@ export type Plan = {
   desc: string;
   units: string;
   includedMinutes: number;
+  carrierCredit: number;
   seats?: number;
   features: string[];
   note: string;

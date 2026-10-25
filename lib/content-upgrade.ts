@@ -98,6 +98,11 @@ export function upgradeContent(database: Database.Database) {
         const seeded = defaultPlans.find((item) => item.name === plan.name);
         plan.includedMinutes = seeded ? seeded.includedMinutes : plan.custom ? 0 : 200;
       }
+      if (plan.carrierCredit == null) {
+        const seeded = defaultPlans.find((item) => item.name === plan.name);
+        plan.carrierCredit = seeded ? seeded.carrierCredit : 0;
+        changed = true;
+      }
       if (plan.note === "AI receptionist available as add-on" || plan.note === "Base plan. Any-language AI starts on the plans above.") {
         plan.note = "A single person, without the AI receptionist.";
         changed = true;

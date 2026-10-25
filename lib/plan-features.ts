@@ -101,6 +101,7 @@ export function normalizePlans(plans: Plan[]) {
       multilingual: features.includes("ai_any_language"),
       base: false,
       includedMinutes: Math.max(0, Math.round(Number(plan.includedMinutes) || 0)),
+      carrierCredit: Math.max(0, Math.round((Number(plan.carrierCredit) || 0) * 100) / 100),
       price: custom ? 0 : Math.max(0, Number(plan.price) || 0),
       priceLabel: custom ? plan.priceLabel || "Custom" : plan.priceLabel || "",
       units: custom && seats === 0 ? plan.units || "Scoped with you" : `${seats} ${seats === 1 ? "person" : "people"}`,

@@ -16,6 +16,7 @@ function blankPlan(): Plan {
     desc: "",
     units: "1 person",
     includedMinutes: 0,
+    carrierCredit: 0,
     seats: 1,
     features: ["numbers", "softphone", "voicemail"],
     note: "",
@@ -60,6 +61,7 @@ export function PlanEditor({ initial }: { initial: Plan[] }) {
             <label>Monthly price <input type="number" min={0} step="1" value={plan.custom ? 0 : plan.price} disabled={plan.custom} onChange={(event) => update(index, { price: Number(event.target.value) })} /></label>
             <label>Extensions included <input type="number" min={0} max={500} step="1" value={plan.seats ?? 1} onChange={(event) => update(index, { seats: Number(event.target.value) })} /></label>
             <label>Outbound minutes each month <input type="number" min={0} step="1" value={plan.includedMinutes} onChange={(event) => update(index, { includedMinutes: Number(event.target.value) })} /></label>
+            <label>Phone company balance <input type="number" min={0} step="0.01" value={plan.carrierCredit || 0} onChange={(event) => update(index, { carrierCredit: Number(event.target.value) })} /></label>
           </div>
           <label>Short description <input value={plan.desc} onChange={(event) => update(index, { desc: event.target.value })} /></label>
           <label>Note on the pricing card <input value={plan.note} onChange={(event) => update(index, { note: event.target.value })} /></label>

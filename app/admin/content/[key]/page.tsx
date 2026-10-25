@@ -21,7 +21,7 @@ export default async function ContentPage({ params, searchParams }: { params: Pr
       <>
         <span className="eyebrow">Catalog</span>
         <h2>Plans</h2>
-        <p>Check the features each plan includes. Extensions included, minutes, and price are numbers. A customer who subscribes gets exactly the checked features, and cannot add more people than Extensions included.</p>
+        <p>Check the features each plan includes. Extensions included, minutes, price, and the phone-company balance are numbers. That balance is added to the VoIP.ms client only after a plan payment is confirmed, and only while funding is turned on. A customer who subscribes gets exactly the checked features, and cannot add more people than Extensions included.</p>
         {query.error ? <p className="form-feedback">{query.error}</p> : null}
         {query.saved ? <p className="form-feedback">Plans saved.</p> : null}
         <PlanEditor initial={normalizePlans(JSON.parse(row.json) as Plan[])} />

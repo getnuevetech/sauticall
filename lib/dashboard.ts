@@ -271,13 +271,13 @@ export function dashboardFor(user: Staff) {
     });
     cards.push({
       title: "Trunk tasks",
-      href: "/admin/lines",
+      href: "/admin/trunks",
       kind: "donut",
       slices: slicesFrom(tally(tasks, (task) => task.status), ["open", "done"]),
       empty: "No trunk tasks.",
     });
     const openTasks = tasks.filter((task) => task.status === "open").length;
-    if (openTasks) attention.push({ href: "/admin/lines", title: `${openTasks} trunk${openTasks === 1 ? "" : "s"} to finish on the server`, detail: "3CX did not take the number automatically" });
+    if (openTasks) attention.push({ href: "/admin/trunks", title: `${openTasks} trunk${openTasks === 1 ? "" : "s"} to finish on the server`, detail: "3CX did not take the number automatically" });
     const missingAddress = lines.filter((line) => line.e911_status !== "done").length;
     if (missingAddress) attention.push({ href: "/admin/lines", title: `${missingAddress} emergency address${missingAddress === 1 ? "" : "es"} not finished`, detail: "These numbers still need a completed address" });
   }

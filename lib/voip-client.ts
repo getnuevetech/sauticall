@@ -1,8 +1,9 @@
 import crypto from "crypto";
-import { openingBalance, readClientBalance } from "./client-funding";
+import { planFundAmount, readClientBalance } from "./client-funding";
 import { clientEmail, clientPlace, personName, readVoipClientId } from "./client-profile";
 import { callVoipms, getConnection } from "./carriers";
-import { getDb } from "./db";
+import { flagOn, getDb, readDoc } from "./db";
+import type { Plan } from "./types";
 import { getEmergency } from "./e911";
 import { regionAllowed } from "./places";
 import { ensureSubaccount, getSubaccount, linkSubaccountClient } from "./voip-account";
@@ -152,52 +153,44 @@ export async function ensureVoipClient(userId: number, refresh = false): Promise
   return { ok: true, clientId };
 }
 
-function fundingPlan(userId: number) {
-  const setup = getDb().prepare("SELECT payload FROM account_requests WHERE user_id = ? AND kind = 'setup' ORDER BY id DESC LIMIT 1").get(userId) as { payload: string } | undefined;
-  let selected = "";
-  if (setup) {
-    try {
-      selected = String((JSON.parse(setup.payload) as { plan?: string }).plan || "");
-    } catch {
-      selected = "";
-    }
-  }
-  if (openingBalance(selected) > 0) return selected;
-  const paid = getDb().prepare("SELECT plan_name FROM payment_attempts WHERE user_id = ? AND status = 'paid' AND plan_name != '' ORDER BY id DESC LIMIT 1").get(userId) as { plan_name: string } | undefined;
-  if (paid && openingBalance(paid.plan_name) > 0) return paid.plan_name;
-  return selected;
+function creditFor(planName: string) {
+  const plans = readDoc<Plan[]>("plans") || [];
+  const plan = plans.find((item) => item.name.trim().toLowerCase() === planName.trim().toLowerCase());
+  return { plan: plan?.name || planName.trim(), amount: planFundAmount(plan?.carrierCredit) };
 }
 
-export async function fundOpeningBalance(userId: number, clientId: string) {
-  const existing = getVoipClient(userId);
-  if ((existing?.funded_cents || 0) > 0) return { ok: true as const, message: `Opening balance of $${((existing?.funded_cents || 0) / 100).toFixed(0)} is already on client ${clientId}.` };
-  const plan = fundingPlan(userId);
-  const amount = openingBalance(plan);
+export async function fundPaidPlan(userId: number, planName: string) {
+  if (!flagOn("billing.fund_client")) return { ok: true as const, message: "Funding client accounts is turned off." };
+  const { plan, amount } = creditFor(planName);
   if (!amount) {
-    const message = plan ? `${plan} has no automatic opening balance.` : "No Solo, Small Business, or Team plan was selected, so no opening balance was added.";
-    note(userId, message);
+    const message = plan ? `${plan} has no phone-company balance set, so nothing was added.` : "The paid plan has no phone-company balance set, so nothing was added.";
+    if (getVoipClient(userId)) note(userId, message);
     return { ok: false as const, message };
   }
-  const current = await callVoipms("getResellerBalance", { client: clientId });
+  const client = await ensureVoipClient(userId);
+  if (!client.ok) return client;
+  const existing = getVoipClient(userId);
+  if ((existing?.funded_cents || 0) > 0) return { ok: true as const, message: `A phone-company balance of $${((existing?.funded_cents || 0) / 100).toFixed(2)} is already on client ${client.clientId}.` };
+  const current = await callVoipms("getResellerBalance", { client: client.clientId });
   const balance = current.ok ? readClientBalance(current.body) : null;
   if (balance != null && balance >= amount) {
     getDb().prepare("UPDATE voip_clients SET funded_cents = ?, funded_plan = ? WHERE user_id = ?").run(Math.round(amount * 100), plan, userId);
-    const message = `Client ${clientId} already had $${balance.toFixed(2)}, so the $${amount} ${plan} opening payment was not added again.`;
+    const message = `Client ${client.clientId} already had $${balance.toFixed(2)}, so the $${amount.toFixed(2)} ${plan} balance was not added again.`;
     note(userId, message);
     return { ok: true as const, message };
   }
   const paid = await callVoipms("addPayment", {
-    client: clientId,
+    client: client.clientId,
     payment: amount.toFixed(2),
-    description: `SautiCall ${plan} opening balance`,
+    description: `SautiCall ${plan} plan balance`,
   });
   if (!paid.ok) {
-    const message = `VoIP.ms did not add the $${amount} ${plan} opening balance (${paid.status}).`;
+    const message = `VoIP.ms did not add the $${amount.toFixed(2)} ${plan} balance (${paid.status}).`;
     note(userId, message);
     return { ok: false as const, message };
   }
   getDb().prepare("UPDATE voip_clients SET funded_cents = ?, funded_plan = ? WHERE user_id = ?").run(Math.round(amount * 100), plan, userId);
-  const message = `Client ${clientId} has a $${amount} opening balance for ${plan}.`;
+  const message = `Client ${client.clientId} has a $${amount.toFixed(2)} balance for ${plan}.`;
   note(userId, message);
   return { ok: true as const, message };
 }
@@ -205,13 +198,11 @@ export async function fundOpeningBalance(userId: number, clientId: string) {
 export async function provisionCustomer(userId: number) {
   const client = await ensureVoipClient(userId);
   if (!client.ok) return client;
-  const funded = await fundOpeningBalance(userId, client.clientId);
   const line = await ensureSubaccount(userId, client.clientId);
   if (!line.ok) {
-    note(userId, `${funded.message} ${line.message}`.trim());
+    note(userId, line.message);
     return { ok: false as const, message: line.message };
   }
-  const synced = await syncCustomerDids(userId);
-  if (!funded.ok) note(userId, `${funded.message} ${synced.message}`.trim());
+  await syncCustomerDids(userId);
   return { ok: true as const, clientId: client.clientId };
 }

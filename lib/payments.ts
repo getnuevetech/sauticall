@@ -22,6 +22,8 @@ type AttemptRow = {
   status: string;
   provider_ref: string;
   checkout_url: string;
+  plan_name?: string;
+  product_kind?: string;
 };
 
 export type PublicGatewayConfig = {
@@ -214,6 +216,10 @@ async function markPaid(id: number) {
   grantForPayment(id);
   const attempt = attemptById(id);
   if (attempt?.user_id) await enforceUser(attempt.user_id);
+  if (attempt?.user_id && attempt.product_kind !== "bundle" && attempt.plan_name) {
+    const { fundPaidPlan } = await import("./voip-client");
+    await fundPaidPlan(attempt.user_id, attempt.plan_name).catch(() => undefined);
+  }
 }
 
 export async function confirmReturn(attemptId: number, query: { session_id?: string; token?: string; orderId?: string; cancelled?: string }) {

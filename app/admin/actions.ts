@@ -298,8 +298,8 @@ export async function retryTrunk(formData: FormData) {
   const { attachTrunk } = await import("@/lib/lines");
   const result = await attachTrunk(id);
   audit(user.email, "trunk.retry", `${id}:${result.ok ? "ok" : "failed"}`);
-  if (!result.ok) redirect(`/admin/lines?error=${encodeURIComponent(result.message)}`);
-  redirect("/admin/lines");
+  if (!result.ok) redirect(`/admin/trunks?error=${encodeURIComponent(result.message)}`);
+  redirect("/admin/trunks");
 }
 
 export async function sendEmergencyAddress(formData: FormData) {
@@ -329,8 +329,8 @@ export async function completeTrunk(formData: FormData) {
   const { markTrunkDone } = await import("@/lib/lines");
   const result = markTrunkDone(id, note);
   audit(user.email, "trunk.done", String(id));
-  if (!result.ok) redirect(`/admin/lines?error=${encodeURIComponent(result.message)}`);
-  redirect("/admin/lines");
+  if (!result.ok) redirect(`/admin/trunks?error=${encodeURIComponent(result.message)}`);
+  redirect("/admin/trunks");
 }
 
 export async function retryGroup(formData: FormData) {

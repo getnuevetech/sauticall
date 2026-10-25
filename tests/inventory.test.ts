@@ -4,7 +4,7 @@ import { clientEmail, clientPlace, personName, readVoipClientId } from "../lib/c
 import { customerMessage, customerRequestStatus } from "../lib/customer-message.ts";
 import { didMatches, parseDigitSearch } from "../lib/did-search.ts";
 import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
-import { openingBalance, readClientBalance } from "../lib/client-funding.ts";
+import { planFundAmount, readClientBalance } from "../lib/client-funding.ts";
 import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
@@ -274,10 +274,11 @@ test("a customer never sees a partner or integration error", () => {
 });
 
 test("opening balances match the plan, and an outbound rule stays limited to that customer", () => {
-  assert.equal(openingBalance("Solo"), 5);
-  assert.equal(openingBalance("small business"), 10);
-  assert.equal(openingBalance("Team"), 15);
-  assert.equal(openingBalance("Custom"), 0);
+  assert.equal(planFundAmount(5), 5);
+  assert.equal(planFundAmount("10.5"), 10.5);
+  assert.equal(planFundAmount(0), 0);
+  assert.equal(planFundAmount(-3), 0);
+  assert.equal(planFundAmount("nope"), 0);
   assert.equal(readClientBalance({ balance: "12.50" }), 12.5);
   assert.equal(readClientBalance({}), null);
   const rule = outboundRuleBody({ name: "SautiCall 3612267988", trunkId: 4, callerId: "+13612267988", from: "514", to: "523", priority: 3 });

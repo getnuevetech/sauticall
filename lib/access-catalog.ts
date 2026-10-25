@@ -12,7 +12,7 @@ export const PERMISSIONS: Permission[] = [
   { key: "content.nav", group: "Website", label: "Menu", description: "Edit the header and account menu." },
   { key: "content.footer", group: "Website", label: "Footer", description: "Edit the footer." },
   { key: "content.services", group: "Website", label: "Services", description: "Edit the service cards." },
-  { key: "content.plans", group: "Website", label: "Plans", description: "Edit plan names, prices, extensions included, and included minutes." },
+  { key: "content.plans", group: "Website", label: "Plans", description: "Edit plan names, prices, extensions included, included minutes, and the phone-company balance." },
   { key: "content.bundles", group: "Website", label: "Call minute bundles", description: "Edit minute bundles customers can buy." },
   { key: "content.faqs", group: "Website", label: "Pricing questions", description: "Edit the short questions on the pricing page." },
   { key: "content.personas", group: "Website", label: "Who it's for", description: "Edit the audience cards." },
@@ -156,6 +156,7 @@ export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
     links: [
       { label: "Extensions and groups", href: "/admin/phone", permission: "settings.phone" },
       { label: "Lines and trunks", href: "/admin/lines", permission: "settings.lines" },
+      { label: "3CX trunks", href: "/admin/trunks", permission: "settings.lines" },
     ],
   },
   {

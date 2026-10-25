@@ -1,9 +1,7 @@
-export function openingBalance(planName: string) {
-  const name = planName.trim().toLowerCase().replace(/\s+/g, " ");
-  if (name === "solo") return 5;
-  if (name === "small business") return 10;
-  if (name === "team") return 15;
-  return 0;
+export function planFundAmount(credit: unknown) {
+  const amount = Number(credit);
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  return Math.round(amount * 100) / 100;
 }
 
 export function readClientBalance(body: unknown) {
