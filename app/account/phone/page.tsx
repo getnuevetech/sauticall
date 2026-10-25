@@ -1,6 +1,6 @@
 import { Frame } from "@/components/site/Frame";
 import { AccountHero, AccountNav } from "@/components/account/Portal";
-import { addPerson, removePerson, savePhoneHours } from "../actions";
+import { addPerson, removePerson, saveDepartmentName, savePhoneHours } from "../actions";
 import { chooseDaytimeGroup, createQueue, createRingGroup, deleteCallGroup } from "../desk-actions";
 import { guardAccount } from "@/lib/guard";
 import { QUEUE_STRATEGIES, RING_STRATEGIES, groupMembers, strategyLabel, type CallGroup } from "@/lib/call-groups";
@@ -8,6 +8,7 @@ import { getDb } from "@/lib/db";
 import { extensionCapacity, paidPlan } from "@/lib/pbx";
 import { planAllows } from "@/lib/plan-features";
 import { customerMessage } from "@/lib/customer-message";
+import { DEPARTMENT_NAME_RULES, acceptedDepartmentName } from "@/lib/pbx-user";
 import { loadSite } from "@/lib/site";
 
 type Extension = { id: number; number: string; former_number: string; first_name: string; last_name: string; email: string; status: string; access_password: string; last_message: string };
@@ -45,9 +46,10 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
   const limit = plan ? extensionCapacity(plan) : 0;
   const rows = getDb().prepare("SELECT id, number, former_number, first_name, last_name, email, status, access_password, last_message FROM pbx_extensions WHERE user_id = ? ORDER BY id").all(user.id) as Extension[];
   const activeRows = rows.filter((row) => row.status !== "removed");
-  const hours = getDb().prepare("SELECT open_time, close_time, last_message FROM pbx_departments WHERE user_id = ?").get(user.id) as { open_time: string; close_time: string; last_message: string } | undefined;
+  const hours = getDb().prepare("SELECT name, open_time, close_time, last_message FROM pbx_departments WHERE user_id = ?").get(user.id) as { name: string; open_time: string; close_time: string; last_message: string } | undefined;
+  const companyName = acceptedDepartmentName(hours?.name || "");
   const groups = getDb().prepare("SELECT * FROM call_groups WHERE user_id = ? ORDER BY kind, id").all(user.id) as CallGroup[];
-  const saved = params.saved === "group" ? text("phoneGroupSaved") : params.saved === "hours" ? text("phoneHoursSaved") : params.saved === "removed" ? "This person was removed. Their name, email, and extension stay in the record." : params.saved ? text("phoneSaved") : "";
+  const saved = params.saved === "department" ? "Company name saved. People are added to this department." : params.saved === "group" ? text("phoneGroupSaved") : params.saved === "hours" ? text("phoneHoursSaved") : params.saved === "removed" ? "This person was removed. Their name, email, and extension stay in the record." : params.saved ? text("phoneSaved") : "";
   return (
     <Frame pathname="/account/phone">
       <main>
@@ -60,19 +62,29 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
             {!plan ? <div className="contact-form"><p>{text("phoneClosed")}</p></div> : (
               <>
                 <p>{plan.name} includes {limit} {limit === 1 ? "person" : "people"}. {activeRows.length} added.</p>
+                <form className="contact-form" action={saveDepartmentName}>
+                  <h3>Company name</h3>
+                  <p>This name is the department. People are added to this department.</p>
+                  <p>{DEPARTMENT_NAME_RULES}</p>
+                  <label>Company name <input name="company_name" defaultValue={companyName} maxLength={50} required placeholder="Kwik Tech" /></label>
+                  <button className="btn btn-primary" type="submit">Save company name</button>
+                  {companyName ? <p>Department: {companyName}</p> : <p>Save the company name before adding a person.</p>}
+                </form>
                 {!planAllows(plan, "ring_groups") ? <p>Ring groups are not included on {plan.name}.</p> : null}
                 {!planAllows(plan, "queues") ? <p>Call queues are not included on {plan.name}.</p> : null}
                 {!planAllows(plan, "ai") ? <p>The AI receptionist is not included on {plan.name}.</p> : null}
-                {activeRows.length < limit ? (
+                {companyName && activeRows.length < limit ? (
                   <form className="contact-form" action={addPerson}>
                     <div className="form-grid">
                       <label>{text("phoneFirst")} <input name="first_name" required /></label>
                       <label>{text("phoneLast")} <input name="last_name" required /></label>
                     </div>
                     <label>{text("phoneEmail")} <input name="email" type="email" required /></label>
+                    <p>This person is added to {companyName}.</p>
                     <button className="btn btn-primary" type="submit">{text("phoneAdd")}</button>
                   </form>
-                ) : <p>{text("phoneLimit")}</p>}
+                ) : null}
+                {companyName && activeRows.length >= limit ? <p>{text("phoneLimit")}</p> : null}
                 {planAllows(plan, "business_hours") ? <form className="contact-form" action={savePhoneHours} style={{ marginTop: 18 }}>
                   <h3>{text("phoneHours")}</h3>
                   <div className="form-grid">

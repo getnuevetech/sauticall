@@ -260,7 +260,7 @@ export async function provisionPerson(formData: FormData) {
   const { provisionExtension } = await import("@/lib/pbx");
   const result = await provisionExtension(id);
   audit(user.email, "pbx.provision", `${id}:${result.ok ? "ok" : "failed"}`);
-  if (!result.ok) redirect(`/admin/phone?error=${encodeURIComponent(result.message)}`);
+  if (!result.ok) redirect(`/admin/phone?error=${encodeURIComponent(result.detail || result.message)}`);
   redirect("/admin/phone");
 }
 

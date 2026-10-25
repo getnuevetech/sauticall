@@ -18,11 +18,10 @@ export default async function AdminPhonePage({ searchParams }: { searchParams: P
   const plans = normalizePlans(readDoc<Plan[]>("plans")).filter((item) => !item.custom);
   const planLine = plans.map((item) => `${item.name} includes ${extensionCapacity(item)}`).join(", ");
   const reserved = getDb().prepare(
-    `SELECT u.email, d.number_from, d.number_to FROM pbx_departments d
+    `SELECT u.email, d.name, d.xapi_id, d.last_message, d.number_from, d.number_to FROM pbx_departments d
      JOIN users u ON u.id = d.user_id
-     WHERE d.number_from != '' AND d.number_to != ''
-     ORDER BY CAST(d.number_from AS INTEGER)`,
-  ).all() as { email: string; number_from: string; number_to: string }[];
+     ORDER BY u.email`,
+  ).all() as { email: string; name: string; xapi_id: number; last_message: string; number_from: string; number_to: string }[];
   const rows = getDb().prepare(
     `SELECT e.id, e.email, u.email AS account_email, e.number, e.former_number, e.first_name, e.last_name, e.status, e.xapi_id, e.last_message
      FROM pbx_extensions e JOIN users u ON u.id = e.user_id ORDER BY e.id DESC LIMIT 100`,
@@ -37,11 +36,13 @@ export default async function AdminPhonePage({ searchParams }: { searchParams: P
     <>
       <span className="eyebrow">Phone system</span>
       <h2>Extensions, ring groups, and queues</h2>
-      <p>Each customer gets a department on 3CX. Daytime calls go to the ring group or queue they chose, once that group is on the phone system. Otherwise they go to the first extension. After hours they go to voicemail. If 3CX does not accept the group, build it on the server with the number and people below, point the department office-hours route at it, and mark it done.</p>
+      <p>Each customer sets a company name, and that name is sent to 3CX as their department. People are added to that department. A 400 on the department name is kept below with the 3CX reply, so a rejected name is visible here. Daytime calls go to the ring group or queue they chose, once that group is on the phone system. Otherwise they go to the first extension. After hours they go to voicemail. If 3CX does not accept the group, build it on the server with the number and people below, point the department office-hours route at it, and mark it done.</p>
       <p>How many extensions a customer can add is set on that customer’s plan. {planLine}. The most any plan can include is 500. Change those under Plans. A customer cannot add more people than their plan includes.</p>
       <p>The message that said 3CX received 500 was a list of existing numbers, 500 records in one request. 3CX accepts 100 records per request, so that list is read 100 at a time. That 500 is not an extension number and it is not a plan limit.</p>
       <p>The next person is numbered from {plan.start}. Someone already on the phone system keeps that number. Someone saved here who is not on the phone system yet, with a number below {plan.start}, moves to the next free number from {plan.start} when this form is saved. Numbers already on 3CX are skipped.</p>
-      {reserved.length ? <p>Ranges already at or above {plan.start}: {reserved.map((row) => `${row.email} ${row.number_from}–${row.number_to}`).join(". ")}.</p> : null}
+      {reserved.length ? reserved.map((row) => (
+        <p key={row.email}>{row.email}: department {row.name || "company name not set"}{row.xapi_id ? ` · ${row.xapi_id}` : ""}.{row.number_from && row.number_to ? ` Extensions ${row.number_from}–${row.number_to}.` : ""}{row.last_message ? ` ${row.last_message}` : ""}</p>
+      )) : null}
       {params.saved === "removed" ? <p className="form-feedback">This person was removed. Their name, email, and extension stay in the record.</p> : null}
       {params.error ? <p className="form-feedback">{params.error}</p> : null}
       <ExtensionPlanForm plan={plan} />

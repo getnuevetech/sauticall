@@ -8,7 +8,7 @@ import { numberPurchaseMode } from "../lib/number-order.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
-import { departmentCreateBody, userCreateBody } from "../lib/pbx-user.ts";
+import { DEPARTMENT_NAME_RULES, acceptedDepartmentName, departmentCreateBody, departmentNameIssue, departmentNameTakenMessage, departmentRejectedMessage, userCreateBody } from "../lib/pbx-user.ts";
 import { readRateCenters, regionAllowed } from "../lib/places.ts";
 
 test("a number request has to be a full 10-digit inventory number", () => {
@@ -195,8 +195,27 @@ test("a 3CX reply that the number is already used counts as a collision", () => 
   assert.match(message, /Extension 124 already exists on 3CX/);
 });
 
+test("a company name follows the department rules before it is sent", () => {
+  assert.equal(departmentNameIssue("Kwik Tech"), "");
+  assert.equal(acceptedDepartmentName("  Kwik   Tech "), "Kwik Tech");
+  assert.equal(departmentNameIssue("3CX Test"), "");
+  assert.equal(departmentNameIssue("AT&T (West)"), "");
+  assert.match(departmentNameIssue(""), /company name/);
+  assert.match(departmentNameIssue("DEFAULT"), /DEFAULT/);
+  assert.match(departmentNameIssue("default"), /DEFAULT/);
+  assert.match(departmentNameIssue("O'Brien"), /apostrophes/);
+  assert.match(departmentNameIssue("SautiCall 4"), /company name/);
+  assert.match(departmentNameIssue("a".repeat(51)), /50/);
+  assert.match(departmentNameIssue("Acme/West"), /apostrophes/);
+  assert.match(departmentNameTakenMessage("Kwik Tech"), /already a department/);
+  assert.match(departmentRejectedMessage("Kwik Tech"), /did not accept "Kwik Tech"/);
+  assert.match(DEPARTMENT_NAME_RULES, /People are added to that department/);
+  assert.equal(acceptedDepartmentName("SautiCall 9"), "");
+});
+
 test("a new department and person match the 3CX user shape", () => {
-  const department = departmentCreateBody("SautiCall 4", 500, 509);
+  const department = departmentCreateBody("Kwik Tech", 500, 509);
+  assert.equal(department.Name, "Kwik Tech");
   assert.equal(department.Props.UserNumberFrom, "500");
   assert.equal(department.Props.UserNumberTo, "509");
   assert.equal("UserNumberFrom" in department, false);

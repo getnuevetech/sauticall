@@ -323,6 +323,10 @@ export async function addPerson(formData: FormData) {
   if (!first || !last || !email.includes("@")) redirect("/account/phone?error=First%20name%2C%20last%20name%2C%20and%20email%20are%20required.");
   const count = getDb().prepare("SELECT COUNT(*) AS n FROM pbx_extensions WHERE user_id = ? AND status != 'removed'").get(user.id) as { n: number };
   if (count.n >= extensionCapacity(plan)) redirect("/account/phone?error=This%20plan%20has%20no%20room%20for%20another%20person.");
+  const { departmentNameIssue: nameIssue } = await import("@/lib/pbx-user");
+  const department = getDb().prepare("SELECT name FROM pbx_departments WHERE user_id = ?").get(user.id) as { name: string } | undefined;
+  const nameProblem = nameIssue(department?.name || "");
+  if (nameProblem) redirect(`/account/phone?error=${encodeURIComponent(nameProblem)}`);
   const used = [
     ...(getDb().prepare("SELECT number FROM pbx_extensions WHERE status != 'removed'").all() as { number: string }[]),
     ...(getDb().prepare("SELECT number FROM call_groups").all() as { number: string }[]),
@@ -365,6 +369,18 @@ export async function removePerson(formData: FormData) {
   redirect("/account/phone?saved=removed");
 }
 
+export async function saveDepartmentName(formData: FormData) {
+  const user = await currentUser();
+  if (!user) redirect("/account/login");
+  const { paidPlan: departmentPlan } = await import("@/lib/pbx");
+  if (!departmentPlan(user.id)) redirect("/account/phone?error=Pay%20for%20a%20plan%20before%20adding%20people.");
+  const { applyDepartmentName } = await import("@/lib/pbx");
+  const result = await applyDepartmentName(user.id, String(formData.get("company_name") || ""));
+  audit(user.email, "pbx.department", result.ok ? "saved" : (result.detail || result.message).slice(0, 400));
+  if (!result.ok) redirect(`/account/phone?error=${encodeURIComponent(safeCustomerError(result.message, "The company name could not be saved. Check the name rules and try again."))}`);
+  redirect("/account/phone?saved=department");
+}
+
 export async function savePhoneHours(formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
@@ -378,7 +394,7 @@ export async function savePhoneHours(formData: FormData) {
     `INSERT INTO pbx_departments (user_id, name, xapi_id, number_from, number_to, open_time, close_time, last_message)
      VALUES (?, ?, 0, '', '', ?, ?, '')
      ON CONFLICT(user_id) DO UPDATE SET open_time = excluded.open_time, close_time = excluded.close_time`,
-  ).run(user.id, `SautiCall ${user.id}`, open, close);
+  ).run(user.id, "", open, close);
   const { updateRouting } = await import("@/lib/pbx");
   const result = await updateRouting(user.id);
   audit(user.email, "pbx.hours", `${open}-${close}`);

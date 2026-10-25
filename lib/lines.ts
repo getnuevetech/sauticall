@@ -2,6 +2,7 @@ import { getConnection, orderDid, pbxRequest } from "./carriers";
 import { flagOn, getDb } from "./db";
 import { enforceUser } from "./minutes";
 import { extensionRange, readExtensionPlan } from "./pbx";
+import { acceptedDepartmentName } from "./pbx-user";
 import { ensureVoipClient, syncCustomerDids } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
 
@@ -15,7 +16,7 @@ function publicNumber(did: string) {
 
 function departmentName(userId: number) {
   const row = getDb().prepare("SELECT name FROM pbx_departments WHERE user_id = ?").get(userId) as { name: string } | undefined;
-  return row?.name || `SautiCall ${userId}`;
+  return acceptedDepartmentName(row?.name || "") || "Company name not set";
 }
 
 function extensionFor(userId: number) {

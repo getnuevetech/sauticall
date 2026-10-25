@@ -4,6 +4,7 @@ import { planExtensionRanges } from "./extension-plan";
 import { numbersInRanges } from "./extension-numbers";
 import { nextFreeNumber } from "./group-numbers";
 import { idFromPbx } from "./pbx-id";
+import { acceptedDepartmentName } from "./pbx-user";
 import { numberAlreadyUsed } from "./pbx-access";
 import { extensionNumberUsed, listPhoneSystemNumbers, readExtensionPlan, updateRouting } from "./pbx";
 
@@ -77,7 +78,7 @@ function saveTask(group: CallGroup, members: Member[], status: string, note: str
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(group_id) DO UPDATE SET kind = excluded.kind, name = excluded.name, number = excluded.number, strategy = excluded.strategy, members = excluded.members, department_name = excluded.department_name, status = excluded.status, note = excluded.note`,
     )
-    .run(group.id, group.user_id, group.kind, group.name, group.number, strategyLabel(group.kind, group.strategy), memberText(members), department?.name || `SautiCall ${group.user_id}`, status, note.slice(0, 400), new Date().toISOString());
+    .run(group.id, group.user_id, group.kind, group.name, group.number, strategyLabel(group.kind, group.strategy), memberText(members), acceptedDepartmentName(department?.name || "") || "Company name not set", status, note.slice(0, 400), new Date().toISOString());
 }
 
 export async function provisionCallGroup(id: number) {

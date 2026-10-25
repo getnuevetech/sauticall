@@ -65,7 +65,7 @@ export function persistNewExtensionRanges(ranges: AssignedRange[]) {
      WHERE pbx_departments.xapi_id = 0`,
   );
   const save = database.transaction((rows: AssignedRange[]) => {
-    for (const range of rows) write.run(range.id, `SautiCall ${range.id}`, String(range.from), String(range.to));
+    for (const range of rows) write.run(range.id, "", String(range.from), String(range.to));
   });
   save(ranges);
 }

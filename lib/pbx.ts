@@ -4,7 +4,16 @@ import { flagOn, getDb, readDoc } from "./db";
 import { chooseExtension, extensionRange, replacementExtension } from "./extension-numbers";
 import { persistNewExtensionRanges, planExtensionRanges, readExtensionPlan, shiftPendingExtensions } from "./extension-plan";
 import { describeExtensionFailure, numberAlreadyUsed } from "./pbx-access";
-import { departmentCreateBody, departmentRangeBody, userCreateBody } from "./pbx-user";
+import {
+  acceptedDepartmentName,
+  departmentCreateBody,
+  departmentNameIssue,
+  departmentNameTakenMessage,
+  departmentRangeBody,
+  departmentRejectedMessage,
+  normalizeDepartmentName,
+  userCreateBody,
+} from "./pbx-user";
 import { idFromPbx } from "./pbx-id";
 import { extensionCapacity, normalizePlan } from "./plan-features";
 import type { Plan } from "./types";
@@ -18,6 +27,14 @@ export function appPassword() {
 }
 
 type Department = { user_id: number; name: string; xapi_id: number; number_from: string; number_to: string; open_time: string; close_time: string; last_message: string };
+
+class PhoneSystemError extends Error {
+  admin: string;
+  constructor(customer: string, admin = customer) {
+    super(customer);
+    this.admin = admin;
+  }
+}
 type ExtensionRow = { id: number; user_id: number; number: string; first_name: string; last_name: string; email: string; xapi_id: number; status: string; access_password: string; last_message: string };
 
 async function findUserByNumber(number: string) {
@@ -147,14 +164,133 @@ export function paidPlan(userId: number) {
   return plan ? normalizePlan(plan) : null;
 }
 
-async function ensureDepartment(userId: number) {
+function readGroups(body: unknown) {
+  if (!(body && typeof body === "object" && Array.isArray((body as { value?: unknown }).value))) return [];
+  return ((body as { value: { Id?: number; Name?: unknown; IsDefault?: unknown }[] }).value).map((item) => ({
+    id: Number(item.Id) || 0,
+    name: String(item.Name || ""),
+    isDefault: item.IsDefault === true || /^default$/i.test(String(item.Name || "").trim()),
+  }));
+}
+
+function departmentFailure(name: string, result: { status?: number; message?: string; code?: string; detail?: string }) {
+  const raw = `${result.detail || ""} ${result.message || ""} ${result.code || ""}`;
+  const admin = result.message || departmentRejectedMessage(name);
+  if (result.status === 403 || /console restrictions|system owner|access denied/i.test(raw)) {
+    return { customer: "The phone system refused this department. The team has the details. People are added to the company department.", admin };
+  }
+  if (/duplicate|already exists|WARNINGS\.XAPI\.DUPLICATE/i.test(raw)) return { customer: departmentNameTakenMessage(name), admin };
+  if (result.status === 400 && /name/i.test(raw)) return { customer: departmentRejectedMessage(name), admin };
+  if (result.status === 400) return { customer: "The phone system rejected the department. The team has the details. People are added to the company department.", admin };
+  return { customer: "The phone system did not save the company department. The team has the details. People are added to the company department.", admin };
+}
+
+function noteDepartment(userId: number, message: string) {
   const database = getDb();
-  const existing = database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department | undefined;
+  const existing = database.prepare("SELECT user_id FROM pbx_departments WHERE user_id = ?").get(userId);
+  if (!existing) return;
+  database.prepare("UPDATE pbx_departments SET last_message = ? WHERE user_id = ?").run(message.slice(0, 1200), userId);
+}
+
+function saveDepartmentRecord(userId: number, name: string, xapiId: number, from: number, to: number, message: string) {
+  getDb().prepare(
+    `INSERT INTO pbx_departments (user_id, name, xapi_id, number_from, number_to, open_time, close_time, last_message)
+     VALUES (?, ?, ?, ?, ?, '09:00', '17:00', ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       name = excluded.name,
+       xapi_id = CASE WHEN excluded.xapi_id != 0 THEN excluded.xapi_id ELSE pbx_departments.xapi_id END,
+       number_from = CASE WHEN excluded.number_from != '' THEN excluded.number_from ELSE pbx_departments.number_from END,
+       number_to = CASE WHEN excluded.number_to != '' THEN excluded.number_to ELSE pbx_departments.number_to END,
+       last_message = excluded.last_message`,
+  ).run(userId, name, xapiId, String(from), String(to), message.slice(0, 1200));
+}
+
+function plannedDepartmentRange(userId: number) {
   const reserved = planExtensionRanges();
   persistNewExtensionRanges(reserved.ranges);
   const match = reserved.ranges.find((range) => range.id === userId);
-  const fallback = extensionRange(userId, reserved.plan);
-  const range = match || fallback;
+  const range = match || extensionRange(userId, reserved.plan);
+  return { from: range.from, to: range.to };
+}
+
+async function findGroupByName(name: string) {
+  const found = await pbxRequest(`Groups?$filter=${encodeURIComponent(`Name eq '${name}'`)}&$select=Id,Name,IsDefault`);
+  if (!found.ok) return { ok: false as const, group: null, message: found.message || "" };
+  const group = readGroups(found.body).find((item) => item.name.toLowerCase() === name.toLowerCase()) || null;
+  return { ok: true as const, group, message: "" };
+}
+
+async function readGroup(id: number) {
+  const found = await pbxRequest(`Groups(${id})?$select=Id,Name,IsDefault`);
+  if (!found.ok || !found.body || typeof found.body !== "object") return { ok: false as const, name: "", isDefault: false, message: found.message || "" };
+  const body = found.body as { Name?: unknown; IsDefault?: unknown };
+  const name = String(body.Name || "");
+  return { ok: true as const, name, isDefault: body.IsDefault === true || /^default$/i.test(name.trim()), message: "" };
+}
+
+async function placePeople(userId: number, groupId: number) {
+  const people = getDb().prepare("SELECT xapi_id, number FROM pbx_extensions WHERE user_id = ? AND xapi_id != 0 AND status != 'removed'").all(userId) as { xapi_id: number; number: string }[];
+  for (const person of people) {
+    const assigned = await pbxRequest(`Users(${person.xapi_id})`, {
+      method: "PATCH",
+      body: { Id: person.xapi_id, Groups: [{ GroupId: groupId, Rights: { RoleName: "users" } }] },
+    });
+    if (!assigned.ok) {
+      return {
+        ok: false as const,
+        customer: `The company department was saved. Extension ${person.number} still needs to be moved onto it. Save the company name again.`,
+        admin: assigned.message || "",
+      };
+    }
+  }
+  return { ok: true as const, customer: "", admin: "" };
+}
+
+async function createNamedDepartment(userId: number, name: string, from: number, to: number) {
+  const found = await findGroupByName(name);
+  if (!found.ok) {
+    const failure = departmentFailure(name, { message: found.message });
+    noteDepartment(userId, failure.admin);
+    throw new PhoneSystemError(failure.customer, failure.admin);
+  }
+  if (found.group?.isDefault) {
+    const customer = "DEFAULT is reserved. Enter the company name so people are added to that department.";
+    noteDepartment(userId, `3CX already has a department named ${found.group.name}, and it is the default department.`);
+    throw new PhoneSystemError(customer, `3CX already has a department named ${found.group.name}, and it is the default department.`);
+  }
+  if (found.group?.id) {
+    const failure = departmentFailure(name, { status: 400, code: "WARNINGS.XAPI.DUPLICATE", message: `3CX returned 400: WARNINGS.XAPI.DUPLICATE. Name ${name} already exists.` });
+    noteDepartment(userId, failure.admin);
+    throw new PhoneSystemError(failure.customer, failure.admin);
+  }
+  const created = await pbxRequest("Groups", {
+    method: "POST",
+    body: departmentCreateBody(name, from, to),
+  });
+  const id = idFromPbx(created.body, created.location);
+  const createdBody = created.body && typeof created.body === "object" ? created.body as { Name?: unknown; IsDefault?: unknown } : {};
+  const createdName = String(createdBody.Name || name);
+  const createdDefault = createdBody.IsDefault === true || /^default$/i.test(createdName.trim());
+  if (!created.ok || !id || createdDefault) {
+    const failure = createdDefault
+      ? { customer: "DEFAULT is reserved. Enter the company name so people are added to that department.", admin: created.message || "3CX created the default department." }
+      : departmentFailure(name, created);
+    noteDepartment(userId, failure.admin);
+    throw new PhoneSystemError(failure.customer, failure.admin);
+  }
+  saveDepartmentRecord(userId, name, id, from, to, "Company department saved.");
+  return getDb().prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department;
+}
+
+async function ensureDepartment(userId: number) {
+  const database = getDb();
+  const range = plannedDepartmentRange(userId);
+  const existing = database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department | undefined;
+  const name = acceptedDepartmentName(existing?.name || "");
+  if (!name) {
+    const customer = departmentNameIssue(existing?.name || "");
+    throw new PhoneSystemError(customer);
+  }
   if (existing?.xapi_id) {
     const currentFrom = Number(existing.number_from);
     const currentTo = Number(existing.number_to);
@@ -167,31 +303,91 @@ async function ensureDepartment(userId: number) {
       });
       if (widened.ok) database.prepare("UPDATE pbx_departments SET number_from = ?, number_to = ? WHERE user_id = ?").run(String(nextFrom), String(nextTo), userId);
     }
-    return database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department;
+    const group = await readGroup(existing.xapi_id);
+    if (group.ok && group.isDefault) {
+      const customer = "DEFAULT is reserved. Enter the company name so people are added to that department.";
+      const admin = `Department ${existing.xapi_id} on 3CX is the default department.`;
+      noteDepartment(userId, admin);
+      throw new PhoneSystemError(customer, admin);
+    }
+    if (group.ok && group.name && normalizeDepartmentName(group.name) !== name) {
+      const renamed = await pbxRequest(`Groups(${existing.xapi_id})`, {
+        method: "PATCH",
+        body: { Id: existing.xapi_id, Name: name },
+      });
+      if (!renamed.ok) {
+        const failure = departmentFailure(name, renamed);
+        noteDepartment(userId, failure.admin);
+        throw new PhoneSystemError(failure.customer, failure.admin);
+      }
+    }
+    if (existing.name !== name) database.prepare("UPDATE pbx_departments SET name = ? WHERE user_id = ?").run(name, userId);
+    const department = database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department;
+    if (!department.xapi_id) throw new PhoneSystemError("Enter the company name. That name becomes the department, and people are added to it.");
+    return department;
   }
-  const name = `SautiCall ${userId}`;
-  const found = await pbxRequest(`Groups?$filter=${encodeURIComponent(`Name eq '${name}'`)}&$select=Id,Name`);
-  const listed = idFromPbx(readList(found.body)[0], found.location);
-  if (found.ok && listed) {
-    database.prepare(
-      `INSERT INTO pbx_departments (user_id, name, xapi_id, number_from, number_to, open_time, close_time, last_message)
-       VALUES (?, ?, ?, ?, ?, '09:00', '17:00', '')
-       ON CONFLICT(user_id) DO UPDATE SET name = excluded.name, xapi_id = excluded.xapi_id, number_from = excluded.number_from, number_to = excluded.number_to`,
-    ).run(userId, name, listed, String(range.from), String(range.to));
-    return database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department;
+  return createNamedDepartment(userId, name, range.from, range.to);
+}
+
+export async function applyDepartmentName(userId: number, raw: string) {
+  const name = normalizeDepartmentName(raw);
+  const issue = departmentNameIssue(name);
+  if (issue) return { ok: false as const, message: issue, detail: issue };
+  const database = getDb();
+  const clash = database.prepare("SELECT user_id FROM pbx_departments WHERE user_id != ? AND lower(trim(name)) = lower(?)").get(userId, name) as { user_id: number } | undefined;
+  if (clash) {
+    const message = departmentNameTakenMessage(name);
+    return { ok: false as const, message, detail: message };
   }
-  const created = await pbxRequest("Groups", {
-    method: "POST",
-    body: departmentCreateBody(name, range.from, range.to),
-  });
-  const id = idFromPbx(created.body, created.location);
-  if (!created.ok || !id) throw new Error(created.message);
-  database.prepare(
-    `INSERT INTO pbx_departments (user_id, name, xapi_id, number_from, number_to, open_time, close_time, last_message)
-     VALUES (?, ?, ?, ?, ?, '09:00', '17:00', '')
-     ON CONFLICT(user_id) DO UPDATE SET xapi_id = excluded.xapi_id, name = excluded.name`,
-  ).run(userId, name, id, String(range.from), String(range.to));
-  return database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department;
+  const range = plannedDepartmentRange(userId);
+  const existing = database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department | undefined;
+  if (!flagOn("pbx.live_provision")) {
+    saveDepartmentRecord(userId, name, existing?.xapi_id || 0, range.from, range.to, "Company name saved. It becomes the department when people are added.");
+    return { ok: true as const, message: "Company name saved. It becomes the department when people are added.", detail: "" };
+  }
+  try {
+    let department: Department;
+    if (existing?.xapi_id) {
+      const group = await readGroup(existing.xapi_id);
+      if (!group.ok) {
+        const failure = departmentFailure(name, { message: group.message });
+        noteDepartment(userId, failure.admin);
+        return { ok: false as const, message: failure.customer, detail: failure.admin };
+      }
+      if (group.isDefault) {
+        const customer = "DEFAULT is reserved. Enter the company name so people are added to that department.";
+        const admin = `Department ${existing.xapi_id} on 3CX is the default department.`;
+        noteDepartment(userId, admin);
+        return { ok: false as const, message: customer, detail: admin };
+      }
+      if (normalizeDepartmentName(group.name || existing.name) !== name) {
+        const renamed = await pbxRequest(`Groups(${existing.xapi_id})`, {
+          method: "PATCH",
+          body: { Id: existing.xapi_id, Name: name },
+        });
+        if (!renamed.ok) {
+          const failure = departmentFailure(name, renamed);
+          noteDepartment(userId, failure.admin);
+          return { ok: false as const, message: failure.customer, detail: failure.admin };
+        }
+      }
+      saveDepartmentRecord(userId, name, existing.xapi_id, range.from, range.to, "Company department saved.");
+      department = database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department;
+    } else {
+      department = await createNamedDepartment(userId, name, range.from, range.to);
+    }
+    const placed = await placePeople(userId, department.xapi_id);
+    if (!placed.ok) {
+      noteDepartment(userId, placed.admin);
+      return { ok: false as const, message: placed.customer, detail: placed.admin };
+    }
+    return { ok: true as const, message: "Company name saved. People are added to this department.", detail: "" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "The phone system did not save this department.";
+    const detail = error instanceof PhoneSystemError ? error.admin : message;
+    noteDepartment(userId, detail);
+    return { ok: false as const, message, detail };
+  }
 }
 
 function route(number: string, to: "Extension" | "VoiceMail" | "RingGroup" | "Queue") {
@@ -268,12 +464,14 @@ export async function provisionExtension(id: number) {
     }
     if (!(Number(row.number) >= plan.start)) return { ok: false, message: "No free extension is left from the starting number." };
     const department = await ensureDepartment(row.user_id);
+    if (!department.xapi_id) throw new PhoneSystemError("Enter the company name. That name becomes the department, and people are added to it.");
     const listed = await listPhoneSystemNumbers();
     const known = listed.ok ? listed.numbers : [];
     const rejected: string[] = [];
     let movedFrom = "";
     let xapiId = 0;
     let linkedExisting = "";
+    let createdHere = false;
     let posts = 0;
     for (let attempt = 0; attempt < 30 && posts < 8; attempt += 1) {
       const lookup = await findUserByNumber(row.number);
@@ -306,6 +504,7 @@ export async function provisionExtension(id: number) {
       });
       xapiId = idFromPbx(created.body, created.location);
       if (created.ok) {
+        createdHere = true;
         if (!xapiId) {
           const found = await findUserByNumber(row.number);
           if (found.user?.id && found.user.email.toLowerCase() === row.email.toLowerCase()) xapiId = found.user.id;
@@ -338,14 +537,23 @@ export async function provisionExtension(id: number) {
         Groups: [{ GroupId: department.xapi_id, Rights: { RoleName: "users" } }],
       },
     });
-    const message = assigned.ok ? linkedExisting || "Created on the phone system." : `${linkedExisting ? `${linkedExisting} ` : ""}Created on the phone system. Department assignment needs attention: ${assigned.message}`;
+    if (!assigned.ok) {
+      let admin = assigned.message || "The phone system did not place this person on the company department.";
+      if (createdHere) {
+        const deleted = await pbxRequest(`Users(${xapiId})`, { method: "DELETE" });
+        if (!deleted.ok && deleted.status !== 404) admin = `${admin} The new extension stayed on the phone system: ${deleted.message}`;
+      }
+      throw new PhoneSystemError("The phone system did not place this person on the company department.", admin);
+    }
+    const message = linkedExisting || "Created on the phone system.";
     database.prepare("UPDATE pbx_extensions SET xapi_id = ?, status = 'created', last_message = ? WHERE id = ?").run(xapiId, message.slice(0, 1200), id);
     await routeDepartment(department);
     return { ok: true, message: "Created on the phone system." };
   } catch (error) {
     const message = error instanceof Error ? error.message : "The phone system did not create this person.";
-    database.prepare("UPDATE pbx_extensions SET status = 'failed', last_message = ? WHERE id = ?").run(message.slice(0, 1200), id);
-    return { ok: false, message };
+    const detail = error instanceof PhoneSystemError ? error.admin : message;
+    database.prepare("UPDATE pbx_extensions SET status = 'failed', last_message = ? WHERE id = ?").run(detail.slice(0, 1200), id);
+    return { ok: false, message, detail };
   }
 }
 
