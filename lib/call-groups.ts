@@ -115,7 +115,7 @@ export async function provisionCallGroup(id: number) {
   const xapiId = group.xapi_id || idFromPbx(created.body, created.location);
   if (!created.ok || !xapiId) {
     const message = created.message || "3CX did not create this group.";
-    database.prepare("UPDATE call_groups SET status = 'failed', last_message = ? WHERE id = ?").run(message.slice(0, 400), id);
+    database.prepare("UPDATE call_groups SET status = 'failed', last_message = ? WHERE id = ?").run(message.slice(0, 1200), id);
     saveTask({ ...group }, members, "open", message);
     return { ok: false, message };
   }

@@ -1,7 +1,7 @@
 import { getDb } from "./db";
 import { carrierSearchType, didMatches, type DigitSearch } from "./did-search";
 import { readDids, type ListedDid } from "./did-list";
-import { pbxAccessMessage, roleFromToken } from "./pbx-access";
+import { adminPbxError, pbxAccessMessage, roleFromToken } from "./pbx-access";
 import { readRateCenters } from "./places";
 
 export type PublicConfig = Record<string, string>;
@@ -219,25 +219,40 @@ export async function pbxRequest(path: string, init: { method?: string; body?: u
       cache: "no-store",
       signal: AbortSignal.timeout(20000),
     });
-    const body = await response.json().catch(() => null);
-    const detail = xapiMessage(body, "");
-    const message = response.ok ? detail || "ok" : pbxAccessMessage(response.status, roleFromToken(token), detail);
-    return { ok: response.ok, status: response.status, body, message, location: response.headers.get("location") || "" };
+    const text = await response.text();
+    const body = parseBody(text);
+    const error = xapiError(body, text);
+    const role = roleFromToken(token);
+    const message = response.ok ? error.message || "ok" : adminPbxError(response.status, role, error.code, error.message);
+    return { ok: response.ok, status: response.status, body, message, code: error.code, detail: error.message, role, location: response.headers.get("location") || "" };
   } catch (error) {
     const message = error instanceof Error ? error.message : "3CX could not be reached.";
     return { ok: false, status: 0, body: null, message, location: "" };
   }
 }
 
-function xapiMessage(body: unknown, fallback: string) {
-  if (body && typeof body === "object") {
-    const record = body as { error?: { message?: string }; message?: unknown };
-    const nested = record.error?.message;
-    const top = typeof record.message === "string" ? record.message : "";
-    const message = nested || top;
-    if (message) return message.replace(/\s+/g, " ").slice(0, 400);
+function parseBody(text: string) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
   }
-  return fallback;
+}
+
+function xapiError(body: unknown, text: string) {
+  if (body && typeof body === "object") {
+    const record = body as { error?: { code?: unknown; message?: unknown }; code?: unknown; message?: unknown };
+    const nested = record.error && typeof record.error === "object" ? record.error : record;
+    const code = typeof nested.code === "string" ? nested.code : "";
+    const message = typeof nested.message === "string" ? nested.message : "";
+    if (code || message) return { code, message: message.replace(/\s+/g, " ").trim().slice(0, 800) };
+  }
+  return { code: "", message: text.replace(/\s+/g, " ").trim().slice(0, 800) };
+}
+
+function xapiMessage(body: unknown, fallback: string) {
+  return xapiError(body, fallback).message || fallback;
 }
 
 export async function test3cx() {

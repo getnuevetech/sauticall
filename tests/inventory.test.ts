@@ -7,7 +7,7 @@ import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
 import { numberPurchaseMode } from "../lib/number-order.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
-import { pbxAccessMessage, roleFromToken } from "../lib/pbx-access.ts";
+import { describeExtensionFailure, pbxAccessMessage, roleFromToken } from "../lib/pbx-access.ts";
 import { readRateCenters, regionAllowed } from "../lib/places.ts";
 
 test("a number request has to be a full 10-digit inventory number", () => {
@@ -62,6 +62,40 @@ test("state and city lists reject a typed code that is not a real place", () => 
   assert.equal(regionAllowed("CA", "ON"), true);
   assert.equal(regionAllowed("US", "ON"), false);
   assert.deepEqual(readRateCenters({ ratecenters: [{ ratecenter: "HOUSTON" }, { ratecenter: "AUSTIN" }, "DALLAS"] }), ["AUSTIN", "DALLAS", "HOUSTON"]);
+});
+
+test("an admin sees the precise 3CX error and whether the extension exists", () => {
+  const refused = describeExtensionFailure({
+    number: "122",
+    status: 403,
+    code: "",
+    detail: "Access denied.",
+    role: "users",
+    lookupFailed: "3CX returned 403: Access denied.",
+  });
+  assert.match(refused, /could not check whether extension 122 already exists/);
+  assert.match(refused, /3CX returned 403: Access denied\./);
+  assert.match(refused, /System Owner/);
+  const taken = describeExtensionFailure({
+    number: "122",
+    status: 400,
+    code: "ALREADY_IN_USE",
+    detail: "The number is already in use.",
+    role: "",
+    existing: { email: "other@example.com" },
+  });
+  assert.match(taken, /Extension 122 already exists on 3CX for other@example.com/);
+  assert.match(taken, /3CX returned 400 \(ALREADY_IN_USE\): The number is already in use\./);
+  const missing = describeExtensionFailure({
+    number: "500",
+    status: 400,
+    code: "",
+    detail: "Number is outside the department range.",
+    role: "",
+    existing: null,
+  });
+  assert.match(missing, /Extension 500 was not found on 3CX/);
+  assert.match(missing, /Number is outside the department range/);
 });
 
 test("a 403 from 3CX names the API role that was refused", () => {

@@ -3,6 +3,7 @@ import { pbxRequest } from "./carriers";
 import { flagOn, getDb, readDoc } from "./db";
 import { chooseExtension, extensionRange, replacementExtension } from "./extension-numbers";
 import { persistNewExtensionRanges, planExtensionRanges, readExtensionPlan, shiftPendingExtensions } from "./extension-plan";
+import { describeExtensionFailure } from "./pbx-access";
 import { idFromPbx } from "./pbx-id";
 import { extensionCapacity, normalizePlan } from "./plan-features";
 import type { Plan } from "./types";
@@ -17,6 +18,26 @@ export function appPassword() {
 
 type Department = { user_id: number; name: string; xapi_id: number; number_from: string; number_to: string; open_time: string; close_time: string; last_message: string };
 type ExtensionRow = { id: number; user_id: number; number: string; first_name: string; last_name: string; email: string; xapi_id: number; status: string; access_password: string; last_message: string };
+
+async function findUserByNumber(number: string) {
+  const found = await pbxRequest(`Users?$filter=${encodeURIComponent(`Number eq '${number}'`)}&$select=Id,Number,EmailAddress`);
+  if (!found.ok) return { ok: false as const, user: null, message: found.detail || found.message };
+  const match = readList(found.body).find((item) => String(item.Number ?? "") === number);
+  if (!match) return { ok: true as const, user: null, message: "" };
+  return { ok: true as const, user: { id: idFromPbx(match), email: String(match.EmailAddress || "") }, message: "" };
+}
+
+function extensionFailure(number: string, result: { status: number; code?: string; detail?: string; role?: string }, lookup: { ok: boolean; user: { email: string } | null; message: string }) {
+  return describeExtensionFailure({
+    number,
+    status: result.status,
+    code: result.code || "",
+    detail: result.detail || "",
+    role: result.role || "",
+    existing: lookup.ok ? lookup.user : undefined,
+    lookupFailed: lookup.ok ? "" : lookup.message,
+  });
+}
 
 function readList(body: unknown) {
   if (body && typeof body === "object" && "value" in body && Array.isArray((body as { value?: unknown }).value)) {
@@ -194,27 +215,28 @@ export async function provisionExtension(id: number) {
     }
     if (!(Number(row.number) >= plan.start)) return { ok: false, message: "No free extension is left from the starting number." };
     const department = await ensureDepartment(row.user_id);
-    let created = await pbxRequest("Users", {
-      method: "POST",
-      body: {
-        Id: 0,
-        FirstName: row.first_name,
-        LastName: row.last_name,
-        EmailAddress: row.email,
-        Number: row.number,
-        Language: "EN",
-        SendEmailMissedCalls: false,
-        VMEmailOptions: "Notification",
-        Require2FA: false,
-        AccessPassword: row.access_password,
-      },
+    const userBody = (number: string) => ({
+      Id: 0,
+      FirstName: row.first_name,
+      LastName: row.last_name,
+      EmailAddress: row.email,
+      Number: number,
+      Language: "EN",
+      SendEmailMissedCalls: false,
+      VMEmailOptions: "Notification",
+      Require2FA: false,
+      AccessPassword: row.access_password,
     });
+    let created = await pbxRequest("Users", { method: "POST", body: userBody(row.number) });
     let xapiId = idFromPbx(created.body, created.location);
-    if (!created.ok && /ALREADY_IN_USE|already exists/i.test(created.message)) {
-      const found = await pbxRequest(`Users?$filter=${encodeURIComponent(`Number eq '${row.number}'`)}&$select=Id,Number,EmailAddress`);
-      const match = readList(found.body).find((item) => item.EmailAddress && item.EmailAddress.toLowerCase() === row.email.toLowerCase());
-      xapiId = idFromPbx(match);
-      if (!xapiId) {
+    let linkedExisting = "";
+    if (!created.ok) {
+      const lookup = await findUserByNumber(row.number);
+      const sameEmail = lookup.user && lookup.user.email.toLowerCase() === row.email.toLowerCase();
+      if (sameEmail && lookup.user?.id) {
+        xapiId = lookup.user.id;
+        linkedExisting = `Extension ${row.number} already exists on 3CX for ${lookup.user.email}, so that user was linked.`;
+      } else if (lookup.user || /ALREADY_IN_USE|already exists|already in use/i.test(`${created.code || ""} ${created.detail || created.message}`)) {
         const taken = [
           ...(database.prepare("SELECT number FROM pbx_extensions").all() as { number: string }[]),
           ...(database.prepare("SELECT number FROM call_groups").all() as { number: string }[]),
@@ -222,30 +244,23 @@ export async function provisionExtension(id: number) {
         const listed = await listPhoneSystemNumbers();
         if (listed.ok) taken.push(...listed.numbers);
         const reserved = planExtensionRanges();
-        const next = replacementExtension(row.number, plan.start, taken, row.user_id, reserved.ranges, reserved.plan);
-        if (!next || next === row.number) throw new Error(`Extension ${row.number} is already used on the phone system.`);
+        const previous = row.number;
+        const next = replacementExtension(previous, plan.start, taken, row.user_id, reserved.ranges, reserved.plan);
+        if (!next || next === previous) throw new Error(extensionFailure(previous, created, lookup));
         database.prepare("UPDATE pbx_extensions SET number = ? WHERE id = ? AND xapi_id = 0").run(next, id);
         row = { ...row, number: next };
-        created = await pbxRequest("Users", {
-          method: "POST",
-          body: {
-            Id: 0,
-            FirstName: row.first_name,
-            LastName: row.last_name,
-            EmailAddress: row.email,
-            Number: row.number,
-            Language: "EN",
-            SendEmailMissedCalls: false,
-            VMEmailOptions: "Notification",
-            Require2FA: false,
-            AccessPassword: row.access_password,
-          },
-        });
+        created = await pbxRequest("Users", { method: "POST", body: userBody(next) });
         xapiId = idFromPbx(created.body, created.location);
-        if (!xapiId) throw new Error(created.message || `Extension ${next} is already used on the phone system.`);
+        if (!xapiId) {
+          const again = await findUserByNumber(next);
+          throw new Error(`Extension ${previous} already exists on 3CX. ${extensionFailure(next, created, again)}`);
+        }
+        linkedExisting = `Extension ${previous} already exists on 3CX, so this person was created as ${next}.`;
+      } else {
+        throw new Error(extensionFailure(row.number, created, lookup));
       }
     }
-    if (!xapiId) throw new Error(created.message);
+    if (!xapiId) throw new Error(created.detail || created.message || "3CX did not return an extension id.");
     const assigned = await pbxRequest(`Users(${xapiId})`, {
       method: "PATCH",
       body: {
@@ -253,13 +268,13 @@ export async function provisionExtension(id: number) {
         Groups: [{ "@odata.type": "#Pbx.UserGroup", GroupId: department.xapi_id, Rights: { RoleName: "users" } }],
       },
     });
-    const message = assigned.ok ? "Created on the phone system." : `Created on the phone system. Department assignment needs attention: ${assigned.message}`;
-    database.prepare("UPDATE pbx_extensions SET xapi_id = ?, status = 'created', last_message = ? WHERE id = ?").run(xapiId, message.slice(0, 400), id);
+    const message = assigned.ok ? linkedExisting || "Created on the phone system." : `${linkedExisting ? `${linkedExisting} ` : ""}Created on the phone system. Department assignment needs attention: ${assigned.message}`;
+    database.prepare("UPDATE pbx_extensions SET xapi_id = ?, status = 'created', last_message = ? WHERE id = ?").run(xapiId, message.slice(0, 1200), id);
     await routeDepartment(department);
     return { ok: true, message: "Created on the phone system." };
   } catch (error) {
     const message = error instanceof Error ? error.message : "The phone system did not create this person.";
-    database.prepare("UPDATE pbx_extensions SET status = 'failed', last_message = ? WHERE id = ?").run(message.slice(0, 400), id);
+    database.prepare("UPDATE pbx_extensions SET status = 'failed', last_message = ? WHERE id = ?").run(message.slice(0, 1200), id);
     return { ok: false, message };
   }
 }

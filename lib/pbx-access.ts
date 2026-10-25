@@ -21,3 +21,32 @@ export function pbxAccessMessage(status: number, role: string, detail: string) {
   }
   return `3CX refused this API client.${extra} In Integrations, API, choose the default department and the System Owner role, and allow this server under console restrictions.`;
 }
+
+export function adminPbxError(status: number, role: string, code: string, detail: string) {
+  const raw = detail.replace(/\s+/g, " ").trim();
+  const head = `3CX returned ${status}${code ? ` (${code})` : ""}${raw ? `: ${raw}` : "."}`;
+  if (status !== 403) return head;
+  return `${head} ${pbxAccessMessage(403, role, "")}`;
+}
+
+export function describeExtensionFailure(input: {
+  number: string;
+  status: number;
+  code: string;
+  detail: string;
+  role: string;
+  existing?: { email: string } | null;
+  lookupFailed?: string;
+}) {
+  const collision = /ALREADY_IN_USE|already exists|already in use/i.test(`${input.code} ${input.detail}`);
+  let existence: string;
+  if (input.existing || collision) {
+    const email = input.existing?.email ? ` for ${input.existing.email}` : "";
+    existence = `Extension ${input.number} already exists on 3CX${email}.`;
+  } else if (input.existing === null) {
+    existence = `Extension ${input.number} was not found on 3CX.`;
+  } else {
+    existence = `SautiCall could not check whether extension ${input.number} already exists on 3CX${input.lookupFailed ? `: ${input.lookupFailed}` : "."}`;
+  }
+  return `${existence} ${adminPbxError(input.status, input.role, input.code, input.detail)}`;
+}
