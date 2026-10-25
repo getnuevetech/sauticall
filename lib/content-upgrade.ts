@@ -34,6 +34,10 @@ export function upgradeContent(database: Database.Database) {
       }
     }
     for (const flag of flags) {
+      if (flag.key === "auth.mfa" && flag.description === "Require an authenticator code after password sign-in.") {
+        flag.description = "Require an authenticator for every account at sign-in and before an app password is revealed. You can also require it for one customer from that customer's page.";
+        changed = true;
+      }
       if (flag.key === "auth.show_sign_in" && String(flag.description).includes("approved header")) {
         flag.enabled = true;
         flag.description = "Show Sign in in the header so a returning customer can open an account.";

@@ -78,6 +78,7 @@ export type SessionUser = {
   role: "super_admin" | "staff" | "customer";
   mfa_secret: string | null;
   mfa_pending: number;
+  mfa_required: number;
 };
 
 export async function createSession(userId: number, mfaPending = false) {
@@ -116,7 +117,7 @@ export async function currentUser(): Promise<SessionUser | null> {
   if (!token) return null;
   const row = getDb()
     .prepare(
-      `SELECT u.id, u.email, u.name, u.role, u.mfa_secret, u.disabled, s.mfa_pending
+      `SELECT u.id, u.email, u.name, u.role, u.mfa_secret, u.mfa_required, u.disabled, s.mfa_pending
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.token = ? AND s.expires_at > ?`,
     )

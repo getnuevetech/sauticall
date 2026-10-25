@@ -7,11 +7,13 @@ import { QUEUE_STRATEGIES, RING_STRATEGIES, groupMembers, strategyLabel, type Ca
 import { getDb } from "@/lib/db";
 import { extensionCapacity, paidPlan } from "@/lib/pbx";
 import { planAllows } from "@/lib/plan-features";
+import { AppPassword } from "@/components/account/AppPassword";
 import { customerMessage } from "@/lib/customer-message";
+import { accountNeedsMfa } from "@/lib/mfa";
 import { DEPARTMENT_NAME_RULES, acceptedDepartmentName } from "@/lib/pbx-user";
 import { loadSite } from "@/lib/site";
 
-type Extension = { id: number; number: string; former_number: string; first_name: string; last_name: string; email: string; status: string; access_password: string; last_message: string };
+type Extension = { id: number; number: string; former_number: string; first_name: string; last_name: string; email: string; status: string; welcome_note: string };
 
 function extensionNumber(row: Extension) {
   return row.status === "removed" && row.former_number ? row.former_number : row.number;
@@ -44,7 +46,8 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
   const text = (key: string) => (typeof copy[key] === "string" ? String(copy[key]) : "");
   const plan = paidPlan(user.id);
   const limit = plan ? extensionCapacity(plan) : 0;
-  const rows = getDb().prepare("SELECT id, number, former_number, first_name, last_name, email, status, access_password, last_message FROM pbx_extensions WHERE user_id = ? ORDER BY id").all(user.id) as Extension[];
+  const rows = getDb().prepare("SELECT id, number, former_number, first_name, last_name, email, status, welcome_note FROM pbx_extensions WHERE user_id = ? ORDER BY id").all(user.id) as Extension[];
+  const needsCode = Boolean(user.mfa_secret) || accountNeedsMfa(user);
   const activeRows = rows.filter((row) => row.status !== "removed");
   const hours = getDb().prepare("SELECT name, open_time, close_time, last_message FROM pbx_departments WHERE user_id = ?").get(user.id) as { name: string; open_time: string; close_time: string; last_message: string } | undefined;
   const companyName = acceptedDepartmentName(hours?.name || "");
@@ -131,7 +134,10 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
                   <h3>Extension {extensionNumber(row)} · {row.first_name} {row.last_name}</h3>
                   <p>{row.email}</p>
                   <p>{setupStatus(row.status)}</p>
-                  {row.status === "created" ? <p>App password: {row.access_password}</p> : null}
+                  {row.welcome_note ? <p>{row.welcome_note}</p> : null}
+                  {row.status === "created" ? (
+                    needsCode && !user.mfa_secret ? <p><a href="/account/security">Set up your authenticator to reveal the app password.</a></p> : <AppPassword extensionId={row.id} needsCode={needsCode} />
+                  ) : null}
                   {row.status !== "removed" ? (
                     <form action={removePerson}>
                       <input type="hidden" name="id" value={row.id} />

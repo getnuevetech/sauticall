@@ -12,6 +12,7 @@ import {
 } from "@/lib/auth";
 import { safeCustomerError } from "@/lib/customer-message";
 import { audit, flagOn, getDb } from "@/lib/db";
+import { accountNeedsMfa, revealBlock } from "@/lib/mfa";
 
 type UserRow = {
   id: number;
@@ -20,6 +21,7 @@ type UserRow = {
   password_hash: string;
   role: "super_admin" | "staff" | "customer";
   mfa_secret: string | null;
+  mfa_required?: number;
   disabled?: number;
 };
 
@@ -30,7 +32,8 @@ export async function login(formData: FormData) {
   const user = getDb().prepare("SELECT * FROM users WHERE email = ?").get(email) as UserRow | undefined;
   if (!user || !verifyPassword(password, user.password_hash)) return { error: "Email or password is incorrect." };
   if (user.disabled) return { error: "This account is turned off. An administrator can turn it back on." };
-  const needsCode = flagOn("auth.mfa") && Boolean(user.mfa_secret);
+  const needsMfa = accountNeedsMfa(user);
+  const needsCode = needsMfa && Boolean(user.mfa_secret);
   await createSession(user.id, needsCode);
   if (user.role === "customer") {
     const { provisionCustomer } = await import("@/lib/voip-client");
@@ -38,7 +41,7 @@ export async function login(formData: FormData) {
   }
   audit(user.email, "auth.login", needsCode ? "mfa-pending" : "password");
   if (needsCode) redirect("/account/login?step=code");
-  if (flagOn("auth.mfa") && !user.mfa_secret) redirect("/account/security");
+  if (needsMfa && !user.mfa_secret) redirect("/account/security");
   redirect(user.role === "customer" ? "/account" : "/admin");
 }
 
@@ -90,23 +93,35 @@ export async function logout() {
 export async function enrollMfa(formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
-  if (!flagOn("auth.mfa")) return { error: "An administrator has turned multi-factor sign-in off." };
   const secret = String(formData.get("secret") || "");
   const code = String(formData.get("code") || "");
   if (!totpMatches(secret, code)) return { error: "That code does not match this authenticator setup." };
   getDb().prepare("UPDATE users SET mfa_secret = ? WHERE id = ?").run(secret, user.id);
   await markMfaComplete();
   audit(user.email, "auth.mfa.enroll", "");
-  redirect("/account");
+  redirect("/account/security");
 }
 
 export async function clearOwnMfa() {
   const user = await currentUser();
   if (!user) redirect("/account/login");
-  if (flagOn("auth.mfa")) redirect("/account/security");
+  if (accountNeedsMfa(user)) redirect("/account/security");
   getDb().prepare("UPDATE users SET mfa_secret = NULL WHERE id = ?").run(user.id);
   audit(user.email, "auth.mfa.clear", "");
   redirect("/account/security");
+}
+
+export async function revealAppPassword(extensionId: number, code: string): Promise<{ error?: string; password?: string }> {
+  const user = await currentUser();
+  if (!user) return { error: "Sign in again to continue." };
+  const blocked = revealBlock(user, code);
+  if (blocked) return { error: blocked };
+  const row = getDb()
+    .prepare("SELECT access_password FROM pbx_extensions WHERE id = ? AND user_id = ? AND status = 'created'")
+    .get(extensionId, user.id) as { access_password: string } | undefined;
+  if (!row?.access_password) return { error: "That app password is not available." };
+  audit(user.email, "pbx.password.reveal", String(extensionId));
+  return { password: row.access_password };
 }
 
 export async function startCheckout(formData: FormData) {

@@ -8,6 +8,8 @@ import { numberPurchaseMode } from "../lib/number-order.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
+import { extensionWelcomeText, webClientUrl, welcomeCustomerNote } from "../lib/extension-welcome.ts";
+import { mfaIsRequired } from "../lib/mfa-rules.ts";
 import { DEPARTMENT_NAME_RULES, acceptedDepartmentName, departmentCreateBody, departmentNameIssue, departmentNameTakenMessage, departmentRejectedMessage, userCreateBody } from "../lib/pbx-user.ts";
 import { readRateCenters, regionAllowed } from "../lib/places.ts";
 
@@ -193,6 +195,21 @@ test("a 3CX reply that the number is already used counts as a collision", () => 
     existing: null,
   });
   assert.match(message, /Extension 124 already exists on 3CX/);
+});
+
+test("an extension welcome explains 3CX sign-in and keeps the app password off the email", () => {
+  const text = extensionWelcomeText({ firstName: "Abiola", number: "514", email: "aoolomola@gmail.com", webClient: webClientUrl("https://pbx.example.com/") });
+  assert.match(text, /extension is 514/);
+  assert.match(text, /https:\/\/pbx\.example\.com\/webclient/);
+  assert.match(text, /3CX phone app/);
+  assert.match(text, /desk phone/);
+  assert.match(text, /SautiCall support/);
+  assert.equal(text.includes("u2dPtRSyZ"), false);
+  assert.equal(welcomeCustomerNote(true), "A setup email was sent to this address.");
+  assert.match(welcomeCustomerNote(false), /could not be sent/);
+  assert.equal(mfaIsRequired(false, 0), false);
+  assert.equal(mfaIsRequired(false, 1), true);
+  assert.equal(mfaIsRequired(true, 0), true);
 });
 
 test("a company name follows the department rules before it is sent", () => {

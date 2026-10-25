@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/access";
 import { groupMembers, strategyLabel } from "@/lib/call-groups";
 import { flagOn, getDb, readDoc } from "@/lib/db";
 import { readExtensionPlan } from "@/lib/extension-plan";
+import { alignStoredExtensions } from "@/lib/pbx";
 import { extensionCapacity, normalizePlans } from "@/lib/plan-features";
 import type { Plan } from "@/lib/types";
 
@@ -12,6 +13,7 @@ type GroupRow = { id: number; email: string; kind: string; name: string; number:
 
 export default async function AdminPhonePage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string }> }) {
   await requirePermission("settings.phone");
+  await alignStoredExtensions();
   const params = await searchParams;
   const live = flagOn("pbx.live_provision");
   const plan = readExtensionPlan();
@@ -39,9 +41,9 @@ export default async function AdminPhonePage({ searchParams }: { searchParams: P
       <p>Each customer sets a company name, and that name is sent to 3CX as their department. People are added to that department. A 400 on the department name is kept below with the 3CX reply, so a rejected name is visible here. Daytime calls go to the ring group or queue they chose, once that group is on the phone system. Otherwise they go to the first extension. After hours they go to voicemail. If 3CX does not accept the group, build it on the server with the number and people below, point the department office-hours route at it, and mark it done.</p>
       <p>How many extensions a customer can add is set on that customer’s plan. {planLine}. The most any plan can include is 500. Change those under Plans. A customer cannot add more people than their plan includes.</p>
       <p>The message that said 3CX received 500 was a list of existing numbers, 500 records in one request. 3CX accepts 100 records per request, so that list is read 100 at a time. That 500 is not an extension number and it is not a plan limit.</p>
-      <p>The next person is numbered from {plan.start}. Someone already on the phone system keeps that number. Someone saved here who is not on the phone system yet, with a number below {plan.start}, moves to the next free number from {plan.start} when this form is saved. Numbers already on 3CX are skipped.</p>
+      <p>The next person is numbered from {plan.start}. Someone already on the phone system keeps that number. Someone saved here who is not on the phone system yet, with a number below {plan.start}, moves to the next free number from {plan.start} when this form is saved. Numbers already on 3CX are skipped. The extension is the number in each heading. This page reads that number back from the phone system when the connection is on.</p>
       {reserved.length ? reserved.map((row) => (
-        <p key={row.email}>{row.email}: department {row.name || "company name not set"}{row.xapi_id ? ` · ${row.xapi_id}` : ""}.{row.number_from && row.number_to ? ` Extensions ${row.number_from}–${row.number_to}.` : ""}{row.last_message ? ` ${row.last_message}` : ""}</p>
+        <p key={row.email}>{row.email}: department {row.name || "company name not set"}.{row.number_from && row.number_to ? ` Extensions ${row.number_from}–${row.number_to}.` : ""}{/^SautiCall \d+$/.test(row.name || "") ? " Set a company name on that customer's phone page to rename this department." : ""}{row.last_message ? ` ${row.last_message}` : ""}</p>
       )) : null}
       {params.saved === "removed" ? <p className="form-feedback">This person was removed. Their name, email, and extension stay in the record.</p> : null}
       {params.error ? <p className="form-feedback">{params.error}</p> : null}
@@ -55,7 +57,7 @@ export default async function AdminPhonePage({ searchParams }: { searchParams: P
             <h3>{group.kind === "queue" ? "Queue" : "Ring group"} {group.number} · {group.name}</h3>
             <p>{group.email} · {strategyLabel(group.kind, group.strategy)} · {group.answers ? "Answers daytime calls" : "Does not answer daytime calls"}</p>
             <p>{people || "No people"}{group.department_name ? ` · Department ${group.department_name}` : ""}</p>
-            <p>{group.status === "created" ? "On the phone system" : group.status === "manual" ? "Marked done on the server" : group.status === "failed" ? "Needs attention" : "Waiting"}{group.xapi_id ? ` · ${group.xapi_id}` : ""}</p>
+            <p>{group.status === "created" ? "On the phone system" : group.status === "manual" ? "Marked done on the server" : group.status === "failed" ? "Needs attention" : "Waiting"}</p>
             {group.last_message ? <p>{group.last_message}</p> : null}
             {group.status !== "created" && group.status !== "manual" ? (
               <>
@@ -78,7 +80,7 @@ export default async function AdminPhonePage({ searchParams }: { searchParams: P
       {rows.map((row) => (
         <article key={row.id} className="feature-card" style={{ marginBottom: 16 }}>
           <h3>Extension {row.status === "removed" && row.former_number ? row.former_number : row.number} · {row.first_name} {row.last_name}</h3>
-          <p>{row.email}{row.account_email && row.account_email.toLowerCase() !== row.email.toLowerCase() ? ` · Account ${row.account_email}` : ""} · {row.status === "created" ? "On the phone system" : row.status === "removed" ? "Removed, record kept" : row.status === "failed" ? "Needs attention" : "Waiting"}{row.xapi_id ? ` · ${row.xapi_id}` : ""}</p>
+          <p>{row.email}{row.account_email && row.account_email.toLowerCase() !== row.email.toLowerCase() ? ` · Account ${row.account_email}` : ""} · Extension {row.status === "removed" && row.former_number ? row.former_number : row.number} · {row.status === "created" ? "On the phone system" : row.status === "removed" ? "Removed, record kept" : row.status === "failed" ? "Needs attention" : "Waiting"}</p>
           {row.last_message ? <p>{row.last_message}</p> : null}
           {row.status !== "created" && row.status !== "removed" ? (
             <form action={provisionPerson}>

@@ -113,6 +113,7 @@ export async function saveCustomerUser(formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
   const disabled = formData.get("disabled") === "on" ? 1 : 0;
+  const mfaRequired = formData.get("mfa_required") === "on" ? 1 : 0;
   if (!id) back("/admin/customers", "That customer was not found.");
   if (!name || !email.includes("@")) back(path, "Name and email are required.");
   if (password && password.length < 10) back(path, "Use a password of at least 10 characters.");
@@ -121,9 +122,9 @@ export async function saveCustomerUser(formData: FormData) {
   const clash = getDb().prepare("SELECT id FROM users WHERE email = ? AND id != ?").get(email, id);
   if (clash) back(path, "That email is already in use.");
   if (password) {
-    getDb().prepare("UPDATE users SET name = ?, email = ?, password_hash = ?, disabled = ? WHERE id = ? AND role = 'customer'").run(name, email, hashPassword(password), disabled, id);
+    getDb().prepare("UPDATE users SET name = ?, email = ?, password_hash = ?, disabled = ?, mfa_required = ? WHERE id = ? AND role = 'customer'").run(name, email, hashPassword(password), disabled, mfaRequired, id);
   } else {
-    getDb().prepare("UPDATE users SET name = ?, email = ?, disabled = ? WHERE id = ? AND role = 'customer'").run(name, email, disabled, id);
+    getDb().prepare("UPDATE users SET name = ?, email = ?, disabled = ?, mfa_required = ? WHERE id = ? AND role = 'customer'").run(name, email, disabled, mfaRequired, id);
   }
   if (disabled) getDb().prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
   audit(actor.email, "customer.update", email);

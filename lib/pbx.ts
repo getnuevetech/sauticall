@@ -3,6 +3,7 @@ import { pbxRequest } from "./carriers";
 import { flagOn, getDb, readDoc } from "./db";
 import { chooseExtension, extensionRange, replacementExtension } from "./extension-numbers";
 import { persistNewExtensionRanges, planExtensionRanges, readExtensionPlan, shiftPendingExtensions } from "./extension-plan";
+import { extensionWelcomeText, webClientUrl, welcomeCustomerNote } from "./extension-welcome";
 import { describeExtensionFailure, numberAlreadyUsed } from "./pbx-access";
 import {
   acceptedDepartmentName,
@@ -57,6 +58,52 @@ function extensionFailure(number: string, result: { status: number; code?: strin
   });
 }
 
+function liveNumber(body: unknown) {
+  if (!body || typeof body !== "object" || !("Number" in body)) return "";
+  return String((body as { Number?: unknown }).Number ?? "").trim();
+}
+
+function rememberLiveNumber(id: number, userId: number, current: string, live: string) {
+  if (!/^\d+$/.test(live) || live === current) return current;
+  const clash = getDb().prepare("SELECT id FROM pbx_extensions WHERE user_id = ? AND number = ? AND id != ?").get(userId, live, id);
+  if (clash) return current;
+  getDb().prepare("UPDATE pbx_extensions SET number = ? WHERE id = ?").run(live, id);
+  return live;
+}
+
+async function deliverWelcome(person: { xapiId: number; firstName: string; number: string; email: string }) {
+  try {
+  const sent = await pbxRequest(`Users(${person.xapiId})/Pbx.SendWelcomeEmail`, { method: "POST", body: {} });
+  if (sent.ok) return { note: welcomeCustomerNote(true), detail: "3CX sent the welcome email." };
+  const { getConnection } = await import("./carriers");
+  const { mailSettings } = await import("./tickets");
+  const { sendMail } = await import("./smtp");
+  const settings = mailSettings();
+  const webClient = webClientUrl(String(getConnection("3cx").public.base_url || ""));
+  const text = extensionWelcomeText({ firstName: person.firstName, number: person.number, email: person.email, webClient });
+  if (!settings?.smtp_host || !settings.smtp_from) {
+    return { note: welcomeCustomerNote(false), detail: `3CX did not send the welcome email (${sent.message}). Outgoing email is not set up.` };
+  }
+  const result = await sendMail({
+    host: settings.smtp_host,
+    port: Number(settings.smtp_port) || 587,
+    user: settings.smtp_user,
+    pass: settings.smtp_pass,
+    secure: settings.smtp_secure === 1,
+    from: settings.smtp_from,
+    to: [person.email],
+    subject: `Your extension ${person.number}`,
+    text,
+    messageId: `sc-ext-${person.xapiId}-${crypto.randomBytes(6).toString("hex")}@sauticall`,
+  });
+  if (result.ok) return { note: welcomeCustomerNote(true), detail: `3CX did not send the welcome email (${sent.message}). Setup instructions were emailed.` };
+  return { note: welcomeCustomerNote(false), detail: `3CX did not send the welcome email (${sent.message}). Setup email failed: ${result.message}` };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "The setup email could not be sent.";
+    return { note: welcomeCustomerNote(false), detail: message };
+  }
+}
+
 function readList(body: unknown) {
   if (body && typeof body === "object" && "value" in body && Array.isArray((body as { value?: unknown }).value)) {
     return (body as { value: { Id?: number; EmailAddress?: string; Number?: string | number }[] }).value;
@@ -108,6 +155,44 @@ async function collectNumbers(collection: string) {
     path = skipped;
   }
   return { ok: true as const, numbers, message: "" };
+}
+
+export async function alignStoredExtensions() {
+  if (!flagOn("pbx.live_provision")) return;
+  const database = getDb();
+  const rows = database.prepare("SELECT id, user_id, number, xapi_id FROM pbx_extensions WHERE xapi_id != 0 AND status != 'removed'").all() as { id: number; user_id: number; number: string; xapi_id: number }[];
+  if (!rows.length) return;
+  const byId = new Map(rows.map((row) => [row.xapi_id, row]));
+  let seen = 0;
+  let previousPage = "";
+  let path = `Users?$select=Id,Number&$top=${PHONE_SYSTEM_PAGE}`;
+  try {
+    for (let page = 0; page < 50 && path; page += 1) {
+      const result = await pbxRequest(capTop(path));
+      if (!result.ok) return;
+      const batch = readList(result.body);
+      const signature = batch.map((item) => `${item.Id ?? ""}:${item.Number ?? ""}`).join(",");
+      if (page > 0 && signature === previousPage) break;
+      previousPage = signature;
+      seen += batch.length;
+      for (const item of batch) {
+        const local = byId.get(Number(item.Id) || 0);
+        if (!local) continue;
+        rememberLiveNumber(local.id, local.user_id, local.number, String(item.Number ?? "").trim());
+      }
+      const linked = nextPage(result.body);
+      if (linked && linked !== path) {
+        path = linked;
+        continue;
+      }
+      if (batch.length < PHONE_SYSTEM_PAGE) break;
+      const skipped = `Users?$select=Id,Number&$top=${PHONE_SYSTEM_PAGE}&$skip=${seen}`;
+      if (skipped === path) break;
+      path = skipped;
+    }
+  } catch {
+    return;
+  }
 }
 
 export async function listPhoneSystemNumbers() {
@@ -545,8 +630,11 @@ export async function provisionExtension(id: number) {
       }
       throw new PhoneSystemError("The phone system did not place this person on the company department.", admin);
     }
-    const message = linkedExisting || "Created on the phone system.";
-    database.prepare("UPDATE pbx_extensions SET xapi_id = ?, status = 'created', last_message = ? WHERE id = ?").run(xapiId, message.slice(0, 1200), id);
+    const confirmed = await pbxRequest(`Users(${xapiId})?$select=Id,Number`);
+    if (confirmed.ok) row.number = rememberLiveNumber(id, row.user_id, row.number, liveNumber(confirmed.body));
+    const welcome = createdHere ? await deliverWelcome({ xapiId, firstName: row.first_name, number: row.number, email: row.email }) : { note: "", detail: "" };
+    const message = [linkedExisting || `Extension ${row.number} is on the phone system.`, welcome.detail].filter(Boolean).join(" ");
+    database.prepare("UPDATE pbx_extensions SET number = ?, xapi_id = ?, status = 'created', last_message = ?, welcome_note = ? WHERE id = ?").run(row.number, xapiId, message.slice(0, 1200), welcome.note, id);
     await routeDepartment(department);
     return { ok: true, message: "Created on the phone system." };
   } catch (error) {

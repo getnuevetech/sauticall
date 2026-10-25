@@ -18,7 +18,7 @@ export const defaultTheme: Theme = {
 export const defaultFlags: Flag[] = [
   { key: "auth.signup", label: "Customer registration", description: "Allow new customers to create an account.", enabled: true },
   { key: "auth.password_login", label: "Email and password sign-in", description: "Allow password sign-in for customer and staff accounts.", enabled: true },
-  { key: "auth.mfa", label: "Multi-factor authentication", description: "Require an authenticator code after password sign-in.", enabled: false },
+  { key: "auth.mfa", label: "Multi-factor authentication", description: "Require an authenticator for every account at sign-in and before an app password is revealed. You can also require it for one customer from that customer's page.", enabled: false },
   { key: "auth.show_sign_in", label: "Sign-in link in the header", description: "Show Sign in in the header so a returning customer can open an account.", enabled: true },
   { key: "contact.form", label: "Contact form", description: "Accept messages from the public contact page.", enabled: true },
   { key: "sales.custom_request", label: "Custom plan request", description: "Accept the unpriced Custom plan form so sales can follow up.", enabled: true },

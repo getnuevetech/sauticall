@@ -11,11 +11,12 @@ export default async function CustomerPage({ params, searchParams }: { params: P
   const actor = await requirePermission("users.customers");
   const { id } = await params;
   const query = await searchParams;
-  const person = getDb().prepare("SELECT id, name, email, disabled, created_at FROM users WHERE id = ? AND role = 'customer'").get(Number(id)) as {
+  const person = getDb().prepare("SELECT id, name, email, disabled, mfa_required, created_at FROM users WHERE id = ? AND role = 'customer'").get(Number(id)) as {
     id: number;
     name: string;
     email: string;
     disabled: number;
+    mfa_required: number;
     created_at: string;
   } | undefined;
   if (!person) notFound();
@@ -40,6 +41,8 @@ export default async function CustomerPage({ params, searchParams }: { params: P
         </div>
         <label>New password <input name="password" type="password" minLength={10} placeholder="Leave blank to keep the current password" /></label>
         <label className="check-option"><input type="checkbox" name="disabled" defaultChecked={Boolean(person.disabled)} /> Turn off sign-in</label>
+        <label className="check-option"><input type="checkbox" name="mfa_required" defaultChecked={Boolean(person.mfa_required)} /> Require an authenticator for this account</label>
+        <p>When this is on, the customer sets up an authenticator. Revealing an app password asks for a code. The switch under What customers can do can require this for every account.</p>
         <button className="btn btn-primary" type="submit">Save customer</button>
       </form>
       <div className="desk">
