@@ -1,7 +1,7 @@
 import { getDb } from "./db";
 import { carrierSearchType, didMatches, type DigitSearch } from "./did-search";
 import { readDids, type ListedDid } from "./did-list";
-import { adminPbxError, pbxAccessMessage, pbxErrorText, roleFromToken } from "./pbx-access";
+import { adminPbxError, pbxAccessMessage, pbxErrorText, pbxRoleIsAdmin, roleFromToken } from "./pbx-access";
 import { readRateCenters } from "./places";
 
 export type PublicConfig = Record<string, string>;
@@ -262,7 +262,8 @@ export async function test3cx() {
       throw new Error(pbxAccessMessage(defs.status, roleFromToken(token), xapiMessage(body, "")));
     }
     const role = roleFromToken(token);
-    const message = `Connected${version ? `. Version ${version}` : ""}${role ? `. Role ${role.replace(/_/g, " ")}` : ""}.`;
+    if (!pbxRoleIsAdmin(role)) throw new Error(pbxAccessMessage(403, role, ""));
+    const message = `Connected${version ? `. Version ${version}` : ""}. Role ${role.replace(/_/g, " ")}.`;
     recordCheck("3cx", true, message);
     return { ok: true, message };
   } catch (error) {

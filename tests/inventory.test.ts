@@ -99,10 +99,17 @@ test("an admin sees the precise 3CX error and whether the extension exists", () 
 });
 
 test("a 403 from 3CX names the API role that was refused", () => {
-  const header = Buffer.from(JSON.stringify({ MaxRole: "users" })).toString("base64url");
-  assert.equal(roleFromToken(`aa.${header}.zz`), "users");
+  const users = Buffer.from(JSON.stringify({ role: ["App", "Local", "SingleCompany"], MaxRole: "users" })).toString("base64url");
+  assert.equal(roleFromToken(`aa.${users}.zz`), "users");
+  const appOnly = Buffer.from(JSON.stringify({ role: ["App", "Local", "Paid", "Enterprise", "CallFlowApp"] })).toString("base64url");
+  assert.equal(roleFromToken(`aa.${appOnly}.zz`), "");
+  const owner = Buffer.from(JSON.stringify({ role: ["App"], MaxRole: "system_owners" })).toString("base64url");
+  assert.equal(roleFromToken(`aa.${owner}.zz`), "system_owners");
   assert.match(pbxAccessMessage(403, "users", "Access denied."), /System Owner/);
-  assert.match(pbxAccessMessage(403, "system_owners", ""), /console restrictions/);
+  assert.match(pbxAccessMessage(403, "users", "Access denied."), /Console Restrictions/);
+  assert.match(pbxAccessMessage(403, "", ""), /no department role/);
+  assert.match(pbxAccessMessage(403, "", ""), /Configuration API Access/);
+  assert.match(pbxAccessMessage(403, "system_owners", ""), /Console Restrictions/);
 });
 
 test("extension numbers start at 2000 and skip numbers already taken", () => {
