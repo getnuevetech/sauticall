@@ -8,6 +8,7 @@ import { numberPurchaseMode } from "../lib/number-order.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
+import { departmentCreateBody, userCreateBody } from "../lib/pbx-user.ts";
 import { readRateCenters, regionAllowed } from "../lib/places.ts";
 
 test("a number request has to be a full 10-digit inventory number", () => {
@@ -192,6 +193,24 @@ test("a 3CX reply that the number is already used counts as a collision", () => 
     existing: null,
   });
   assert.match(message, /Extension 124 already exists on 3CX/);
+});
+
+test("a new department and person match the 3CX user shape", () => {
+  const department = departmentCreateBody("SautiCall 4", 500, 509);
+  assert.equal(department.Props.UserNumberFrom, "500");
+  assert.equal(department.Props.UserNumberTo, "509");
+  assert.equal("UserNumberFrom" in department, false);
+  const person = userCreateBody({
+    firstName: "Agbo",
+    lastName: "Ola",
+    email: "sales@kwiktech.net",
+    number: "515",
+    password: "secret",
+    groupId: 12,
+  });
+  assert.equal(person.Number, "515");
+  assert.deepEqual(person.Groups, [{ GroupId: 12, Rights: { RoleName: "users" } }]);
+  assert.equal(JSON.stringify(person).includes("@odata.type"), false);
 });
 
 test("a customer never sees a partner or integration error", () => {

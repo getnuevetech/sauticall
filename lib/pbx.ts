@@ -4,6 +4,7 @@ import { flagOn, getDb, readDoc } from "./db";
 import { chooseExtension, extensionRange, replacementExtension } from "./extension-numbers";
 import { persistNewExtensionRanges, planExtensionRanges, readExtensionPlan, shiftPendingExtensions } from "./extension-plan";
 import { describeExtensionFailure, numberAlreadyUsed } from "./pbx-access";
+import { departmentCreateBody, departmentRangeBody, userCreateBody } from "./pbx-user";
 import { idFromPbx } from "./pbx-id";
 import { extensionCapacity, normalizePlan } from "./plan-features";
 import type { Plan } from "./types";
@@ -162,7 +163,7 @@ async function ensureDepartment(userId: number) {
     if (String(nextFrom) !== existing.number_from || String(nextTo) !== existing.number_to) {
       const widened = await pbxRequest(`Groups(${existing.xapi_id})`, {
         method: "PATCH",
-        body: { Id: existing.xapi_id, UserNumberFrom: String(nextFrom), UserNumberTo: String(nextTo) },
+        body: departmentRangeBody(nextFrom, nextTo),
       });
       if (widened.ok) database.prepare("UPDATE pbx_departments SET number_from = ?, number_to = ? WHERE user_id = ?").run(String(nextFrom), String(nextTo), userId);
     }
@@ -181,13 +182,7 @@ async function ensureDepartment(userId: number) {
   }
   const created = await pbxRequest("Groups", {
     method: "POST",
-    body: {
-      AllowCallService: true,
-      Language: "EN",
-      Name: name,
-      UserNumberFrom: String(range.from),
-      UserNumberTo: String(range.to),
-    },
+    body: departmentCreateBody(name, range.from, range.to),
   });
   const id = idFromPbx(created.body, created.location);
   if (!created.ok || !id) throw new Error(created.message);
@@ -300,18 +295,14 @@ export async function provisionExtension(id: number) {
       posts += 1;
       const created = await pbxRequest("Users", {
         method: "POST",
-        body: {
-          Id: 0,
-          FirstName: row.first_name,
-          LastName: row.last_name,
-          EmailAddress: row.email,
-          Number: row.number,
-          Language: "EN",
-          SendEmailMissedCalls: false,
-          VMEmailOptions: "Notification",
-          Require2FA: false,
-          AccessPassword: row.access_password,
-        },
+        body: userCreateBody({
+          firstName: row.first_name,
+          lastName: row.last_name,
+          email: row.email,
+          number: row.number,
+          password: row.access_password,
+          groupId: department.xapi_id || undefined,
+        }),
       });
       xapiId = idFromPbx(created.body, created.location);
       if (created.ok) {
@@ -344,7 +335,7 @@ export async function provisionExtension(id: number) {
       method: "PATCH",
       body: {
         Id: xapiId,
-        Groups: [{ "@odata.type": "#Pbx.UserGroup", GroupId: department.xapi_id, Rights: { RoleName: "users" } }],
+        Groups: [{ GroupId: department.xapi_id, Rights: { RoleName: "users" } }],
       },
     });
     const message = assigned.ok ? linkedExisting || "Created on the phone system." : `${linkedExisting ? `${linkedExisting} ` : ""}Created on the phone system. Department assignment needs attention: ${assigned.message}`;
