@@ -7,7 +7,7 @@ import { readExtensionPlan } from "@/lib/extension-plan";
 import { extensionCapacity, normalizePlans } from "@/lib/plan-features";
 import type { Plan } from "@/lib/types";
 
-type Row = { id: number; email: string; number: string; first_name: string; last_name: string; status: string; xapi_id: number; last_message: string };
+type Row = { id: number; email: string; account_email: string; number: string; first_name: string; last_name: string; status: string; xapi_id: number; last_message: string };
 type GroupRow = { id: number; email: string; kind: string; name: string; number: string; strategy: string; answers: number; status: string; xapi_id: number; last_message: string; task_status: string | null; members: string | null; department_name: string | null };
 
 export default async function AdminPhonePage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string }> }) {
@@ -24,7 +24,7 @@ export default async function AdminPhonePage({ searchParams }: { searchParams: P
      ORDER BY CAST(d.number_from AS INTEGER)`,
   ).all() as { email: string; number_from: string; number_to: string }[];
   const rows = getDb().prepare(
-    `SELECT e.id, u.email, e.number, e.first_name, e.last_name, e.status, e.xapi_id, e.last_message
+    `SELECT e.id, e.email, u.email AS account_email, e.number, e.first_name, e.last_name, e.status, e.xapi_id, e.last_message
      FROM pbx_extensions e JOIN users u ON u.id = e.user_id ORDER BY e.id DESC LIMIT 100`,
   ).all() as Row[];
   const groups = getDb().prepare(
@@ -75,7 +75,7 @@ export default async function AdminPhonePage({ searchParams }: { searchParams: P
       {rows.map((row) => (
         <article key={row.id} className="feature-card" style={{ marginBottom: 16 }}>
           <h3>Extension {row.number} · {row.first_name} {row.last_name}</h3>
-          <p>{row.email} · {row.status === "created" ? "On the phone system" : row.status === "failed" ? "Needs attention" : "Waiting"}{row.xapi_id ? ` · ${row.xapi_id}` : ""}</p>
+          <p>{row.email}{row.account_email && row.account_email.toLowerCase() !== row.email.toLowerCase() ? ` · Account ${row.account_email}` : ""} · {row.status === "created" ? "On the phone system" : row.status === "failed" ? "Needs attention" : "Waiting"}{row.xapi_id ? ` · ${row.xapi_id}` : ""}</p>
           {row.last_message ? <p>{row.last_message}</p> : null}
           {row.status !== "created" ? (
             <form action={provisionPerson}>
