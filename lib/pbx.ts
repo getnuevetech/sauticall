@@ -208,7 +208,7 @@ function daytimeDestination(userId: number) {
     .prepare("SELECT kind, number FROM call_groups WHERE user_id = ? AND answers = 1 AND status IN ('created', 'manual') ORDER BY id DESC LIMIT 1")
     .get(userId) as { kind: string; number: string } | undefined;
   if (group?.number) return { number: group.number, to: group.kind === "queue" ? "Queue" as const : "RingGroup" as const };
-  const first = getDb().prepare("SELECT number FROM pbx_extensions WHERE user_id = ? AND xapi_id != 0 ORDER BY id LIMIT 1").get(userId) as { number: string } | undefined;
+  const first = getDb().prepare("SELECT number FROM pbx_extensions WHERE user_id = ? AND xapi_id != 0 AND status != 'removed' ORDER BY id LIMIT 1").get(userId) as { number: string } | undefined;
   if (!first) return null;
   return { number: first.number, to: "Extension" as const };
 }
@@ -240,7 +240,7 @@ async function routeDepartment(department: Department) {
 function savedNumbers() {
   const database = getDb();
   return [
-    ...(database.prepare("SELECT number FROM pbx_extensions").all() as { number: string }[]),
+    ...(database.prepare("SELECT number FROM pbx_extensions WHERE status != 'removed'").all() as { number: string }[]),
     ...(database.prepare("SELECT number FROM call_groups").all() as { number: string }[]),
   ].map((item) => item.number);
 }
@@ -356,6 +356,52 @@ export async function provisionExtension(id: number) {
     database.prepare("UPDATE pbx_extensions SET status = 'failed', last_message = ? WHERE id = ?").run(message.slice(0, 1200), id);
     return { ok: false, message };
   }
+}
+
+export async function removeExtension(id: number) {
+  const database = getDb();
+  const row = database.prepare("SELECT * FROM pbx_extensions WHERE id = ?").get(id) as ExtensionRow | undefined;
+  if (!row) return { ok: false, message: "That person was not found." };
+  if (row.status === "removed") return { ok: true, message: "Already removed. The record is kept." };
+  if (row.xapi_id && !flagOn("pbx.live_provision")) {
+    return { ok: false, message: "Creating people on the phone system is turned off, so this person is still on 3CX." };
+  }
+  if (row.xapi_id) {
+    const removed = await pbxRequest(`Users(${row.xapi_id})`, { method: "DELETE" });
+    if (!removed.ok && removed.status !== 404) return { ok: false, message: removed.message };
+  }
+  const groups = database.prepare(
+    `SELECT g.id, g.kind, g.xapi_id FROM call_groups g
+     JOIN call_group_members m ON m.group_id = g.id WHERE m.extension_id = ?`,
+  ).all(id) as { id: number; kind: string; xapi_id: number }[];
+  database.prepare("DELETE FROM call_group_members WHERE extension_id = ?").run(id);
+  const removedAt = new Date().toISOString();
+  database.prepare(
+    `UPDATE pbx_extensions
+     SET former_number = ?, number = ?, status = 'removed', removed_at = ?, xapi_id = 0, access_password = '', last_message = ?
+     WHERE id = ?`,
+  ).run(row.number, `retired-${id}`, removedAt, `Removed from the phone system. Extension ${row.number} stays in the record for ${row.first_name} ${row.last_name}.`, id);
+  for (const group of groups) {
+    const left = database.prepare("SELECT COUNT(*) AS n FROM call_group_members WHERE group_id = ?").get(group.id) as { n: number };
+    if (!group.xapi_id || !flagOn("pbx.live_provision")) {
+      if (!left.n) database.prepare("UPDATE call_groups SET answers = 0, last_message = ? WHERE id = ?").run("This group has no people.", group.id);
+      continue;
+    }
+    if (!left.n) {
+      const path = group.kind === "queue" ? "Queues" : "RingGroups";
+      const deleted = await pbxRequest(`${path}(${group.xapi_id})`, { method: "DELETE" });
+      database.prepare("UPDATE call_groups SET xapi_id = 0, status = 'waiting', answers = 0, last_message = ? WHERE id = ?").run(
+        deleted.ok || deleted.status === 404 ? "This group has no people, so it was removed from the phone system. The name stays here." : deleted.message.slice(0, 400),
+        group.id,
+      );
+      continue;
+    }
+    const { provisionCallGroup } = await import("./call-groups");
+    const result = await provisionCallGroup(group.id);
+    if (!result.ok) database.prepare("UPDATE call_groups SET last_message = ? WHERE id = ?").run(result.message.slice(0, 400), group.id);
+  }
+  await updateRouting(row.user_id);
+  return { ok: true, message: "Removed. The name, email, and extension stay in the record." };
 }
 
 export async function updateRouting(userId: number) {

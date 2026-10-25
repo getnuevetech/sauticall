@@ -233,8 +233,9 @@ export function dashboardFor(user: Staff) {
   if (can(user, permissions, "settings.phone")) {
     const extensions = database.prepare("SELECT status FROM pbx_extensions").all() as { status: string }[];
     const groups = database.prepare("SELECT kind, status FROM call_groups").all() as { kind: string; status: string }[];
-    kpis.push({ label: "People on the phone system", value: String(extensions.filter((row) => row.status === "created").length), hint: `${extensions.length} people added`, href: "/admin/phone" });
-    cards.push({ title: "Extensions", href: "/admin/phone", kind: "donut", slices: slicesFrom(tally(extensions, (row) => row.status), ["created", "waiting", "failed"]), empty: "No extensions yet." });
+    const removedExtensions = extensions.filter((row) => row.status === "removed").length;
+    kpis.push({ label: "People on the phone system", value: String(extensions.filter((row) => row.status === "created").length), hint: `${extensions.length - removedExtensions} current, ${removedExtensions} removed and kept`, href: "/admin/phone" });
+    cards.push({ title: "Extensions", href: "/admin/phone", kind: "donut", slices: slicesFrom(tally(extensions, (row) => row.status), ["created", "waiting", "failed", "removed"]), empty: "No extensions yet." });
     cards.push({ title: "Ring groups and queues", href: "/admin/phone", kind: "donut", slices: slicesFrom(tally(groups, (row) => row.kind), ["ring", "queue"]), empty: "No ring groups or queues yet." });
     cards.push({
       title: "Group setup",

@@ -243,6 +243,17 @@ export async function saveExtensionPlan(formData: FormData): Promise<{ ok: true;
   };
 }
 
+export async function removePersonRecord(formData: FormData) {
+  const user = await staff("settings.phone");
+  const id = Number(formData.get("id"));
+  const row = getDb().prepare("SELECT number, first_name, last_name, email FROM pbx_extensions WHERE id = ?").get(id) as { number: string; first_name: string; last_name: string; email: string } | undefined;
+  const { removeExtension } = await import("@/lib/pbx");
+  const result = await removeExtension(id);
+  audit(user.email, "pbx.person.remove", row && result.ok ? `${row.number} ${row.first_name} ${row.last_name} ${row.email}` : `${id}:${result.ok ? "ok" : "failed"}`);
+  if (!result.ok) redirect(`/admin/phone?error=${encodeURIComponent(result.message)}`);
+  redirect("/admin/phone?saved=removed");
+}
+
 export async function provisionPerson(formData: FormData) {
   const user = await staff("settings.phone");
   const id = Number(formData.get("id"));

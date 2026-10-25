@@ -60,7 +60,7 @@ export function groupMembers(groupId: number) {
     .prepare(
       `SELECT m.extension_id, e.number, e.first_name, e.last_name, m.position
        FROM call_group_members m JOIN pbx_extensions e ON e.id = m.extension_id
-       WHERE m.group_id = ? ORDER BY m.position, e.number`,
+       WHERE m.group_id = ? AND e.status != 'removed' ORDER BY m.position, e.number`,
     )
     .all(groupId) as Member[];
 }
@@ -117,7 +117,7 @@ export async function provisionCallGroup(id: number) {
   if (!group.xapi_id && !created.ok && numberAlreadyUsed(created.code || "", `${created.detail || ""} ${created.message || ""}`, created.status)) {
     const plan = readExtensionPlan();
     const used = [
-      ...(database.prepare("SELECT number FROM pbx_extensions").all() as { number: string }[]),
+      ...(database.prepare("SELECT number FROM pbx_extensions WHERE status != 'removed'").all() as { number: string }[]),
       ...(database.prepare("SELECT number FROM call_groups").all() as { number: string }[]),
     ].map((item) => item.number);
     const listed = await listPhoneSystemNumbers();
@@ -155,10 +155,10 @@ export async function createCallGroup(input: { userId: number; kind: "ring" | "q
   const database = getDb();
   const count = database.prepare("SELECT COUNT(*) AS n FROM call_groups WHERE user_id = ? AND kind = ?").get(input.userId, input.kind) as { n: number };
   if (count.n >= 10) return { ok: false, message: input.kind === "queue" ? "This account already has 10 call queues." : "This account already has 10 ring groups." };
-  const owned = database.prepare(`SELECT id FROM pbx_extensions WHERE user_id = ? AND id IN (${ids.map(() => "?").join(",")})`).all(input.userId, ...ids) as { id: number }[];
+  const owned = database.prepare(`SELECT id FROM pbx_extensions WHERE user_id = ? AND status != 'removed' AND id IN (${ids.map(() => "?").join(",")})`).all(input.userId, ...ids) as { id: number }[];
   if (owned.length !== ids.length) return { ok: false, message: "Choose people from this account." };
   const used = [
-    ...(database.prepare("SELECT number FROM pbx_extensions").all() as { number: string }[]),
+    ...(database.prepare("SELECT number FROM pbx_extensions WHERE status != 'removed'").all() as { number: string }[]),
     ...(database.prepare("SELECT number FROM call_groups").all() as { number: string }[]),
   ].map((row) => row.number);
   if (flagOn("pbx.live_provision")) {

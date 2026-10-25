@@ -321,10 +321,10 @@ export async function addPerson(formData: FormData) {
   const last = String(formData.get("last_name") || "").trim().slice(0, 40);
   const email = String(formData.get("email") || "").trim().slice(0, 120);
   if (!first || !last || !email.includes("@")) redirect("/account/phone?error=First%20name%2C%20last%20name%2C%20and%20email%20are%20required.");
-  const count = getDb().prepare("SELECT COUNT(*) AS n FROM pbx_extensions WHERE user_id = ?").get(user.id) as { n: number };
+  const count = getDb().prepare("SELECT COUNT(*) AS n FROM pbx_extensions WHERE user_id = ? AND status != 'removed'").get(user.id) as { n: number };
   if (count.n >= extensionCapacity(plan)) redirect("/account/phone?error=This%20plan%20has%20no%20room%20for%20another%20person.");
   const used = [
-    ...(getDb().prepare("SELECT number FROM pbx_extensions").all() as { number: string }[]),
+    ...(getDb().prepare("SELECT number FROM pbx_extensions WHERE status != 'removed'").all() as { number: string }[]),
     ...(getDb().prepare("SELECT number FROM call_groups").all() as { number: string }[]),
   ].map((row) => row.number);
   if (flagOn("pbx.live_provision")) {
@@ -350,6 +350,19 @@ export async function addPerson(formData: FormData) {
     if (!result.ok) redirect(`/account/phone?error=${encodeURIComponent(safeCustomerError(result.message, "We could not add this person yet. Please try again, or contact support."))}`);
   }
   redirect("/account/phone?saved=1");
+}
+
+export async function removePerson(formData: FormData) {
+  const user = await currentUser();
+  if (!user) redirect("/account/login");
+  const id = Number(formData.get("id"));
+  const owned = getDb().prepare("SELECT id, number, first_name, last_name, email FROM pbx_extensions WHERE id = ? AND user_id = ?").get(id, user.id) as { id: number; number: string; first_name: string; last_name: string; email: string } | undefined;
+  if (!owned) redirect("/account/phone?error=That%20person%20was%20not%20found.");
+  const { removeExtension } = await import("@/lib/pbx");
+  const result = await removeExtension(id);
+  audit(user.email, "pbx.person.remove", result.ok ? `${owned.number} ${owned.first_name} ${owned.last_name} ${owned.email}` : `${id}:failed`);
+  if (!result.ok) redirect(`/account/phone?error=${encodeURIComponent(safeCustomerError(result.message, "We could not remove this person yet. Please try again, or contact support."))}`);
+  redirect("/account/phone?saved=removed");
 }
 
 export async function savePhoneHours(formData: FormData) {

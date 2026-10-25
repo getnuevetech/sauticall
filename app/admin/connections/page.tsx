@@ -71,7 +71,7 @@ function PbxForm() {
   return (
     <form className="contact-form" action={saveConnection}>
       <h3>3CX</h3>
-      <p>The check asks 3CX for an access token, reads the system version, and confirms the token is a System Owner. In 3CX Admin, open Integrations, then API. Add a client, turn on 3CX Configuration API Access, choose the DEFAULT department, and set the role to System Owner. Then open Advanced, Console Restrictions, and allow the public IP of this server. A blocked IP leaves the token without that role, and 3CX answers 403. Paste the client ID and the API key here.</p>
+      <p>The check asks 3CX for an access token, reads the system version, and confirms the token is a System Owner. In 3CX Admin, open Integrations, then API. Add a client, turn on 3CX Configuration API Access, choose the DEFAULT department, and set the Role menu to System Owner. Owner is the department role, and 3CX answers 403 for it. Then open Advanced, Console Restrictions, and choose Allow access from everywhere. Paste the client ID and the API key here.</p>
       <input type="hidden" name="provider" value="3cx" />
       <label className="check-option"><input type="checkbox" name="enabled" defaultChecked={connection.enabled === 1} /> Use this connection</label>
       <label>API base URL <input name="base_url" defaultValue={config.base_url || ""} placeholder="https://pbx.example.com" autoComplete="off" /></label>

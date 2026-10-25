@@ -1,6 +1,6 @@
 const LICENSE_ROLES = new Set(["app", "local", "singlecompany", "multicompany", "paid", "enterprise", "professional", "pro", "callflowapp", "cfd", "hosted"]);
 const DEPARTMENT_ROLES = ["system_owners", "system_admins", "owners", "admins", "group_owners", "group_admins", "managers", "receptionists", "users"];
-const ADMIN_ROLES = new Set(["system_owners", "system_admins", "owners", "admins"]);
+const ADMIN_ROLES = new Set(["system_owners", "system_admins"]);
 
 function claimValues(value: unknown) {
   if (typeof value === "string") return [value];
@@ -30,16 +30,25 @@ export function pbxRoleIsAdmin(role: string) {
   return ADMIN_ROLES.has(role.toLowerCase());
 }
 
+function roleLabel(role: string) {
+  const key = role.toLowerCase();
+  if (key === "system_owners") return "System Owner";
+  if (key === "system_admins") return "System Admin";
+  if (key === "owners" || key === "group_owners") return "Owner";
+  if (key === "users") return "User";
+  return role.replace(/_/g, " ");
+}
+
 export function pbxAccessMessage(status: number, role: string, detail: string) {
   if (status !== 403) return detail || `3CX answered ${status}.`;
   const extra = detail && !/access denied/i.test(detail) ? ` ${detail}` : "";
   if (pbxRoleIsAdmin(role)) {
-    return `3CX refused this API client even though the token is ${role.replace(/_/g, " ")}.${extra} In 3CX Admin, open Advanced, then Console Restrictions, and allow the public IP of this SautiCall server.`;
+    return `3CX refused this API client even though the token is ${roleLabel(role)}.${extra} In 3CX Admin, open Advanced, then Console Restrictions, and choose Allow access from everywhere.`;
   }
   const signed = role
-    ? `3CX signed this client in as ${role.replace(/_/g, " ")}, then refused the call.`
-    : "3CX accepted this client, then refused the call. The token has no department role.";
-  return `${signed}${extra} In 3CX Admin, open Integrations, then API. Edit this client, turn on 3CX Configuration API Access, choose the DEFAULT department, and set the role to System Owner. Then open Advanced, Console Restrictions, and allow the public IP of this SautiCall server. A blocked IP leaves the token without System Owner rights, and 3CX answers 403.`;
+    ? `3CX signed this client in as ${roleLabel(role)}, then refused the call.`
+    : "3CX accepted this client, then refused the call. The token has no System Owner role.";
+  return `${signed}${extra} In 3CX Admin, open Integrations, then API. Turn on 3CX Configuration API Access, choose the DEFAULT department, and set the Role menu to System Owner. Owner is the department role, and 3CX answers 403 for it. Save. If the menu already says System Owner, open Advanced, Console Restrictions, and choose Allow access from everywhere.`;
 }
 
 export function adminPbxError(status: number, role: string, code: string, detail: string) {

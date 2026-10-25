@@ -106,10 +106,10 @@ test("a 403 from 3CX names the API role that was refused", () => {
   const owner = Buffer.from(JSON.stringify({ role: ["App"], MaxRole: "system_owners" })).toString("base64url");
   assert.equal(roleFromToken(`aa.${owner}.zz`), "system_owners");
   assert.match(pbxAccessMessage(403, "users", "Access denied."), /System Owner/);
-  assert.match(pbxAccessMessage(403, "users", "Access denied."), /Console Restrictions/);
-  assert.match(pbxAccessMessage(403, "", ""), /no department role/);
+  assert.match(pbxAccessMessage(403, "owners", "Access denied."), /Owner is the department role/);
+  assert.match(pbxAccessMessage(403, "", ""), /no System Owner role/);
   assert.match(pbxAccessMessage(403, "", ""), /Configuration API Access/);
-  assert.match(pbxAccessMessage(403, "system_owners", ""), /Console Restrictions/);
+  assert.match(pbxAccessMessage(403, "system_owners", ""), /Allow access from everywhere/);
 });
 
 test("extension numbers start at 2000 and skip numbers already taken", () => {

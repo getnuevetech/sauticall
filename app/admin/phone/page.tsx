@@ -1,4 +1,4 @@
-import { completeGroup, provisionPerson, retryGroup } from "../actions";
+import { completeGroup, provisionPerson, removePersonRecord, retryGroup } from "../actions";
 import { ExtensionPlanForm } from "@/components/admin/ExtensionPlanForm";
 import { requirePermission } from "@/lib/access";
 import { groupMembers, strategyLabel } from "@/lib/call-groups";
@@ -7,7 +7,7 @@ import { readExtensionPlan } from "@/lib/extension-plan";
 import { extensionCapacity, normalizePlans } from "@/lib/plan-features";
 import type { Plan } from "@/lib/types";
 
-type Row = { id: number; email: string; account_email: string; number: string; first_name: string; last_name: string; status: string; xapi_id: number; last_message: string };
+type Row = { id: number; email: string; account_email: string; number: string; former_number: string; first_name: string; last_name: string; status: string; xapi_id: number; last_message: string };
 type GroupRow = { id: number; email: string; kind: string; name: string; number: string; strategy: string; answers: number; status: string; xapi_id: number; last_message: string; task_status: string | null; members: string | null; department_name: string | null };
 
 export default async function AdminPhonePage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string }> }) {
@@ -24,7 +24,7 @@ export default async function AdminPhonePage({ searchParams }: { searchParams: P
      ORDER BY CAST(d.number_from AS INTEGER)`,
   ).all() as { email: string; number_from: string; number_to: string }[];
   const rows = getDb().prepare(
-    `SELECT e.id, e.email, u.email AS account_email, e.number, e.first_name, e.last_name, e.status, e.xapi_id, e.last_message
+    `SELECT e.id, e.email, u.email AS account_email, e.number, e.former_number, e.first_name, e.last_name, e.status, e.xapi_id, e.last_message
      FROM pbx_extensions e JOIN users u ON u.id = e.user_id ORDER BY e.id DESC LIMIT 100`,
   ).all() as Row[];
   const groups = getDb().prepare(
@@ -42,6 +42,7 @@ export default async function AdminPhonePage({ searchParams }: { searchParams: P
       <p>The message that said 3CX received 500 was a list of existing numbers, 500 records in one request. 3CX accepts 100 records per request, so that list is read 100 at a time. That 500 is not an extension number and it is not a plan limit.</p>
       <p>The next person is numbered from {plan.start}. Someone already on the phone system keeps that number. Someone saved here who is not on the phone system yet, with a number below {plan.start}, moves to the next free number from {plan.start} when this form is saved. Numbers already on 3CX are skipped.</p>
       {reserved.length ? <p>Ranges already at or above {plan.start}: {reserved.map((row) => `${row.email} ${row.number_from}–${row.number_to}`).join(". ")}.</p> : null}
+      {params.saved === "removed" ? <p className="form-feedback">This person was removed. Their name, email, and extension stay in the record.</p> : null}
       {params.error ? <p className="form-feedback">{params.error}</p> : null}
       <ExtensionPlanForm plan={plan} />
       <h3>Ring groups and call queues</h3>
@@ -75,13 +76,19 @@ export default async function AdminPhonePage({ searchParams }: { searchParams: P
       {rows.length === 0 ? <p>No one has been added yet.</p> : null}
       {rows.map((row) => (
         <article key={row.id} className="feature-card" style={{ marginBottom: 16 }}>
-          <h3>Extension {row.number} · {row.first_name} {row.last_name}</h3>
-          <p>{row.email}{row.account_email && row.account_email.toLowerCase() !== row.email.toLowerCase() ? ` · Account ${row.account_email}` : ""} · {row.status === "created" ? "On the phone system" : row.status === "failed" ? "Needs attention" : "Waiting"}{row.xapi_id ? ` · ${row.xapi_id}` : ""}</p>
+          <h3>Extension {row.status === "removed" && row.former_number ? row.former_number : row.number} · {row.first_name} {row.last_name}</h3>
+          <p>{row.email}{row.account_email && row.account_email.toLowerCase() !== row.email.toLowerCase() ? ` · Account ${row.account_email}` : ""} · {row.status === "created" ? "On the phone system" : row.status === "removed" ? "Removed, record kept" : row.status === "failed" ? "Needs attention" : "Waiting"}{row.xapi_id ? ` · ${row.xapi_id}` : ""}</p>
           {row.last_message ? <p>{row.last_message}</p> : null}
-          {row.status !== "created" ? (
+          {row.status !== "created" && row.status !== "removed" ? (
             <form action={provisionPerson}>
               <input type="hidden" name="id" value={row.id} />
               <button className="btn btn-primary" type="submit" disabled={!live}>{live ? "Create on the phone system" : "Creating people is turned off"}</button>
+            </form>
+          ) : null}
+          {row.status !== "removed" ? (
+            <form action={removePersonRecord}>
+              <input type="hidden" name="id" value={row.id} />
+              <button className="btn btn-secondary" type="submit">Remove and keep the record</button>
             </form>
           ) : null}
         </article>

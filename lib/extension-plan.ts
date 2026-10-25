@@ -30,7 +30,7 @@ export function planExtensionRanges(): { plan: ExtensionPlan; ranges: AssignedRa
     seatsByUser.set(payment.user_id, extensionCapacity(match));
   }
   const departments = database.prepare("SELECT user_id, number_from, number_to, xapi_id FROM pbx_departments").all() as DepartmentRange[];
-  const extensions = database.prepare("SELECT user_id, number FROM pbx_extensions").all() as { user_id: number; number: string }[];
+  const extensions = database.prepare("SELECT user_id, number FROM pbx_extensions WHERE status != 'removed'").all() as { user_id: number; number: string }[];
   const ids = new Set<number>([
     ...seatsByUser.keys(),
     ...departments.map((row) => row.user_id),
@@ -73,13 +73,13 @@ export function persistNewExtensionRanges(ranges: AssignedRange[]) {
 export function shiftPendingExtensions(plan = readExtensionPlan()) {
   const database = getDb();
   const pending = database.prepare(
-    "SELECT id, user_id, number FROM pbx_extensions WHERE xapi_id = 0 AND status NOT IN ('created', 'manual') ORDER BY id",
+    "SELECT id, user_id, number FROM pbx_extensions WHERE xapi_id = 0 AND status NOT IN ('created', 'manual', 'removed') ORDER BY id",
   ).all() as { id: number; user_id: number; number: string }[];
   const below = pending.filter((row) => !(Number(row.number) >= plan.start));
   if (!below.length) return [] as { id: number; from: string; to: string }[];
   const reserved = planExtensionRanges();
   const taken = new Set<string>([
-    ...(database.prepare("SELECT number FROM pbx_extensions").all() as { number: string }[]).map((row) => row.number),
+    ...(database.prepare("SELECT number FROM pbx_extensions WHERE status != 'removed'").all() as { number: string }[]).map((row) => row.number),
     ...(database.prepare("SELECT number FROM call_groups").all() as { number: string }[]).map((row) => row.number),
   ]);
   const update = database.prepare("UPDATE pbx_extensions SET number = ? WHERE id = ? AND xapi_id = 0");

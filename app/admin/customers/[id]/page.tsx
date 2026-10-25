@@ -23,7 +23,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
   const lines = getDb().prepare("SELECT did, status, e911_status FROM phone_lines WHERE user_id = ? ORDER BY id").all(person.id) as { did: string; status: string; e911_status: string }[];
   const voipClient = getDb().prepare("SELECT client_id, email, last_message FROM voip_clients WHERE user_id = ?").get(person.id) as { client_id: string; email: string; last_message: string } | undefined;
   const lineAccount = getDb().prepare("SELECT account FROM voip_subaccounts WHERE user_id = ?").get(person.id) as { account: string } | undefined;
-  const people = getDb().prepare("SELECT number, first_name, last_name, email, status FROM pbx_extensions WHERE user_id = ? ORDER BY number").all(person.id) as { number: string; first_name: string; last_name: string; email: string; status: string }[];
+  const people = getDb().prepare("SELECT number, former_number, first_name, last_name, email, status FROM pbx_extensions WHERE user_id = ? ORDER BY id").all(person.id) as { number: string; former_number: string; first_name: string; last_name: string; email: string; status: string }[];
   const seeTickets = userCan(actor, "tickets.view") || userCan(actor, "tickets.view_all") || userCan(actor, "tickets.reply");
   return (
     <>
@@ -46,7 +46,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
         <section className="desk-card">
           <h3>People on the phone system</h3>
           {people.length === 0 ? <p>No extensions yet.</p> : (
-            <ul className="desk-lines">{people.map((item) => <li key={item.number}>{item.number} · {item.first_name} {item.last_name} · {item.email} · {item.status}</li>)}</ul>
+            <ul className="desk-lines">{people.map((item) => <li key={`${item.status}-${item.former_number || item.number}`}>{item.status === "removed" && item.former_number ? item.former_number : item.number} · {item.first_name} {item.last_name} · {item.email} · {item.status === "removed" ? "removed, record kept" : item.status}</li>)}</ul>
           )}
         </section>
         <section className="desk-card">

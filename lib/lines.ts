@@ -19,7 +19,7 @@ function departmentName(userId: number) {
 }
 
 function extensionFor(userId: number) {
-  const row = getDb().prepare("SELECT number FROM pbx_extensions WHERE user_id = ? ORDER BY id LIMIT 1").get(userId) as { number: string } | undefined;
+  const row = getDb().prepare("SELECT number FROM pbx_extensions WHERE user_id = ? AND status != 'removed' ORDER BY id LIMIT 1").get(userId) as { number: string } | undefined;
   return row?.number || String(extensionRange(userId, readExtensionPlan()).from);
 }
 

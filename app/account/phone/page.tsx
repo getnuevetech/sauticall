@@ -1,6 +1,6 @@
 import { Frame } from "@/components/site/Frame";
 import { AccountHero, AccountNav } from "@/components/account/Portal";
-import { addPerson, savePhoneHours } from "../actions";
+import { addPerson, removePerson, savePhoneHours } from "../actions";
 import { chooseDaytimeGroup, createQueue, createRingGroup, deleteCallGroup } from "../desk-actions";
 import { guardAccount } from "@/lib/guard";
 import { QUEUE_STRATEGIES, RING_STRATEGIES, groupMembers, strategyLabel, type CallGroup } from "@/lib/call-groups";
@@ -10,9 +10,14 @@ import { planAllows } from "@/lib/plan-features";
 import { customerMessage } from "@/lib/customer-message";
 import { loadSite } from "@/lib/site";
 
-type Extension = { id: number; number: string; first_name: string; last_name: string; email: string; status: string; access_password: string; last_message: string };
+type Extension = { id: number; number: string; former_number: string; first_name: string; last_name: string; email: string; status: string; access_password: string; last_message: string };
+
+function extensionNumber(row: Extension) {
+  return row.status === "removed" && row.former_number ? row.former_number : row.number;
+}
 
 function setupStatus(status: string) {
+  if (status === "removed") return "Removed. The name, email, and extension stay in the record.";
   if (status === "created" || status === "manual") return "Ready";
   if (status === "failed") return "We could not finish this yet. The team has the details.";
   return "Waiting to be set up.";
@@ -23,8 +28,8 @@ function PeopleFields({ rows, label }: { rows: Extension[]; label: string }) {
     <fieldset>
       <legend>{label}</legend>
       <div className="check-list">
-        {rows.map((row) => (
-          <label key={row.id}><input type="checkbox" name="extension_id" value={row.id} /> {row.first_name} {row.last_name} · {row.number}</label>
+        {rows.filter((row) => row.status !== "removed").map((row) => (
+          <label key={row.id}><input type="checkbox" name="extension_id" value={row.id} /> {row.first_name} {row.last_name} · {extensionNumber(row)}</label>
         ))}
       </div>
     </fieldset>
@@ -38,10 +43,11 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
   const text = (key: string) => (typeof copy[key] === "string" ? String(copy[key]) : "");
   const plan = paidPlan(user.id);
   const limit = plan ? extensionCapacity(plan) : 0;
-  const rows = getDb().prepare("SELECT id, number, first_name, last_name, email, status, access_password, last_message FROM pbx_extensions WHERE user_id = ? ORDER BY id").all(user.id) as Extension[];
+  const rows = getDb().prepare("SELECT id, number, former_number, first_name, last_name, email, status, access_password, last_message FROM pbx_extensions WHERE user_id = ? ORDER BY id").all(user.id) as Extension[];
+  const activeRows = rows.filter((row) => row.status !== "removed");
   const hours = getDb().prepare("SELECT open_time, close_time, last_message FROM pbx_departments WHERE user_id = ?").get(user.id) as { open_time: string; close_time: string; last_message: string } | undefined;
   const groups = getDb().prepare("SELECT * FROM call_groups WHERE user_id = ? ORDER BY kind, id").all(user.id) as CallGroup[];
-  const saved = params.saved === "group" ? text("phoneGroupSaved") : params.saved === "hours" ? text("phoneHoursSaved") : params.saved ? text("phoneSaved") : "";
+  const saved = params.saved === "group" ? text("phoneGroupSaved") : params.saved === "hours" ? text("phoneHoursSaved") : params.saved === "removed" ? "This person was removed. Their name, email, and extension stay in the record." : params.saved ? text("phoneSaved") : "";
   return (
     <Frame pathname="/account/phone">
       <main>
@@ -53,11 +59,11 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
             {params.error ? <p className="form-feedback">{customerMessage(params.error, "Something went wrong. Please try again, or contact support.")}</p> : null}
             {!plan ? <div className="contact-form"><p>{text("phoneClosed")}</p></div> : (
               <>
-                <p>{plan.name} includes {limit} {limit === 1 ? "person" : "people"}. {rows.length} added.</p>
+                <p>{plan.name} includes {limit} {limit === 1 ? "person" : "people"}. {activeRows.length} added.</p>
                 {!planAllows(plan, "ring_groups") ? <p>Ring groups are not included on {plan.name}.</p> : null}
                 {!planAllows(plan, "queues") ? <p>Call queues are not included on {plan.name}.</p> : null}
                 {!planAllows(plan, "ai") ? <p>The AI receptionist is not included on {plan.name}.</p> : null}
-                {rows.length < limit ? (
+                {activeRows.length < limit ? (
                   <form className="contact-form" action={addPerson}>
                     <div className="form-grid">
                       <label>{text("phoneFirst")} <input name="first_name" required /></label>
@@ -76,7 +82,7 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
                   <button className="btn btn-secondary" type="submit">{text("phoneRoute")}</button>
                   {hours?.last_message && customerMessage(hours.last_message, "") ? <p>{customerMessage(hours.last_message, "")}</p> : null}
                 </form> : null}
-                {rows.length ? (
+                {activeRows.length ? (
                   <>
                     {planAllows(plan, "ring_groups") ? <form className="contact-form" action={createRingGroup} style={{ marginTop: 18 }}>
                       <h3>{text("phoneRing")}</h3>
@@ -87,7 +93,7 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
                           {RING_STRATEGIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                         </select>
                       </label>
-                      <PeopleFields rows={rows} label={text("phoneMembers")} />
+                      <PeopleFields rows={activeRows} label={text("phoneMembers")} />
                       <button className="btn btn-primary" type="submit">{text("phoneCreateRing")}</button>
                     </form> : null}
                     {planAllows(plan, "queues") ? <form className="contact-form" action={createQueue} style={{ marginTop: 18 }}>
@@ -99,7 +105,7 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
                           {QUEUE_STRATEGIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                         </select>
                       </label>
-                      <PeopleFields rows={rows} label={text("phoneMembers")} />
+                      <PeopleFields rows={activeRows} label={text("phoneMembers")} />
                       <button className="btn btn-primary" type="submit">{text("phoneCreateQueue")}</button>
                     </form> : null}
                   </>
@@ -110,10 +116,16 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
               {rows.length === 0 ? <p>{text("phoneEmpty")}</p> : null}
               {rows.map((row) => (
                 <article key={row.id} className="feature-card" style={{ marginBottom: 12 }}>
-                  <h3>Extension {row.number} · {row.first_name} {row.last_name}</h3>
+                  <h3>Extension {extensionNumber(row)} · {row.first_name} {row.last_name}</h3>
                   <p>{row.email}</p>
                   <p>{setupStatus(row.status)}</p>
                   {row.status === "created" ? <p>App password: {row.access_password}</p> : null}
+                  {row.status !== "removed" ? (
+                    <form action={removePerson}>
+                      <input type="hidden" name="id" value={row.id} />
+                      <button className="btn btn-secondary" type="submit">{text("phoneRemove")}</button>
+                    </form>
+                  ) : null}
                 </article>
               ))}
               {groups.length === 0 && plan ? <p>{text("phoneGroupEmpty")}</p> : null}
