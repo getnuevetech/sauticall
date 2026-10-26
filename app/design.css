@@ -167,3 +167,5 @@ body{background:#fff}
 .mobile-nav form{margin:0}
 .mobile-nav button.nav-menu-action{background:none;border:0;color:inherit;text-align:left;width:100%;padding:11px 0;border-bottom:1px solid #233a4a;cursor:pointer}
 .nav-account{display:inline-flex;align-items:center}
+.auth-qr{width:220px;height:220px;margin:8px 0 18px;padding:10px;background:#fff;border:1px solid #e2e8f2;border-radius:16px}
+.auth-qr svg{display:block;width:100%;height:100%}
