@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Icon } from "../Icon";
-import { AiCallCard, AnswerCards, CallsMock, DeskMock, DevicePair, ExampleCall, ExtTable, HomeStage, LanguageScene, NumberPair, QueueCard, SettingsPanel, Unfold } from "./PublicMocks";
+import { AiCallCard, CallsMock, DeskMock, DevicePair, ExtTable, HomeStage, NumberPair, QueueCard } from "./PublicMocks";
 import { perMinute, wholeMoney } from "@/lib/account-display";
 import { normalizePlan, planAllows, type FeatureKey } from "@/lib/plan-features";
 import { planSignupPath } from "@/lib/signup";
@@ -344,54 +344,101 @@ export function PublicSolutions({ page, services }: { page: Record<string, unkno
 }
 
 export function PublicAi({ page, plans, faqs }: { page: Record<string, unknown>; plans: Plan[]; faqs: Faq[] }) {
+  void page;
+  void plans;
   void faqs;
-  const aiPlans = plans.filter((plan) => planAllows(normalizePlan(plan), "ai")).map((plan) => plan.name);
   return (
     <main>
-      <section className="pub-hero ai-hero">
-        <div className="wrap pub-hero-grid">
+      <section className="ai-hero">
+        <div className="wrap ai-hero-grid">
           <div>
-            <p className="pub-kicker">{str(page, "eyebrow", "AI receptionist")}</p>
-            <h1>A warm welcome. <span className="accent">A clear next step.</span></h1>
-            <p>{str(page, "lead", "Greet callers, answer approved business questions, take messages and connect people to your team.")}</p>
+            <p className="pub-kicker">AI receptionist</p>
+            <h1>A warm welcome.<br /><span className="accent">A clear next step.</span></h1>
+            <p>Greet callers, answer approved business questions, take messages and connect people to your team.</p>
             <div className="pub-actions">
               <Link className="btn btn-primary" href="/pricing">View AI-enabled plans</Link>
               <Link className="btn btn-secondary" href="/contact">Talk to us</Link>
             </div>
           </div>
-          <div className="ai-stage"><ExampleCall /></div>
+          <div className="ai-photo">
+            <img src="/marketing/ai-caller.jpg" alt="A caller on the phone with the business" />
+            <article className="ai-example">
+              <header>Example call <Icon name="arrowdown" size={14} /></header>
+              <div className="ai-line"><span className="feature-ico blue"><Icon name="bot" size={14} /></span><div><b>AI receptionist</b><small>Thanks for calling. How can I help?</small></div></div>
+              <div className="ai-line"><span className="feature-ico violet"><Icon name="users" size={14} /></span><div><b>Caller</b><small>Can I speak to sales?</small></div></div>
+              <div className="ai-line result"><span className="feature-ico green"><Icon name="arrow" size={14} /></span><div><b>Result</b><small>Transfer to Sales · Extension 514</small></div></div>
+            </article>
+          </div>
         </div>
-      </section>
-      <section>
-        <div className="wrap pub-band">
+        <div className="wrap ai-points">
           {[
             ["blue", "phone", "Welcome callers", "A friendly, consistent greeting for every call."],
-            ["green", "message", "Answer routine questions", "Share approved information about your business."],
+            ["blue", "message", "Answer routine questions", "Share approved information about your business."],
             ["amber", "mic", "Capture messages", "Take messages with key details when needed."],
-            ["violet", "users", "Connect your team", "Transfer callers to the right person or department."],
+            ["amber", "users", "Connect your team", "Transfer callers to the right person or department."],
           ].map(([tone, icon, title, body]) => (
-            <article key={title} className="pub-tile flat">
-              <span className={`feature-ico ${tone}`}><Icon name={icon} size={18} /></span>
-              <h3>{title}</h3>
-              <p>{body}</p>
+            <article key={title}>
+              <span className={`feature-ico ${tone}`}><Icon name={icon} size={16} /></span>
+              <div><h3>{title}</h3><p>{body}</p></div>
             </article>
           ))}
         </div>
       </section>
-      <section className="section pub-dark">
+      <section className="section ai-unfold">
         <div className="wrap">
           <p className="pub-kicker">See how a call can unfold</p>
           <h2>Your business information and routing rules guide each step.</h2>
-          <Unfold />
+          <div className="ai-flow">
+            <article><span className="feature-ico amber"><Icon name="phone" size={16} /></span><b>Incoming caller</b><small>A customer calls your business.</small></article>
+            <span className="ai-dots" aria-hidden="true" />
+            <article><span className="feature-ico blue"><Icon name="bot" size={16} /></span><b>AI receptionist</b><small>Thanks for calling. How can I help?</small></article>
+            <span className="ai-dots" aria-hidden="true" />
+            <div>
+              <article><span className="feature-ico green"><Icon name="message" size={16} /></span><div><b>Answer a question</b><small>Provide information from your approved answers.</small></div></article>
+              <article><span className="feature-ico amber"><Icon name="users" size={16} /></span><div><b>Connect to a person</b><small>Transfer to the right team or extension.</small></div></article>
+              <article><span className="feature-ico blue"><Icon name="mic" size={16} /></span><div><b>Take a message</b><small>Capture caller details and their reason for call.</small></div></article>
+            </div>
+          </div>
         </div>
       </section>
       <section className="section">
         <div className="wrap">
           <h2 className="center">Built around your business.</h2>
-          <AnswerCards />
+          <div className="ai-built">
+            <article className="tint-blue">
+              <span className="feature-ico blue"><Icon name="message" size={16} /></span>
+              <h3>Your approved answers</h3>
+              <p>Use your business information to answer common questions.</p>
+              <dl>
+                <div><dt>Business name</dt><dd>Riverside Dental</dd></div>
+                <div><dt>Business hours</dt><dd>Mon – Fri, 8:00 am – 5:00 pm</dd></div>
+                <div><dt>Address</dt><dd>123 Maple Ave, Riverton</dd></div>
+                <div><dt>Services</dt><dd>General, Cosmetic, Emergency</dd></div>
+              </dl>
+            </article>
+            <article className="tint-peach">
+              <span className="feature-ico amber"><Icon name="users" size={16} /></span>
+              <h3>Your transfer destinations</h3>
+              <p>Send callers to the right person or department.</p>
+              <dl>
+                <div><dt>Sales</dt><dd>Extension 514</dd></div>
+                <div><dt>Support</dt><dd>Extension 515</dd></div>
+              </dl>
+            </article>
+            <article className="tint-blue">
+              <span className="feature-ico blue"><Icon name="mic" size={16} /></span>
+              <h3>Your message preferences</h3>
+              <p>Choose what details to capture when a message is taken.</p>
+              <dl>
+                <div><dt>Caller&apos;s name</dt><dd>Alex Carter</dd></div>
+                <div><dt>Phone number</dt><dd>(555) 123-4567</dd></div>
+                <div><dt>Reason for call</dt><dd>Interested in appointment availability.</dd></div>
+              </dl>
+            </article>
+          </div>
         </div>
       </section>
-      <section className="section alt">
+      <section className="section ai-choose">
         <div className="wrap pub-split">
           <div>
             <h2>You choose how it answers.</h2>
@@ -399,15 +446,39 @@ export function PublicAi({ page, plans, faqs }: { page: Record<string, unknown>;
             <ul className="pub-list">
               <li>Customize your greeting</li>
               <li>Choose where calls are transferred</li>
-              <li>Set after-hours messages</li>
+              <li>Set after-hours behavior</li>
             </ul>
           </div>
-          <SettingsPanel />
+          <div className="ai-settings">
+            <header><b>AI receptionist settings</b><span>Draft</span></header>
+            <div className="set-grid">
+              <nav>
+                <span className="on">Greeting</span>
+                <span>Business information</span>
+                <span>Transfer rules</span>
+                <span>Message settings</span>
+                <span>After-hours</span>
+              </nav>
+              <div>
+                <label>Greeting<small>This is what callers will hear when they call your business.</small></label>
+                <p className="greet">Thanks for calling Riverside Dental. How can I help you today? <em>62/250</em></p>
+                <label>Business hours</label>
+                <p className="hours"><span>Mon – Fri</span><span>8:00 am</span><span>to</span><span>5:00 pm</span></p>
+                <div className="ai-set-actions">
+                  <Link className="btn btn-secondary" href="/account/register?product=ai">Preview greeting</Link>
+                  <Link className="btn btn-primary" href="/account/register?product=ai">Review changes</Link>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
       <section className="section">
-        <div className="wrap pub-split">
-          <LanguageScene />
+        <div className="wrap ai-lang">
+          <div className="ai-globe" aria-hidden="true">
+            <span>Hello</span><span>Hola</span><span>Bonjour</span><span>こんにちは</span>
+            <i />
+          </div>
           <div>
             <h2>Help callers in supported languages.</h2>
             <p>Check available languages and plan eligibility before choosing your setup.</p>
@@ -415,43 +486,58 @@ export function PublicAi({ page, plans, faqs }: { page: Record<string, unknown>;
           </div>
         </div>
       </section>
-      <section className="section alt">
+      <section className="section ai-setup-sec">
         <div className="wrap">
-          <h2>From setup to your first test call.</h2>
-          <div className="pub-steps line">
+          <h2 className="center">From setup to your first test call.</h2>
+          <div className="ai-steps">
             <div><b>1</b><strong>Choose an AI-enabled plan</strong><span>Select a plan that includes the AI receptionist.</span></div>
             <div><b>2</b><strong>Add your business information</strong><span>Provide your approved answers and details.</span></div>
             <div><b>3</b><strong>Set transfer and message rules</strong><span>Choose where to transfer calls and what to capture.</span></div>
-            <div><b>4</b><strong>Test before activation</strong><span>Have a test call to confirm the experience.</span></div>
+            <div><b>4</b><strong>Test before activation</strong><span>Make a test call to confirm the experience.</span></div>
           </div>
-          <p className="pub-fine">An active plan and completed service setup are required for live calls.</p>
-          <form className="finder" action="/account/register" method="get">
-            <input type="hidden" name="product" value="ai" />
-            <label>Team size
-              <select name="people" defaultValue="5">
-                <option value="1">1 person</option>
-                <option value="5">Up to 5 people</option>
-                <option value="10">Up to 10 people</option>
-              </select>
-            </label>
-            <label>Preferred caller language
-              <select name="language" defaultValue="">
-                <option value="">Select a language</option>
-                <option value="1">Any language</option>
-              </select>
-            </label>
-            <button className="btn btn-primary" type="submit">See matching plans</button>
-          </form>
-          <p className="pub-fine">{aiPlans.join(" and ") || "No published plan"} include the AI receptionist. <Link href="/account/login">Already a customer? Sign in to configure.</Link></p>
+          <p className="pub-fine center">An active number and completed service setup are required for live calls.</p>
+          <div className="ai-finder">
+            <form action="/account/register" method="get">
+              <h2>Find the right AI-enabled plan.</h2>
+              <input type="hidden" name="product" value="ai" />
+              <div>
+                <label>Team size
+                  <select name="people" defaultValue="5">
+                    <option value="1">1 person</option>
+                    <option value="5">Up to 5 people</option>
+                    <option value="10">Up to 10 people</option>
+                  </select>
+                </label>
+                <label>Preferred caller language
+                  <select name="language" defaultValue="">
+                    <option value="">Select a language</option>
+                    <option value="1">Any language</option>
+                  </select>
+                </label>
+              </div>
+              <button className="btn btn-primary" type="submit">See matching plans</button>
+            </form>
+            <aside>
+              <span className="feature-ico blue"><Icon name="message" size={16} /></span>
+              <h3>Review your recommendation</h3>
+              <p>Compare included features, usage allowances and total pricing before you continue.</p>
+              <Link href="/account/login">Already a customer? Sign in to configure →</Link>
+            </aside>
+          </div>
         </div>
       </section>
-      <section className="section"><div className="wrap"><h2>Frequently asked questions.</h2><FaqBlock faqs={AI_FAQS} /></div></section>
-      <section className="pub-end">
+      <section className="section">
+        <div className="wrap ai-faq">
+          <h2>Frequently asked questions.</h2>
+          <FaqBlock faqs={AI_FAQS} cards />
+        </div>
+      </section>
+      <section className="ai-end">
         <div className="wrap">
           <h2>Give your callers a better first hello.</h2>
           <div className="pub-actions">
-            <Link className="btn btn-secondary" href="/pricing">View plans</Link>
-            <Link className="btn btn-primary" href="/contact">Talk to us</Link>
+            <Link className="btn btn-light" href="/pricing">View plans</Link>
+            <Link className="btn btn-ghost" href="/contact">Talk to us</Link>
           </div>
         </div>
       </section>
