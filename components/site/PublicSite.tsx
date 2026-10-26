@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Icon } from "../Icon";
-import { AiCallCard, CallsMock, DeskMock, DevicePair, ExtTable, HomeStage, NumberPair, QueueCard } from "./PublicMocks";
+import { SetupAssistant } from "./Interactive";
+import { AiCallCard, CallsMock, DeskMock, DevicePair, ExtTable, NumberPair, QueueCard } from "./PublicMocks";
+import { recommendPlan } from "@/lib/setup-assistant";
 import { perMinute, wholeMoney } from "@/lib/account-display";
 import { normalizePlan, planAllows, type FeatureKey } from "@/lib/plan-features";
 import { planSignupPath } from "@/lib/signup";
@@ -101,12 +103,12 @@ const PRICE_FAQS: Faq[] = [
   { q: "How do upgrades and downgrades affect billing?", a: "Changing plans starts a new payment for that plan’s monthly price. The account uses the new plan after the payment is confirmed." },
 ];
 
-function FaqBlock({ faqs, cards = false }: { faqs: Faq[]; cards?: boolean }) {
+function FaqBlock({ faqs, cards = false, startClosed = false }: { faqs: Faq[]; cards?: boolean; startClosed?: boolean }) {
   return (
     <div className={cards ? "pub-faq cards" : "pub-faq"}>
       {faqs.map((faq, index) => (
-        <details key={faq.q} open={!cards && index === 0}>
-          <summary>{faq.q} <Icon name="arrowdown" size={16} /></summary>
+        <details key={faq.q} open={!cards && !startClosed && index === 0}>
+          <summary>{faq.q} <Icon name={startClosed ? "plus" : "arrowdown"} size={16} /></summary>
           <p>{faq.a}</p>
         </details>
       ))}
@@ -243,7 +245,7 @@ export function PublicSolutions({ page, services }: { page: Record<string, unkno
               <Link className="btn btn-secondary" href="/pricing">Compare plans</Link>
             </div>
           </div>
-          <HomeStage />
+          <figure className="home-shot"><img src="/marketing/solutions-hero.png" alt="SautiCall on a laptop, a mobile phone, and a desk phone" /></figure>
         </div>
       </section>
       <section className="section tight">
@@ -597,7 +599,8 @@ export function PublicPricing({
                   <td>{row.label}</td>
                   {ordered.map((plan) => {
                     const allowed = row.key ? planAllows(plan, row.key as FeatureKey) : false;
-                    const value = row.seats ? (plan.seats || 1) : row.minutes ? plan.includedMinutes.toLocaleString("en-US") : allowed ? "✓" : "—";
+                    const seats = plan.seats && plan.seats > 0 ? plan.seats : 1;
+                    const value = row.seats ? (seats === 1 ? "1" : `Up to ${seats}`) : row.minutes ? plan.includedMinutes.toLocaleString("en-US") : allowed ? "✓" : "—";
                     const hours = row.key === "business_hours" ? planAllows(plan, "business_hours") && planAllows(plan, "ring_groups") : true;
                     return <td key={plan.name}>{row.key === "business_hours" ? (hours ? "✓" : "—") : value}</td>;
                   })}
@@ -605,7 +608,6 @@ export function PublicPricing({
               ))}
             </tbody>
           </table>
-          <p className="pub-fine">A check means that feature is turned on for the plan. An administrator can change plan features.</p>
         </div>
       </section>
       <section className="section">
@@ -654,18 +656,94 @@ export function PublicPricing({
                 </select>
               </label>
               <label className="check-option"><input type="checkbox" name="ai" value="1" /> I need AI call answering</label>
-              <button className="btn btn-primary" type="submit">Find a suitable plan</button>
+              <span>
+                <button className="btn btn-primary" type="submit">Find a suitable plan</button>
+                <p className="pub-fine">Review the recommendation before continuing.</p>
+              </span>
             </form>
           </div>
         </div>
       </section>
-      <section className="section"><div className="wrap"><h2>Frequently asked questions.</h2><FaqBlock faqs={PRICE_FAQS} /></div></section>
-      <section className="pub-end">
+      <section className="section"><div className="wrap"><h2>Frequently asked questions.</h2><FaqBlock faqs={PRICE_FAQS} startClosed /></div></section>
+      <section className="price-end">
         <div className="wrap">
           <h2>Let&apos;s find the right plan for your team.</h2>
           <div className="pub-actions">
             <Link className="btn btn-coral" href="/contact">Talk to us</Link>
-            <Link className="btn btn-secondary" href="/solutions">Explore solutions</Link>
+            <Link className="btn btn-navy" href="/solutions">Explore solutions</Link>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+export function PublicHow({ home, plans, showDemo }: { home: Record<string, unknown>; plans: Plan[]; showDemo: boolean }) {
+  const sample = str(home, "chatSampleUser");
+  const steps = [
+    ["1", "Tell us what you need", "How many people answer calls, where those calls should go, and whether you want the AI receptionist."],
+    ["2", "Review the suggested plan", "See the people, outbound minutes, and features on the plan that matches what you described."],
+    ["3", "Create your account and pay", "You review the monthly price first. The plan starts after that payment is confirmed."],
+    ["4", "Connect a number and your team", "Choose a new number or transfer one you already use, then add the people who answer."],
+  ];
+  return (
+    <main>
+      <section className="pub-hero">
+        <div className="wrap pub-hero-grid">
+          <div>
+            <p className="pub-kicker">How it works</p>
+            <h1>Tell us what you need. We&apos;ll set it up with you.</h1>
+            <p>Describe the calls you want handled. Review a real plan, create your account, and connect a number and your team.</p>
+            <div className="pub-actions">
+              <Link className="btn btn-primary" href="#assistant">Start with the assistant</Link>
+              <Link className="btn btn-secondary" href="/pricing">Compare plans</Link>
+            </div>
+          </div>
+          <img className="how-mark" src="/marketing/setup-check.png" alt="" />
+        </div>
+      </section>
+      <section className="section">
+        <div className="wrap">
+          <h2>Four steps from the first description to a working line.</h2>
+          <div className="pub-steps">
+            {steps.map(([n, title, body]) => <div key={n}><b>{n}</b><strong>{title}</strong><p>{body}</p></div>)}
+          </div>
+        </div>
+      </section>
+      <section className="section alt" id="assistant">
+        <div className="wrap how-assist">
+          <div>
+            <p className="pub-kicker">Setup assistant</p>
+            <h2>Describe the phone system in everyday language.</h2>
+            <p>The assistant matches your description to a published plan. You still review the price and features before you pay.</p>
+          </div>
+          {showDemo ? (
+            <SetupAssistant
+              title={str(home, "chatTitle", "SautiCall Setup Assistant")}
+              sub={str(home, "chatSub", "Matches your description to a plan you can subscribe to")}
+              status={str(home, "chatStatus", "Ready")}
+              placeholder={str(home, "chatPlaceholder", "Tell us about your team and calls")}
+              hello={str(home, "chatHello", "Tell me how you would like your business calls to work.")}
+              proposal={str(home, "chatProposal", "Recommended setup")}
+              sample={sample}
+              initial={sample ? recommendPlan(plans, sample) : null}
+            />
+          ) : <p><Link className="btn btn-primary" href="/account/register">Create account</Link></p>}
+        </div>
+      </section>
+      <section className="section">
+        <div className="wrap pub-grid-3">
+          <article className="pub-card"><span className="cost-ico"><Icon name="checkcircle" size={16} /></span><h3>You review it first</h3><p>The suggested plan, minutes, and features are the ones on the pricing page. Nothing is charged until you confirm payment.</p></article>
+          <article className="pub-card"><span className="cost-ico"><Icon name="calendar" size={16} /></span><h3>Requests stay in your account</h3><p>Number orders and transfers show their status. A person steps in when a carrier step needs one.</p></article>
+          <article className="pub-card"><span className="cost-ico"><Icon name="users" size={16} /></span><h3>Then add your team</h3><p>After the plan is paid, add the people who answer. Each person gets an extension on your phone system.</p></article>
+        </div>
+      </section>
+      <section className="home-end">
+        <div className="wrap">
+          <h2>Ready to set up your business calls?</h2>
+          <div className="pub-actions">
+            <Link className="btn btn-light" href="/account/register">Get started</Link>
+            <Link className="btn btn-ghost" href="/contact">Talk to us</Link>
           </div>
         </div>
       </section>
@@ -681,6 +759,7 @@ export function AuthSplit({
   points,
   step,
   scene = "desk",
+  art,
 }: {
   title: React.ReactNode;
   lead: string;
@@ -689,6 +768,7 @@ export function AuthSplit({
   points?: string[];
   step?: "account" | "code";
   scene?: "desk" | "calls";
+  art?: string;
 }) {
   return (
     <main>
@@ -703,8 +783,11 @@ export function AuthSplit({
         <section className="pub-auth-side">
           <h1>{title}</h1>
           <p>{lead}</p>
-          <div style={{ marginTop: 24 }}>{scene === "calls" ? <CallsMock /> : <DeskMock />}</div>
-          {points ? <div className="pub-checks">{points.map((point) => <div key={point}><Icon name="checkcircle" size={16} /> {point}</div>)}</div> : null}
+          <div className="auth-art">{art ? <img src={art} alt="" /> : scene === "calls" ? <CallsMock /> : <DeskMock />}</div>
+          {points ? <div className="pub-checks">{points.map((point) => {
+            const icon = /account/i.test(point) ? "users" : /guided|setup/i.test(point) ? "settings" : "checkcircle";
+            return <div key={point}><span><Icon name={icon} size={18} /></span>{point}</div>;
+          })}</div> : null}
           <p className="pub-legal"><span>© 2026 SautiCall</span><Link href="/contact">Help</Link></p>
         </section>
         <section className="pub-auth-main">

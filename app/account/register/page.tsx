@@ -40,6 +40,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
     <Frame pathname="/account/register">
       <AuthSplit
         kicker="Create account"
+        art="/marketing/signup-art.png"
         title={<>Your next business <span className="accent">call starts here.</span></>}
         lead="Bring your numbers, team and call handling together with SautiCall."
         step="account"

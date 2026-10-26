@@ -3,18 +3,17 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Icon } from "../Icon";
-import { HelpBubbles } from "./PublicMocks";
 
 type Item = { title: string; body: string; href: string; topic: string };
 
 const TOPICS = [
   ["all", "All questions", "menu"],
-  ["started", "Getting started", "spark"],
+  ["started", "Getting started", "target"],
   ["numbers", "Numbers & transfers", "phone"],
-  ["phone", "Phone system & devices", "smartphone"],
-  ["ai", "AI receptionist", "bot"],
+  ["phone", "Phone system & devices", "monitor"],
+  ["ai", "AI receptionist", "spark"],
   ["billing", "Plans & minutes", "card"],
-  ["voicemail", "Voicemail", "mic"],
+  ["voicemail", "Voicemail", "mail"],
   ["account", "Account & security", "lock"],
 ] as const;
 
@@ -34,7 +33,7 @@ export function HelpCenter({ faqs, posts }: { faqs: { q: string; a: string }[]; 
   const [query, setQuery] = useState("");
   const [topic, setTopic] = useState("all");
   const guide: Item[] = [
-    { title: "How do I get started with SautiCall?", body: "Create your account, choose a plan, connect a number, add your team, and place a test call once service is active.", href: "/how-it-works", topic: "started" },
+    { title: "How do I get started with SautiCall?", body: "Compare plans or use the setup assistant to find a configuration. Create your account, connect a number, add your team, and place a test call once service is active.", href: "/how-it-works", topic: "started" },
     { title: "Can I keep my existing business number?", body: "Yes. Start a number transfer from your account and follow each step. The team steps in when a transfer needs a person.", href: "/account/porting", topic: "numbers" },
     { title: "Can I use desk phones and mobile apps?", body: "Yes. A compatible desk phone can be connected, and the phone app works on a computer or mobile phone.", href: "/solutions#phones", topic: "phone" },
     { title: "Which plans include the AI receptionist?", body: "The receptionist is included on the plans that list it. On the published plans, that is Small Business and Team.", href: "/pricing", topic: "ai" },
@@ -67,12 +66,13 @@ export function HelpCenter({ faqs, posts }: { faqs: { q: string; a: string }[]; 
             <input aria-label="Search questions" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search questions, topics or keywords..." />
           </label>
           <div className="pub-chips">
+            <span>Popular topics:</span>
             {[["numbers", "Number transfers"], ["billing", "Call minutes"], ["ai", "AI receptionist"]].map(([id, label]) => (
               <button key={id} className={topic === id ? "active" : ""} type="button" onClick={() => setTopic(topic === id ? "all" : id)}>{label}</button>
             ))}
           </div>
           </div>
-          <HelpBubbles />
+          <img className="help-bubbles" src="/marketing/help-bubbles.png" alt="" />
         </div>
       </section>
       <section className="section">
@@ -88,7 +88,7 @@ export function HelpCenter({ faqs, posts }: { faqs: { q: string; a: string }[]; 
               <span className="cost-ico"><Icon name="headset" size={16} /></span>
               <h3>Need account-specific help?</h3>
               <p>Sign in to create or follow a support ticket.</p>
-              <Link className="btn btn-primary" href="/account/login">Sign in for support</Link>
+              <Link className="btn btn-secondary" href="/account/login">Sign in for support</Link>
             </article>
           </aside>
           <div>
@@ -106,14 +106,14 @@ export function HelpCenter({ faqs, posts }: { faqs: { q: string; a: string }[]; 
       </section>
       <section className="section">
         <div className="wrap pub-grid-3">
-          <article className="pub-card help-jump"><span className="cost-ico"><Icon name="spark" size={16} /></span><h3>New to SautiCall?</h3><p>Learn the basics and get set up in a few simple steps.</p><Link href="/how-it-works">Read the setup guide →</Link></article>
-          <article className="pub-card help-jump"><span className="cost-ico"><Icon name="card" size={16} /></span><h3>Choosing a plan?</h3><p>Compare features and find the right plan for your business.</p><Link href="/pricing">Compare plans →</Link></article>
+          <article className="pub-card help-jump"><span className="cost-ico"><Icon name="book" size={16} /></span><h3>New to SautiCall?</h3><p>Learn the basics and get set up in a few simple steps.</p><Link href="/how-it-works">Read the setup guide →</Link></article>
+          <article className="pub-card help-jump"><span className="cost-ico coral"><Icon name="chart" size={16} /></span><h3>Choosing a plan?</h3><p>Compare features and find the right plan for your business.</p><Link href="/pricing">Compare plans →</Link></article>
           <article className="pub-card help-jump"><span className="cost-ico"><Icon name="phone" size={16} /></span><h3>Need to talk?</h3><p>Have a question we didn&apos;t cover? We&apos;re here to help.</p><Link href="/contact">Contact us →</Link></article>
         </div>
       </section>
       <section className="help-ask">
         <div className="wrap">
-          <div><span className="ask-mark">?</span><div><h2>Still have a question?</h2><p>Contact us for general questions, or sign in for help with your account.</p></div></div>
+          <div><img className="ask-art" src="/marketing/help-bubbles.png" alt="" /><div><h2>Still have a question?</h2><p>Contact us for general questions, or sign in for help with your account.</p></div></div>
           <div className="pub-actions">
             <Link className="btn btn-primary" href="/contact">Contact us</Link>
             <Link className="btn btn-secondary" href="/account/login">Sign in for support</Link>

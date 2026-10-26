@@ -391,7 +391,7 @@
 .pub .footer-mini:empty{display:none}
 .pub-search{color:#98a2b3}
 @media(max-width:980px){
-  .pub-hero-grid,.pub-split,.pub-grid-4,.pub-band,.pub-steps,.pub-plans,.pub-grid-3,.pub-help,.pub-auth-grid,.do-row,.number-pair,.unfold,.set-grid,.finder-row,.home-strip,.home-cards,.home-dark-grid,.home-flow,.setup-layout{grid-template-columns:1fr}
+  .pub-hero-grid,.pub-split,.pub-grid-4,.pub-band,.pub-steps,.pub-plans,.pub-grid-3,.pub-help,.pub-auth-grid,.do-row,.number-pair,.unfold,.set-grid,.finder-row,.home-strip,.home-cards,.home-dark-grid,.home-flow,.setup-layout,.how-assist,.pub-checks{grid-template-columns:1fr}
   .home-head,.home-end .wrap,.setup-ask,.setup-steps{flex-direction:column;align-items:flex-start}
   .home-head p{text-align:left}
   .hf-arrow{display:none}
@@ -401,10 +401,14 @@
   .pub .menu-toggle{display:inline-flex;background:none;border:0;color:#172033}
   .pub .mobile-nav{background:#fff}
   .pub .nav-sign{display:inline}
+  .pub .nav-talk{display:none}
+  .pub .nav-cta{display:inline-flex;padding:8px 12px;font-size:.84rem;white-space:nowrap}
+  .pub .nav-sign{padding:8px 10px}
   .pub .footer-main{grid-template-columns:1fr 1fr}
   .u-arrow{display:none}
   .ai-hero-grid,.ai-flow,.ai-built,.ai-lang,.ai-finder,.ai-faq,.ai-points,.ai-steps{grid-template-columns:1fr}
-  .ai-end .wrap{flex-direction:column;align-items:flex-start}
+  .ai-end .wrap,.price-end .wrap{flex-direction:column;align-items:flex-start}
+  .price-end{text-align:left}
 }
 .ai-hero{background:linear-gradient(180deg,#e7f1ff 0%,#f5f9ff 70%,#fff 100%);padding:48px 0 28px}
 .ai-hero h1{max-width:520px}
@@ -473,3 +477,29 @@
 .ai-end:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 18px,#ffffff14 18px 20px);opacity:.35}
 .ai-end .wrap{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px}
 .ai-end h2{color:#fff;margin:0}
+.pub-hero .center h1,.pub-hero .center p{margin-left:auto;margin-right:auto}
+.help-bubbles{width:min(100%,340px);height:auto;display:block;margin-left:auto}
+.pub-chips span{color:#667085;font-size:.86rem;align-self:center}
+.pub-topics button.active{box-shadow:inset 3px 0 #2f5bff}
+.pub-q summary{display:flex;justify-content:space-between;align-items:center;gap:12px;cursor:pointer;font-weight:750;color:#172033;list-style:none}
+.pub-q summary::-webkit-details-marker{display:none}
+.pub-q summary:after{content:"";width:8px;height:8px;border-right:2px solid #98a2b3;border-bottom:2px solid #98a2b3;transform:rotate(45deg);flex:none}
+.pub-q[open] summary:after{transform:rotate(-135deg)}
+.pub-q a{color:#2f5bff;font-weight:750}
+.help-side .btn{width:100%;justify-content:center;color:#2f5bff;border-color:#b9ccff}
+.help-ask .btn-secondary{color:#2f5bff;border-color:#2f5bff;background:#fff}
+.cost-ico.coral{background:#fff1ec;color:#ff5a36}
+.ask-art{width:72px;height:72px;object-fit:contain;flex:none}
+.auth-art{margin:8px 0 4px}
+.auth-art img{width:100%;height:auto;display:block}
+.pub-checks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px}
+.pub-checks div{display:grid;justify-items:center;text-align:center;gap:8px;font-size:.8rem;color:#344054}
+.pub-checks span{width:42px;height:42px;border-radius:50%;background:#fff;color:#2f5bff;display:grid;place-items:center;box-shadow:0 8px 18px #1e3a8a14}
+.how-mark{width:min(100%,360px);height:auto;display:block;margin:0 auto}
+.how-assist{display:grid;grid-template-columns:.85fr 1.15fr;gap:28px;align-items:start}
+.price-end{background:#0b3d9e url(/marketing/wave.jpg) center/cover no-repeat;padding:84px 0}
+.price-end .wrap{display:flex;flex-direction:column;align-items:center;text-align:center}
+.price-end h2{color:#fff}
+.pub .btn-navy{background:#102a4c;color:#fff;border-color:#102a4c}
+.finder>span{display:grid;justify-items:start;gap:6px}
+.finder>span .pub-fine{margin:0}
