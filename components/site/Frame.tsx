@@ -9,8 +9,10 @@ export async function Frame({ pathname, children }: { pathname: string; children
   const home = site.home;
   const talk = typeof home.headerTalk === "string" ? home.headerTalk : "Talk to us";
   const talkHref = typeof home.headerTalkHref === "string" ? home.headerTalkHref : "/contact";
+  const auth = pathname === "/account/login" || pathname === "/account/register";
+  const shell = pathname.startsWith("/admin") ? "" : auth ? "pub pub-auth" : "pub";
   return (
-    <>
+    <div className={shell}>
       {site.theme.fontStylesheetUrl.startsWith("https://") ? <link rel="stylesheet" href={site.theme.fontStylesheetUrl} /> : null}
       <style dangerouslySetInnerHTML={{ __html: themeStyle(site.theme) }} />
       <SiteHeader
@@ -25,7 +27,7 @@ export async function Frame({ pathname, children }: { pathname: string; children
         talkHref={talkHref}
       />
       {children}
-      <SiteFooter theme={site.theme} footer={site.footer} />
-    </>
+      {auth ? null : <SiteFooter theme={site.theme} footer={site.footer} />}
+    </div>
   );
 }

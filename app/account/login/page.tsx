@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Frame } from "@/components/site/Frame";
+import { AuthSplit } from "@/components/site/PublicSite";
 import { AuthForm } from "@/components/account/AuthForm";
 import { AuthenticatorGuide } from "@/components/account/AuthenticatorGuide";
 import { confirmMfa, login } from "../actions";
@@ -18,38 +19,35 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const passwordOn = flagOn("auth.password_login");
   return (
     <Frame pathname="/account/login">
-      <main>
-        <section className="inner-hero">
-          <div className="wrap">
-            <span className="eyebrow">{text("loginEyebrow")}</span>
-            <h1>{params.step === "code" ? text("mfaTitle") : text("loginTitle")}</h1>
-            <p>{params.step === "code" ? text("mfaBody") : text("loginBody")}</p>
-          </div>
-        </section>
-        <section className="section">
-          <div className="wrap" style={{ maxWidth: 640 }}>
-            {!passwordOn ? <div className="contact-form"><p>{text("loginClosed")}</p></div> : null}
-            {passwordOn && params.step === "code" ? (
-              <div className="contact-form">
-                <AuthenticatorGuide mode="signin" />
-                <AuthForm action={confirmMfa} submit="Confirm code" fields={[{ name: "code", label: "Code from the app", placeholder: "123456" }]} />
-              </div>
-            ) : null}
-            {passwordOn && params.step !== "code" && flagOn("auth.signup") ? <p><Link className="btn btn-secondary" href="/account/register">Create an account</Link></p> : null}
-            {passwordOn && params.step !== "code" ? (
-              <AuthForm
-                action={login}
-                submit={text("loginSubmit")}
-                fields={[
-                  { name: "email", label: "Email", type: "email", placeholder: "you@business.com" },
-                  { name: "password", label: "Password", type: "password" },
-                ]}
-                extra={flagOn("auth.signup") ? <p><Link className="text-link" href="/account/register">Create an account</Link></p> : null}
-              />
-            ) : null}
-          </div>
-        </section>
-      </main>
+      <AuthSplit
+        kicker={params.step === "code" ? "Confirm it is you" : "Sign in"}
+        title={params.step === "code" ? text("mfaTitle") : "Your business calls. All together."}
+        lead={params.step === "code" ? text("mfaBody") : "Manage your numbers, team and call handling in one place."}
+        step={params.step === "code" ? "code" : undefined}
+      >
+        <h1>{params.step === "code" ? text("mfaTitle") : "Welcome back"}</h1>
+        <p>{params.step === "code" ? text("mfaBody") : "Sign in to your SautiCall account."}</p>
+        {!passwordOn ? <p>{text("loginClosed")}</p> : null}
+        {passwordOn && params.step === "code" ? (
+          <>
+            <AuthenticatorGuide mode="signin" />
+            <AuthForm className="pub-form" action={confirmMfa} submit="Confirm code" fields={[{ name: "code", label: "Code from the app", placeholder: "123456" }]} />
+          </>
+        ) : null}
+        {passwordOn && params.step !== "code" ? (
+          <AuthForm
+            className="pub-form"
+            action={login}
+            submit="Sign in"
+            fields={[
+              { name: "email", label: "Email address", type: "email", placeholder: "you@business.com" },
+              { name: "password", label: "Password", type: "password", placeholder: "Enter your password" },
+            ]}
+          />
+        ) : null}
+        {passwordOn && params.step !== "code" && flagOn("auth.signup") ? <p>New to SautiCall? <Link href="/account/register">Create an account</Link></p> : null}
+        {passwordOn && params.step !== "code" ? <p>Having trouble signing in? <Link href="/contact">Contact support</Link></p> : null}
+      </AuthSplit>
     </Frame>
   );
 }

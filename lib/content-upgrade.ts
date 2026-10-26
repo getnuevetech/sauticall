@@ -349,6 +349,83 @@ export function upgradeContent(database: Database.Database) {
     writeJson(database, "footer", withFaq);
   }
 
+  const approvedCopy: Record<string, Record<string, string>> = {
+    "page.home": {
+      "A better way to": "Your business phone system.",
+      "say hello.": "Your AI receptionist. One place.",
+      "SAY HELLO TO BETTER BUSINESS CALLING": "BUSINESS CALLING, CONNECTED",
+      "One smart home for your business number, office phones, team extensions, and an AI receptionist that never forgets to pick up.": "Bring your business number, team extensions, desk phones and AI call handling together with SautiCall.",
+      "Plans you can subscribe to.": "A plan for the way you work.",
+      "Create an account on a priced plan, then pay. Custom has no public price: tell us what you need and a salesperson will reach out.": "Compare team size, included outbound minutes, and the features your business needs.",
+      "Your business deserves a great hello.": "Make your next hello a better one.",
+      "Bring the phone system you need to life, with the support of an AI setup assistant and a real team behind it.": "Bring your numbers, team, and call handling together.",
+    },
+    "page.solutions": {
+      "THE FULL TOOLKIT": "SOLUTIONS",
+      "One platform.": "The right tools for",
+      "So many ways to connect.": "every business call.",
+      "Everything from your first business number to a small contact center, managed in one SautiCall account.": "Connect your numbers, team and call handling in one SautiCall account.",
+    },
+    "page.ai": {
+      "SAUTICALL AI RECEPTIONIST": "AI RECEPTIONIST",
+      "A great first impression.": "A warm welcome.",
+      "Every single call.": "A clear next step.",
+      "Your AI receptionist can greet callers, answer approved questions, take messages, and help people reach the right person—even when your hands are full.": "Greet callers, answer approved business questions, take messages and connect people to your team.",
+    },
+    "page.pricing": {
+      "SIMPLE PLANS": "PLANS & PRICING",
+      "Start small.": "Choose the right fit",
+      "Sound big.": "for your business calls.",
+      "Choose a plan and create the account. The monthly price is the price on the plan.": "Compare team capacity, outbound minutes and the features your business needs.",
+      "Choose Solo, Small Business, or Team and create the account.": "Compare Solo, Small Business, and Team. Prices, minutes, and features are the plans you can subscribe to.",
+    },
+  };
+  for (const [key, replacements] of Object.entries(approvedCopy)) {
+    const page = readJson<Record<string, unknown>>(database, key);
+    if (!page) continue;
+    let changed = false;
+    for (const [field, value] of Object.entries(page)) {
+      if (typeof value === "string" && replacements[value]) {
+        page[field] = replacements[value];
+        changed = true;
+      }
+    }
+    if (key === "page.home") {
+      if (page.primaryCta === "Create account" && page.primaryHref === "/account/register") {
+        page.primaryCta = "View plans";
+        page.primaryHref = "/pricing";
+        page.secondaryCta = "Talk to us";
+        page.secondaryHref = "/contact";
+        changed = true;
+      }
+    }
+    if (changed) writeJson(database, key, page);
+  }
+  const navItems = readJson<NavLink[]>(database, "nav");
+  if (navItems) {
+    let navChanged = false;
+    for (const item of navItems) {
+      if (item.href === "/faq" && item.label === "FAQ" && (item.location === "header" || item.location === "mobile")) {
+        item.label = "Help";
+        navChanged = true;
+      }
+    }
+    if (navChanged) writeJson(database, "nav", navItems);
+  }
+  const footerCopy = readJson<{ blurb?: string; legalLeft?: string; groups: { title: string; links: { label: string; href: string }[] }[] }>(database, "footer");
+  if (footerCopy) {
+    let footerChanged = false;
+    if (footerCopy.blurb === "Business calls, your way. One approachable platform for modern phone systems and intelligent call handling.") {
+      footerCopy.blurb = "Business calls, connected.";
+      footerChanged = true;
+    }
+    if (typeof footerCopy.legalLeft === "string" && footerCopy.legalLeft.includes("design concept")) {
+      footerCopy.legalLeft = "© 2026 SautiCall. All rights reserved.";
+      footerChanged = true;
+    }
+    if (footerChanged) writeJson(database, "footer", footerCopy);
+  }
+
   for (const key of ["page.home", "page.solutions", "page.ai", "page.how", "page.about", "page.pricing", "page.contact", "page.custom", "page.account", "services", "faqs"]) {
     const current = readJson<unknown>(database, key);
     if (!current) continue;

@@ -18,6 +18,7 @@ export function AuthForm({
   submitClassName?: string;
 }) {
   const [error, setError] = useState("");
+  const [shown, setShown] = useState<Record<string, boolean>>({});
   return (
     <form
       className={className}
@@ -29,7 +30,14 @@ export function AuthForm({
       {fields.map((field) => (
         <label key={field.name}>
           {field.label}
-          <input name={field.name} type={field.type || "text"} placeholder={field.placeholder} required />
+          {field.type === "password" ? (
+            <span className="pub-pass">
+              <input name={field.name} type={shown[field.name] ? "text" : "password"} placeholder={field.placeholder} required />
+              <button type="button" onClick={() => setShown((current) => ({ ...current, [field.name]: !current[field.name] }))}>{shown[field.name] ? "Hide" : "Show"}</button>
+            </span>
+          ) : (
+            <input name={field.name} type={field.type || "text"} placeholder={field.placeholder} required />
+          )}
         </label>
       ))}
       {extra}

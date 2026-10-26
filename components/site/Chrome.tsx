@@ -55,24 +55,36 @@ export function SiteHeader({
       <div className="wrap nav-inner">
         <Brand theme={theme} />
         <nav className="desktop-nav" aria-label="Primary navigation">
-          {header.map((item) => (
+          {header.map((item) => item.href === "/solutions" ? (
+            <span className="nav-drop" key={item.href + item.label}>
+              <Link className={pathname === item.href ? "active" : ""} href={item.href}>{item.label} <Icon name="arrowdown" size={14} /></Link>
+              <span className="nav-drop-menu">
+                <Link href="/solutions#phone">Phone system</Link>
+                <Link href="/solutions#phones">Desk & mobile</Link>
+                <Link href="/ai-receptionist">AI receptionist</Link>
+                <Link href="/solutions#center">Contact center</Link>
+                <Link href="/solutions#numbers">Numbers & porting</Link>
+              </span>
+            </span>
+          ) : (
             <Link key={item.href + item.label} className={pathname === item.href ? "active" : ""} href={item.href}>{item.label}</Link>
           ))}
         </nav>
         <div className="nav-actions">
           {signedIn ? <Link className="nav-sign nav-account" href={accountHref}>{accountLabel}</Link> : showSignIn ? <Link className="nav-sign" href="/account/login">Sign in</Link> : null}
-          <Link className="nav-sign" href={talkHref}>{talkLabel}</Link>
+          <Link className="nav-sign nav-talk" href={talkHref}>{talkLabel}</Link>
           {signedIn ? (
             <SignOut className="btn btn-primary nav-cta" />
           ) : (
-            <Link className="btn btn-primary nav-cta" href="/account/register">Create account <Icon name="arrow" size={17} /></Link>
+            <Link className="btn btn-primary nav-cta" href="/account/register">Get started <Icon name="arrow" size={17} /></Link>
           )}
           <MenuButton />
         </div>
       </div>
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {signedIn ? <Link href={accountHref}>{accountLabel}</Link> : <Link href="/account/register">Create account</Link>}
+        {signedIn ? <Link href={accountHref}>{accountLabel}</Link> : <Link href="/account/register">Get started</Link>}
         {signedIn ? <SignOut className="nav-menu-action" /> : showSignIn ? <Link href="/account/login">Sign in</Link> : null}
+        <Link href={talkHref}>{talkLabel}</Link>
         {mobile.map((item) => <Link key={`m-${item.href}-${item.label}`} href={item.href}>{item.label}</Link>)}
       </nav>
     </header>

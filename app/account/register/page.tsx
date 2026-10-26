@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Frame } from "@/components/site/Frame";
+import { AuthSplit } from "@/components/site/PublicSite";
 import { AuthForm } from "@/components/account/AuthForm";
 import { register } from "../actions";
 import { currentUser } from "@/lib/auth";
@@ -36,41 +38,38 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
   const setup = String(params.setup || (named ? "" : selectionPrompt(params)) || "").slice(0, 400);
   return (
     <Frame pathname="/account/register">
-      <main>
-        <section className="inner-hero">
-          <div className="wrap">
-            <span className="eyebrow">{text("registerEyebrow")}</span>
-            <h1>{text("registerTitle")}</h1>
-            <p>{text("registerBody")}</p>
-          </div>
-        </section>
-        <section className="section">
-          <div className="wrap" style={{ maxWidth: 640 }}>
-            {chosen ? (
-              <article className="feature-card" style={{ marginBottom: 18 }}>
-                <h3>{chosen.name}</h3>
-                <p>${chosen.price} per month · {chosen.seats} {chosen.seats === 1 ? "person" : "people"} · {chosen.includedMinutes} outbound minutes.</p>
-                <ul className="desk-lines">{featureLabels(chosen.features).map((feature) => <li key={feature}>{feature}</li>)}</ul>
-                {setup ? <p>You asked for: {setup}</p> : null}
-              </article>
-            ) : null}
-            {open ? (
-              <AuthForm
-                action={register}
-                submit={text("registerSubmit") || "Create account"}
-                fields={[
-                  { name: "name", label: "Full name", placeholder: "Your name" },
-                  { name: "email", label: "Work email", type: "email", placeholder: "you@business.com" },
-                  { name: "password", label: "Password", type: "password" },
-                ]}
-                extra={<><input type="hidden" name="plan" value={chosen?.name || ""} /><input type="hidden" name="setup" value={setup} /><p>Already registered? <a className="text-link" href="/account/login">Sign in</a></p></>}
-              />
-            ) : (
-              <div className="contact-form"><p>{text("registerClosed")}</p></div>
-            )}
-          </div>
-        </section>
-      </main>
+      <AuthSplit
+        kicker="Create account"
+        title="Your next business call starts here."
+        lead="Bring your numbers, team and call handling together with SautiCall."
+        step="account"
+        points={["One account for your business", "Guided setup for your team", "Review your plan before payment"]}
+      >
+        <h1>Let&apos;s get you started</h1>
+        <p>Create your SautiCall account. Next, review your plan and payment details.</p>
+        {chosen ? <p>Selected plan: {chosen.name} · ${chosen.price}/month · {chosen.seats || 1} {chosen.seats === 1 ? "person" : "people"} · {chosen.includedMinutes} outbound minutes. {featureLabels(chosen.features).slice(0, 4).join(", ")}</p> : null}
+        {setup ? <p>You asked for: {setup}</p> : null}
+        {open ? (
+          <AuthForm
+            className="pub-form"
+            action={register}
+            submit="Create account"
+            fields={[
+              { name: "name", label: "Full name", placeholder: "Your full name" },
+              { name: "email", label: "Email address", type: "email", placeholder: "you@business.com" },
+              { name: "password", label: "Password", type: "password", placeholder: "Create a password" },
+            ]}
+            extra={<>
+              <input type="hidden" name="plan" value={chosen?.name || ""} />
+              <input type="hidden" name="setup" value={setup} />
+              <label className="check-option"><input name="terms" type="checkbox" required /> I agree to create this account and to be contacted about the service.</label>
+              <p>Password must be at least 8 characters.</p>
+            </>}
+          />
+        ) : <p>{text("registerClosed")}</p>}
+        {open ? <p>Already have an account? <Link href="/account/login">Sign in</Link></p> : null}
+        <p>Questions before you start? <Link href="/contact">Contact us</Link></p>
+      </AuthSplit>
     </Frame>
   );
 }

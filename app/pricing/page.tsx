@@ -1,12 +1,16 @@
 import { Frame } from "@/components/site/Frame";
-import { PricingPage } from "@/components/site/Marketing";
-import { enabled, loadSite } from "@/lib/site";
+import { PublicPricing } from "@/components/site/PublicSite";
+import { readDoc } from "@/lib/db";
+import { loadSite } from "@/lib/site";
 
 export default function Page() {
   const site = loadSite();
+  const bundles = readDoc<{ name?: string; minutes?: number; price?: number; enabled?: boolean }[]>("minute_bundles")
+    .filter((bundle) => bundle.enabled !== false && Number(bundle.minutes) > 0)
+    .map((bundle) => ({ name: String(bundle.name || ""), minutes: Number(bundle.minutes), price: Number(bundle.price) }));
   return (
     <Frame pathname="/pricing">
-      <PricingPage page={site.pricing} plans={site.plans} faqs={site.faqs} showEstimator={enabled(site.flags, "marketing.estimator")} />
+      <PublicPricing page={site.pricing} plans={site.plans} faqs={site.faqs} bundles={bundles} />
     </Frame>
   );
 }

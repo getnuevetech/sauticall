@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./design.css";
+import "./public.css";
 import { loadSite } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
