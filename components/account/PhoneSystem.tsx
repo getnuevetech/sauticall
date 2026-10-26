@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { addPerson, removePerson, saveDepartmentName, savePhoneHours } from "@/app/account/actions";
+import { addPerson, removePerson, saveDepartmentName, savePerson, savePhoneHours } from "@/app/account/actions";
 import { chooseDaytimeGroup, createQueue, createRingGroup, deleteCallGroup } from "@/app/account/desk-actions";
 import { AppPassword } from "./AppPassword";
 import { clockLabel, extensionSetup, personInitials } from "@/lib/account-display";
@@ -67,10 +67,15 @@ export function PhoneSystem({
   const [panel, setPanel] = useState<"details" | "devices" | "app">("details");
   const [adding, setAdding] = useState(false);
   const [editingName, setEditingName] = useState(false);
+  const [editingPerson, setEditingPerson] = useState(false);
+  const [menuId, setMenuId] = useState(0);
+  const [moreOpen, setMoreOpen] = useState(false);
   const active = people.filter((person) => person.status !== "removed");
   const selected = people.find((person) => person.id === selectedId) || null;
   const daytime = groups.find((group) => group.answers);
   const firstPerson = active[0];
+  const rings = groups.filter((group) => group.kind === "ring");
+  const queues = groups.filter((group) => group.kind === "queue");
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return people.filter((person) => {
@@ -107,6 +112,7 @@ export function PhoneSystem({
               </form>
             ) : (
               <button type="button" className="pbx-name" onClick={() => setEditingName(true)}>
+                <span className="num-ico"><Icon name="server" size={16} /></span>
                 <strong>{company || "Add a company name"}</strong>
                 <Icon name="settings" size={14} />
               </button>
@@ -135,8 +141,8 @@ export function PhoneSystem({
                   {bought ? null : <Link className="ws-btn ghost num-outline" href="/account/numbers">Get a number</Link>}
                 </div>
               ) : null}
-              <div className="pbx-split">
-                <section className="num-card">
+              <div className="pbx-board">
+                <section className="num-card pbx-users">
                   <div className="num-results-head">
                     <div>
                       <h2>Users & extensions</h2>
@@ -164,7 +170,7 @@ export function PhoneSystem({
                     </select>
                   </div>
                   <table className="num-table">
-                    <thead><tr><th>User</th><th>Extension</th><th>Setup status</th><th /></tr></thead>
+                    <thead><tr><th>User</th><th>Extension</th><th>Setup status</th><th>Actions</th></tr></thead>
                     <tbody>
                       {shown.length === 0 ? <tr><td colSpan={4}>No people match that search.</td></tr> : shown.map((person) => {
                         const setup = extensionSetup(person.status);
@@ -175,7 +181,18 @@ export function PhoneSystem({
                             </td>
                             <td>{person.number}</td>
                             <td><span className={`pbx-status ${setup.tone}`}>{setup.label}</span></td>
-                            <td><button type="button" className="num-link" onClick={() => { setSelectedId(person.id); setPanel("details"); }}>View details</button></td>
+                            <td className="pbx-actions">
+                              <button type="button" className="num-link" onClick={() => { setSelectedId(person.id); setPanel("details"); setEditingPerson(false); setMoreOpen(false); }}>{setup.tone === "ok" ? "Manage" : "View details"}</button>
+                              <span className="pbx-menu">
+                                <button type="button" aria-label="More actions" onClick={() => setMenuId(menuId === person.id ? 0 : person.id)}>•••</button>
+                                {menuId === person.id && person.status !== "removed" ? (
+                                  <form action={removePerson}>
+                                    <input type="hidden" name="id" value={person.id} />
+                                    <button type="submit">Remove from the phone system</button>
+                                  </form>
+                                ) : null}
+                              </span>
+                            </td>
                           </tr>
                         );
                       })}
@@ -183,8 +200,9 @@ export function PhoneSystem({
                   </table>
                   <p>Provisioned means the extension is on the phone system. A desk phone is requested through support.</p>
                 </section>
+                <aside className="pbx-side">
                 {selected ? (
-                  <aside className="num-card pbx-panel">
+                  <section className="num-card pbx-panel">
                     <div className="num-modal-head">
                       <div>
                         <h2>Extension {selected.number}</h2>
@@ -199,18 +217,43 @@ export function PhoneSystem({
                     </div>
                     {panel === "details" ? (
                       <>
-                        <p><span>Name</span><strong>{selected.first} {selected.last}</strong></p>
-                        <p><span>Email</span><strong>{selected.email}</strong></p>
-                        <p><span>Department</span><strong>{company || "Not set"}</strong></p>
-                        <p><span>Setup status</span><strong className={`pbx-status ${extensionSetup(selected.status).tone}`}>{extensionSetup(selected.status).label}</strong></p>
-                        {selected.welcome ? <p>{selected.welcome}</p> : null}
-                        {!connected ? <p>External calling requires an active business number.</p> : null}
-                        {selected.status !== "removed" ? (
-                          <form action={removePerson}>
+                        {editingPerson && selected.status !== "removed" ? (
+                          <form action={savePerson} className="pbx-edit">
                             <input type="hidden" name="id" value={selected.id} />
-                            <button className="ws-btn ghost" type="submit">Remove from the phone system</button>
+                            <label>First name <input name="first_name" defaultValue={selected.first} required /></label>
+                            <label>Last name <input name="last_name" defaultValue={selected.last} required /></label>
+                            <label>Email <input name="email" type="email" defaultValue={selected.email} required /></label>
+                            <button className="ws-btn primary" type="submit">Save user</button>
+                            <button className="ws-btn ghost" type="button" onClick={() => setEditingPerson(false)}>Cancel</button>
                           </form>
+                        ) : (
+                          <>
+                            <p><span>Name</span><strong>{selected.first} {selected.last}</strong></p>
+                            <p><span>Email</span><strong>{selected.email}</strong></p>
+                            <p><span>Department</span><strong>{company || "Not set"}</strong></p>
+                            <p><span>Setup status</span><strong className={`pbx-status ${extensionSetup(selected.status).tone}`}>{extensionSetup(selected.status).label}</strong></p>
+                            <p><span>Device status</span><strong>Not available</strong></p>
+                          </>
+                        )}
+                        {selected.welcome ? <p>{selected.welcome}</p> : null}
+                        {!connected ? <div className="pbx-callout"><Icon name="phone" size={16} /> External calling requires an active business number.</div> : null}
+                        {selected.status !== "removed" ? (
+                          <div className="pbx-panel-actions">
+                            <button className="ws-btn ghost" type="button" onClick={() => setEditingPerson(true)}>Edit user</button>
+                            <button className="ws-btn primary" type="button" onClick={() => setPanel("app")}>Open app setup</button>
+                          </div>
                         ) : <p>This person was removed. The name, email, and extension stay in the record.</p>}
+                        {selected.status !== "removed" ? (
+                          <div className="pbx-menu pbx-more">
+                            <button type="button" onClick={() => setMoreOpen(!moreOpen)}>More actions</button>
+                            {moreOpen ? (
+                              <form action={removePerson}>
+                                <input type="hidden" name="id" value={selected.id} />
+                                <button type="submit">Remove from the phone system</button>
+                              </form>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </>
                     ) : null}
                     {panel === "devices" ? <p>No desk phone is listed for this person. Contact support if you want a desk phone.</p> : null}
@@ -222,19 +265,28 @@ export function PhoneSystem({
                         </>
                       ) : <p>App access is available after the extension is on the phone system.</p>
                     ) : null}
-                  </aside>
-                ) : null}
-              </div>
-              <div className="pbx-bottom">
-                <section className="num-card">
+                  </section>
+                ) : <section className="num-card"><p>Select a person to see the extension.</p></section>}
+                  <section className="num-card">
+                    <div className="num-results-head"><h2>Ring groups</h2>{allowRings ? <button type="button" className="ws-btn ghost num-outline" onClick={() => setTab("rings")}>Create ring group</button> : null}</div>
+                    {rings.length === 0 ? <p>No ring groups yet</p> : rings.map((group) => <p key={group.id}><strong>{group.name}</strong> · Ext. {group.number}</p>)}
+                    <p>Let multiple team members answer incoming calls.</p>
+                  </section>
+                  <section className="num-card">
+                    <div className="num-results-head"><h2>Call queues</h2>{allowQueues ? <button type="button" className="num-link" onClick={() => setTab("queues")}>Manage queues</button> : <Link href="/account/billing/plan">Compare plans</Link>}</div>
+                    {allowQueues ? (queues.length === 0 ? <p>No call queues yet</p> : queues.map((group) => <p key={group.id}><strong>{group.name}</strong> · Ext. {group.number}</p>)) : <p>Available on Team</p>}
+                    <p>Distribute calls to a queue of team members.</p>
+                  </section>
+                </aside>
+                <section className="num-card pbx-hours-card">
                   <div className="num-results-head"><h2>Business hours</h2>{allowHours ? <button type="button" className="num-link" onClick={() => setTab("routing")}>Edit hours</button> : null}</div>
-                  {allowHours ? <p>{clockLabel(hoursOpen || "09:00")} – {clockLabel(hoursClose || "17:00")}</p> : <p>Business hours are not included on {planName}.</p>}
-                  <p>Times use Central Time.</p>
+                  {allowHours ? <p className="pbx-hours-time">{hoursOpen ? `${clockLabel(hoursOpen)} – ${clockLabel(hoursClose)}` : "Hours are not saved yet."}</p> : <p>Business hours are not included on {planName}.</p>}
+                  <p>Central Time</p>
                 </section>
-                <section className="num-card">
+                <section className="num-card pbx-route-card">
                   <div className="num-results-head"><h2>Call routing</h2><button type="button" className="num-link" onClick={() => setTab("routing")}>Edit routing</button></div>
-                  <p>During hours → {daytime ? `${daytime.name}` : firstPerson ? `Extension ${firstPerson.number}` : "The first person you add"}</p>
-                  <p>After hours → Voicemail</p>
+                  <p>During hours <span>→</span> {daytime ? daytime.name : firstPerson ? `Extension ${firstPerson.number}` : "The first person you add"}</p>
+                  <p>After hours <span>→</span> Voicemail</p>
                 </section>
               </div>
             </>

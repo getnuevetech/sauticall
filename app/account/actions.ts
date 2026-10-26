@@ -384,6 +384,20 @@ export async function addPerson(formData: FormData) {
   redirect("/account/phone?saved=1");
 }
 
+export async function savePerson(formData: FormData) {
+  const user = await currentUser();
+  if (!user) redirect("/account/login");
+  const { updateExtensionProfile } = await import("@/lib/pbx");
+  const result = await updateExtensionProfile(Number(formData.get("id")), user.id, {
+    first: String(formData.get("first_name") || ""),
+    last: String(formData.get("last_name") || ""),
+    email: String(formData.get("email") || ""),
+  });
+  audit(user.email, "pbx.person.edit", result.ok ? "saved" : result.message.slice(0, 400));
+  if (!result.ok) redirect(`/account/phone?error=${encodeURIComponent(safeCustomerError(result.message, "This person could not be updated. Please try again, or contact support."))}`);
+  redirect("/account/phone?saved=person");
+}
+
 export async function removePerson(formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");

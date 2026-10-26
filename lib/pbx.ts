@@ -691,6 +691,26 @@ export async function removeExtension(id: number) {
   return { ok: true, message: "Removed. The name, email, and extension stay in the record." };
 }
 
+export async function updateExtensionProfile(id: number, userId: number, input: { first: string; last: string; email: string }) {
+  const row = getDb().prepare("SELECT * FROM pbx_extensions WHERE id = ? AND user_id = ?").get(id, userId) as ExtensionRow | undefined;
+  if (!row) return { ok: false, message: "That person was not found." };
+  if (row.status === "removed") return { ok: false, message: "This person was removed. The record stays as it is." };
+  const first = input.first.trim().replace(/\s+/g, " ").slice(0, 40);
+  const last = input.last.trim().replace(/\s+/g, " ").slice(0, 40);
+  const email = input.email.trim().toLowerCase().slice(0, 120);
+  if (!first || !last || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, message: "Enter a first name, last name, and email." };
+  if (row.xapi_id) {
+    if (!flagOn("pbx.live_provision")) return { ok: false, message: "The phone system is not accepting changes right now." };
+    const patched = await pbxRequest(`Users(${row.xapi_id})`, {
+      method: "PATCH",
+      body: { Id: row.xapi_id, FirstName: first, LastName: last, EmailAddress: email },
+    });
+    if (!patched.ok) return { ok: false, message: patched.message || "The name could not be saved." };
+  }
+  getDb().prepare("UPDATE pbx_extensions SET first_name = ?, last_name = ?, email = ? WHERE id = ?").run(first, last, email, id);
+  return { ok: true, message: "Saved." };
+}
+
 export async function updateRouting(userId: number) {
   const department = getDb().prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department | undefined;
   const destination = daytimeDestination(userId);

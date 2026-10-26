@@ -32,9 +32,11 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
         ? "Business hours saved."
         : params.saved === "removed"
           ? "This person was removed. Their name, email, and extension stay in the record."
-          : params.saved
-            ? "The person was added."
-            : "";
+          : params.saved === "person"
+      ? "The person’s name and email were saved."
+      : params.saved
+        ? "The person was added."
+        : "";
   const note = params.note ? customerMessage(params.note, "") : "";
   const notice = params.error ? customerMessage(params.error, "Something went wrong. Please try again, or contact support.") : [saved, note].filter(Boolean).join(" ");
   return (
