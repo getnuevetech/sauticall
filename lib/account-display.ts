@@ -80,6 +80,19 @@ export function invoiceNumber(id: number) {
   return `INV-${String(id).padStart(3, "0")}`;
 }
 
+export function invoiceText(input: { id: number; amountCents: number; currency: string; description: string; planName: string; when: string }) {
+  const lines = [
+    "SautiCall",
+    `Invoice ${invoiceNumber(input.id)}`,
+    `Date: ${chicagoDate(input.when)}`,
+    `Amount: ${money(input.amountCents / 100)} ${input.currency || "USD"}`,
+    "Status: Paid",
+  ];
+  if (input.planName) lines.push(`Plan: ${input.planName}`);
+  if (input.description) lines.push(`Description: ${input.description}`);
+  return `${lines.join("\n")}\n`;
+}
+
 export function formatPhone(did: string) {
   const digits = did.replace(/\D/g, "");
   const ten = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;

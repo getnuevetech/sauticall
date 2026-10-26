@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AuthForm } from "@/components/account/AuthForm";
+import { Icon } from "@/components/Icon";
 import { startCheckout } from "../../actions";
 import { guardAccount } from "@/lib/guard";
 import { flagOn, getDb, readDoc } from "@/lib/db";
@@ -27,7 +28,7 @@ export default async function ManagePlanPage({ searchParams }: { searchParams: P
       <h1>Manage your plan</h1>
       <p>Compare plans and choose what fits your business.</p>
       {params.error ? <p className="form-feedback">{customerMessage(params.error, "Payment could not be started. Please try again, or contact support.")}</p> : null}
-      <section className="ws-card">
+      <section className="ws-card bill-now">
         <span>Current plan</span>
         {current ? <p>You&apos;re on {current.name} · {wholeMoney(current.price)}/month · {current.seats || 1} {current.seats === 1 ? "person" : "people"} · {current.includedMinutes.toLocaleString("en-US")} outbound minutes.</p> : <p>You do not have a paid plan yet. Choose one below.</p>}
       </section>
@@ -36,12 +37,24 @@ export default async function ManagePlanPage({ searchParams }: { searchParams: P
           const previous = index > 0 ? ordered[index - 1] : null;
           const isCurrent = current?.name === plan.name;
           const lower = current ? plan.price < current.price : false;
+          const lines = planHighlights(plan, previous);
           return (
             <article key={plan.name} className={`ws-plan${isCurrent ? " current" : ""}`}>
-              {isCurrent ? <span className="badge">Current plan</span> : <span />}
-              <h2>{plan.name}</h2>
-              <p className="price">{wholeMoney(plan.price)} <small>/ month</small></p>
-              <ul>{planHighlights(plan, previous).map((line) => <li key={line}>{line}</li>)}</ul>
+              <div className="bill-plan-head">
+                <div>
+                  <h2>{plan.name}</h2>
+                  <p className="price">{wholeMoney(plan.price)} <small>/ month</small></p>
+                </div>
+                {isCurrent ? <span className="badge">Current plan</span> : null}
+              </div>
+              <ul>
+                {lines.map((line, lineIndex) => (
+                  <li key={line} className={lineIndex < 2 ? "meta" : undefined}>
+                    {lineIndex < 2 ? <Icon name={lineIndex === 0 ? "users" : "phone"} size={16} /> : null}
+                    {line}
+                  </li>
+                ))}
+              </ul>
               {isCurrent ? <button className="ws-btn" type="button" disabled>Current plan</button> : (
                 <Link className={`ws-btn ${lower || !current ? "ghost" : "primary"}`} href={`/account/billing/plan?review=${encodeURIComponent(plan.name)}`}>{current ? (lower ? "Review downgrade" : "Review upgrade") : "Choose plan"}</Link>
               )}
@@ -51,8 +64,8 @@ export default async function ManagePlanPage({ searchParams }: { searchParams: P
       </div>
       <section className="ws-banner">
         <div>
-          <strong>Review before you confirm</strong>
-          <p>{review ? `${review.name} is ${wholeMoney(review.price)} per month. That amount is due when you confirm. The plan starts when the payment is confirmed.` : "See the price and start date before changing plans."}</p>
+          <strong><Icon name="info" size={16} /> Review before you confirm</strong>
+          <p>{review ? `${review.name} is ${wholeMoney(review.price)} per month. That amount is due when you confirm. The plan starts when the payment is confirmed.` : "See your charge today, new recurring price, and effective date before changing plans."}</p>
           {review && open && ready.length > 0 ? ready.map((gateway) => (
             <AuthForm
               key={gateway.id}

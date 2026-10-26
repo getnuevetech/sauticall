@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Icon } from "@/components/Icon";
 import { guardAccount } from "@/lib/guard";
 import { accountUsage } from "@/lib/account-usage";
 import { chicagoDate, chicagoDay, invoiceNumber, money, usagePercent, wholeMoney } from "@/lib/account-display";
+import { customerMessage } from "@/lib/customer-message";
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<{ error?: string; plan?: string }> }) {
   const user = await guardAccount();
@@ -22,8 +24,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         <a href="#invoices">Invoices</a>
         <a href="#payment">Payment methods</a>
       </nav>
-      {params.error ? <p className="form-feedback">{params.error}</p> : null}
-      <div className="ws-grid-2">
+      {params.error ? <p className="form-feedback">{customerMessage(params.error, "That billing step could not be completed. Please try again, or contact support.")}</p> : null}
+      <div className="ws-grid-2 bill-top">
         <section className="ws-card">
           <div className="ws-split"><span>Current plan</span>{plan ? <span className="ws-pill live">Active</span> : null}</div>
           <h2 style={{ marginTop: 8 }}>{plan ? plan.name : "No plan yet"}</h2>
@@ -34,27 +36,36 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         </section>
         <section className="ws-card">
           <div className="ws-split"><h2>Outbound minutes</h2><span>{usage.periodStart ? `${chicagoDay(usage.periodStart)} – ${usage.periodEnd ? chicagoDay(usage.periodEnd) : "now"}` : "This period"}</span></div>
-          <p className="price" style={{ fontSize: "1.6rem" }}>{usage.usedMinutes.toLocaleString("en-US")} / {usage.included.toLocaleString("en-US")} min used</p>
+          <div className="bill-usage">
+            <p className="price">{usage.usedMinutes.toLocaleString("en-US")} / {usage.included.toLocaleString("en-US")} <small>min used</small></p>
+            <strong>{percent}%</strong>
+          </div>
           <div className="ws-meter"><span style={{ width: `${percent}%` }} /></div>
-          <div className="ws-split"><span>{usage.remaining.toLocaleString("en-US")} minutes remaining</span><span>{percent}%</span></div>
-          {usage.periodEnd ? <p>Resets {chicagoDate(usage.periodEnd)}</p> : <p>Minutes appear here after a plan payment.</p>}
+          <div className="ws-split">
+            <span>{usage.remaining.toLocaleString("en-US")} minutes remaining</span>
+            <span>{usage.periodEnd ? `Resets ${chicagoDate(usage.periodEnd)}` : "Minutes appear after a plan payment"}</span>
+          </div>
           <div className="ws-actions">
             <Link className="ws-btn ghost" href="/account/minutes">View usage</Link>
             <Link className="ws-btn ghost" href="/account/minutes">Buy extra minutes</Link>
           </div>
         </section>
       </div>
-      <div className="ws-grid-3">
+      <div className="ws-grid-3 bill-figures">
         <section className="ws-card"><span>Subscription</span><b>{plan ? money(plan.price) : money(0)}</b></section>
         <section className="ws-card"><span>Additional charges</span><b>{money(usage.extraCents / 100)}</b></section>
-        <section className="ws-card"><span>Estimated next bill</span><b>{money(usage.renewalAmount)}</b><span>Taxes and any additional charges shown at checkout.</span></section>
+        <section className="ws-card">
+          <span className="bill-note">Estimated next bill <Icon name="info" size={14} /></span>
+          <b>{money(usage.renewalAmount)}</b>
+          <span>Taxes and any additional charges shown at checkout.</span>
+        </section>
       </div>
-      <div className="ws-grid-2" style={{ marginTop: 14 }}>
+      <div className="ws-grid-2 bill-top" style={{ marginTop: 14 }}>
         <section className="ws-card" id="invoices">
           <h2>Recent invoices</h2>
           {usage.payments.length === 0 ? <p>No invoices yet.</p> : (
             <table className="ws-table">
-              <thead><tr><th>Invoice</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
+              <thead><tr><th>Invoice</th><th>Date</th><th>Amount</th><th>Status</th><th>Download</th></tr></thead>
               <tbody>
                 {usage.payments.slice(0, 8).map((payment) => (
                   <tr key={payment.id}>
@@ -62,6 +73,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                     <td>{chicagoDate(payment.paid_at || payment.created_at)}</td>
                     <td>{money(payment.amount_cents / 100)}</td>
                     <td><span className="ws-pill live">Paid</span></td>
+                    <td><a className="bill-dl" href={`/account/billing/invoice/${payment.id}`} aria-label={`Download ${invoiceNumber(payment.id)}`}><Icon name="download" size={16} /></a></td>
                   </tr>
                 ))}
               </tbody>
@@ -70,8 +82,13 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         </section>
         <section className="ws-card" id="payment">
           <h2>Payment method</h2>
-          <p>{lastPaid?.public_label ? `Last payment used ${lastPaid.public_label}. A card is not stored on this account.` : "No saved payment method"}</p>
-          <p>Add a payment method when you choose or change a plan.</p>
+          <div className="bill-pay">
+            <span className="ws-ico"><Icon name="card" size={18} /></span>
+            <div>
+              <strong>{lastPaid?.public_label ? `Last payment used ${lastPaid.public_label}` : "No saved payment method"}</strong>
+              <p>{lastPaid?.public_label ? "A card is not stored on this account." : "Add a payment method to keep your service active."}</p>
+            </div>
+          </div>
           <p><Link className="ws-btn ghost" href="/account/billing/plan">Add payment method</Link></p>
         </section>
       </div>

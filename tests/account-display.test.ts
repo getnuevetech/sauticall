@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { callDuration, clockLabel, extensionSetup, formatPhone, helpTopic, invoiceNumber, money, monthlyPrice, perMinute, personFirstName, personInitials, planHighlights, usagePercent, wholeMoney } from "../lib/account-display.ts";
+import { callDuration, clockLabel, extensionSetup, formatPhone, helpTopic, invoiceNumber, invoiceText, money, monthlyPrice, perMinute, personFirstName, personInitials, planHighlights, usagePercent, wholeMoney } from "../lib/account-display.ts";
 import { navIsActive, workspaceCrumb } from "../lib/account-nav.ts";
 
 test("a signed-in name becomes a greeting and initials", () => {
@@ -26,6 +26,7 @@ test("billing amounts and minute use stay inside the period", () => {
   assert.equal(usagePercent(320, 800), 40);
   assert.equal(usagePercent(0, 0), 0);
   assert.equal(invoiceNumber(1), "INV-001");
+  assert.match(invoiceText({ id: 1, amountCents: 3900, currency: "USD", description: "Small Business", planName: "Small Business", when: "2026-10-26T15:00:00.000Z" }), /Invoice INV-001[\s\S]*\$39\.00 USD[\s\S]*Status: Paid[\s\S]*Plan: Small Business/);
   assert.equal(formatPhone("3025550101"), "(302) 555-0101");
   assert.equal(monthlyPrice("1.1"), "$1.10");
 });
