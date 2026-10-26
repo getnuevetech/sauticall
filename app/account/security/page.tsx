@@ -1,6 +1,7 @@
 import { Frame } from "@/components/site/Frame";
 import { AccountHero, AccountNav } from "@/components/account/Portal";
 import { AuthForm } from "@/components/account/AuthForm";
+import { AuthenticatorGuide } from "@/components/account/AuthenticatorGuide";
 import { clearOwnMfa, enrollMfa } from "../actions";
 import { authenticatorQr, authenticatorUri } from "@/lib/authenticator";
 import { currentUser } from "@/lib/auth";
@@ -23,21 +24,23 @@ export default async function SecurityPage() {
   return (
     <Frame pathname="/account/security">
       <main>
-        <AccountHero eyebrow="SECURITY" title={text("mfaTitle") || "Confirm it is you"} body={required ? (text("mfaOnHint") || "An authenticator is required for this account.") : "An authenticator can be added for this account. Revealing an app password asks for a code once it is on."} />
+        <AccountHero eyebrow="SECURITY" title={text("mfaTitle") || "Confirm it is you"} body={user.mfa_secret ? "An authenticator is on for this account. Use the code from that app when SautiCall asks for one." : required ? (text("mfaOnHint") || "An authenticator is required for this account.") : "An authenticator can be added for this account. Revealing an app password asks for a code once it is on."} />
         <section className="section">
           <div className="wrap" style={{ maxWidth: 760 }}>
             <AccountNav pathname="/account/security" />
             {!user.mfa_secret ? (
               <div className="contact-form">
-                <p>{required ? "Scan the code with an authenticator app, then enter the 6-digit code. An app password stays hidden until you enter a code." : "Scan the code to add an authenticator. An administrator can require it for this account. Once it is on, revealing an app password asks for a code."}</p>
+                <p>{required ? "This account needs an authenticator before you can continue. An app password stays hidden until you enter a code." : "You can add an authenticator now. An administrator can also require it for this account. Once it is on, revealing an app password asks for a code."}</p>
+                <AuthenticatorGuide mode="setup" />
                 <div className="auth-qr" dangerouslySetInnerHTML={{ __html: qr }} />
-                <p>If the app cannot scan, enter this key by hand.</p>
+                <p>Setup key, if the app asks you to type it.</p>
                 <p><strong>{secret}</strong></p>
-                <AuthForm action={enrollMfa} submit="Turn on authenticator" fields={[{ name: "code", label: "Code", placeholder: "123456" }]} extra={<input type="hidden" name="secret" value={secret} />} />
+                <AuthForm action={enrollMfa} submit="Turn on authenticator" fields={[{ name: "code", label: "Code from the app", placeholder: "123456" }]} extra={<input type="hidden" name="secret" value={secret} />} />
               </div>
             ) : (
               <div className="contact-form">
-                <p>An authenticator is saved for this account. Revealing an app password asks for a code.</p>
+                <p>An authenticator is saved for this account. Revealing an app password asks for a code from that app.</p>
+                <AuthenticatorGuide mode="signin" />
                 {!required ? <form action={clearOwnMfa}><button className="btn btn-secondary" type="submit">Remove authenticator</button></form> : null}
               </div>
             )}

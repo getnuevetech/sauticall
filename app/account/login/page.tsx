@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Frame } from "@/components/site/Frame";
 import { AuthForm } from "@/components/account/AuthForm";
+import { AuthenticatorGuide } from "@/components/account/AuthenticatorGuide";
 import { confirmMfa, login } from "../actions";
 import { currentUser } from "@/lib/auth";
 import { flagOn } from "@/lib/db";
@@ -29,7 +30,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <div className="wrap" style={{ maxWidth: 640 }}>
             {!passwordOn ? <div className="contact-form"><p>{text("loginClosed")}</p></div> : null}
             {passwordOn && params.step === "code" ? (
-              <AuthForm action={confirmMfa} submit="Confirm code" fields={[{ name: "code", label: "Authenticator code", placeholder: "123456" }]} />
+              <div className="contact-form">
+                <AuthenticatorGuide mode="signin" />
+                <AuthForm action={confirmMfa} submit="Confirm code" fields={[{ name: "code", label: "Code from the app", placeholder: "123456" }]} />
+              </div>
             ) : null}
             {passwordOn && params.step !== "code" && flagOn("auth.signup") ? <p><Link className="btn btn-secondary" href="/account/register">Create an account</Link></p> : null}
             {passwordOn && params.step !== "code" ? (
