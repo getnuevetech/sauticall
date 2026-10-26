@@ -32,6 +32,10 @@
 .ws-bell{position:relative;width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#475467}
 .ws-bell span{position:absolute;top:7px;right:7px;width:8px;height:8px;border-radius:50%;background:#ef4444}
 .ws-content{padding:6px 28px 48px}
+.ws-verify{margin:0 0 14px;background:#eef2ff;border:1px solid #d9e4ff;border-radius:12px;padding:10px 14px;color:#1d2433}
+.ws-verify a{color:#2f5bff;font-weight:750}
+.num-terms{display:flex;align-items:flex-start;gap:8px;margin:8px 0;font-weight:650;color:#344054}
+.num-terms input{width:auto;margin-top:4px}
 .workspace-page{max-width:860px}
 .workspace-page-head{margin-bottom:18px}
 .ws-title-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}

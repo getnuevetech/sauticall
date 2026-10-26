@@ -58,12 +58,13 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
             fields={[
               { name: "name", label: "Full name", placeholder: "Your full name" },
               { name: "email", label: "Email address", type: "email", placeholder: "you@business.com" },
+              { name: "phone", label: "Mobile number", type: "tel", placeholder: "+1 202 555 0100" },
               { name: "password", label: "Password", type: "password", placeholder: "Create a password" },
             ]}
             extra={<>
               <input type="hidden" name="plan" value={chosen?.name || ""} />
               <input type="hidden" name="setup" value={setup} />
-              <label className="check-option"><input name="terms" type="checkbox" required /> I agree to create this account and to be contacted about the service.</label>
+              <label className="check-option"><input name="terms" type="checkbox" required /> I agree to the Terms of Service.</label>
               <p>Password must be at least 8 characters.</p>
             </>}
           />

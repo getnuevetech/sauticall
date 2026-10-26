@@ -374,6 +374,33 @@ function migrate(database: Database.Database) {
   if (!userCols.has("access_role_id")) database.exec("ALTER TABLE users ADD COLUMN access_role_id INTEGER NOT NULL DEFAULT 0");
   if (!userCols.has("disabled")) database.exec("ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0");
   if (!userCols.has("mfa_required")) database.exec("ALTER TABLE users ADD COLUMN mfa_required INTEGER NOT NULL DEFAULT 0");
+  if (!userCols.has("phone")) database.exec("ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT ''");
+  if (!userCols.has("phone_verified_at")) database.exec("ALTER TABLE users ADD COLUMN phone_verified_at TEXT NOT NULL DEFAULT ''");
+  if (!userCols.has("email_verified_at")) database.exec("ALTER TABLE users ADD COLUMN email_verified_at TEXT NOT NULL DEFAULT ''");
+  if (!userCols.has("terms_accepted_at")) database.exec("ALTER TABLE users ADD COLUMN terms_accepted_at TEXT NOT NULL DEFAULT ''");
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS verification_challenges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      channel TEXT NOT NULL,
+      destination TEXT NOT NULL,
+      code_hash TEXT NOT NULL,
+      salt TEXT NOT NULL DEFAULT '',
+      token_hash TEXT NOT NULL DEFAULT '',
+      expires_at TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      used_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS sms_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      phone TEXT NOT NULL,
+      status TEXT NOT NULL,
+      detail TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+  `);
   const extensionCols = new Set((database.prepare("PRAGMA table_info(pbx_extensions)").all() as { name: string }[]).map((column) => column.name));
   if (!extensionCols.has("former_number")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN former_number TEXT NOT NULL DEFAULT ''");
   if (!extensionCols.has("removed_at")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN removed_at TEXT NOT NULL DEFAULT ''");

@@ -1,6 +1,13 @@
 "use client";
 
+import { useFormStatus } from "react-dom";
 import { useState } from "react";
+
+function SubmitButton({ label, className }: { label: string; className: string }) {
+  const { pending } = useFormStatus();
+  const waiting = label.startsWith("Create") ? "Creating account…" : label.startsWith("Sign") ? "Signing in…" : "Please wait…";
+  return <button className={className} type="submit" disabled={pending} aria-busy={pending}>{pending ? waiting : label}</button>;
+}
 
 export function AuthForm({
   action,
@@ -41,7 +48,7 @@ export function AuthForm({
         </label>
       ))}
       {extra}
-      <button className={submitClassName} type="submit">{submit}</button>
+      <SubmitButton label={submit} className={submitClassName} />
       {error ? <div className="form-feedback">{error}</div> : null}
     </form>
   );

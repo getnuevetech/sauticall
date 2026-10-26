@@ -213,6 +213,7 @@
 .pub-pass input{padding-right:64px}
 .pub-pass button{position:absolute;right:8px;top:8px;border:0;background:transparent;color:#2f5bff;font-weight:700}
 .pub-form .btn{width:100%}
+.pub-form .btn:disabled{opacity:.75;cursor:wait}
 .pub-checks{display:flex;gap:16px;flex-wrap:wrap;margin-top:22px}
 .pub-checks div{display:flex;gap:8px;align-items:center;color:#344054;font-weight:650;font-size:.9rem}
 .pub-steps-line{display:flex;gap:10px;align-items:center;color:#98a2b3;font-weight:700;margin:8px 0 18px}

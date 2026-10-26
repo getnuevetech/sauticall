@@ -12,12 +12,14 @@ export function WorkspaceFrame({
   email,
   company,
   alerts,
+  needsVerify = false,
   children,
 }: {
   name: string;
   email: string;
   company: string;
   alerts: number;
+  needsVerify?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -82,7 +84,10 @@ export function WorkspaceFrame({
           </Link>
           <span className="ws-avatar">{mark}</span>
         </header>
-        <div className="ws-content">{children}</div>
+        <div className="ws-content">
+          {needsVerify && pathname !== "/account/verify" ? <p className="ws-verify">Confirm your email and mobile number. <Link href="/account/verify">Continue</Link></p> : null}
+          {children}
+        </div>
       </div>
     </div>
   );

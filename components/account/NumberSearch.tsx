@@ -1,10 +1,16 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { saveNumber } from "@/app/account/actions";
 import { PlaceSelects } from "./PlaceSelects";
 
 type Did = { did: string; ratecenter: string; state: string; monthly: string };
+
+function BuyButton({ label }: { label: string }) {
+  const { pending } = useFormStatus();
+  return <button className="btn btn-secondary" type="submit" disabled={pending}>{pending ? "Please wait…" : label}</button>;
+}
 
 const MODES = [
   ["city", "Numbers in this city"],
@@ -82,7 +88,8 @@ export function NumberSearch({
           <input type="hidden" name="ratecenter" value={item.ratecenter} />
           <strong>{item.did}</strong>
           <p>{[item.ratecenter, item.state, item.monthly ? `$${item.monthly}/mo` : ""].filter(Boolean).join(" · ")}</p>
-          <button className="btn btn-secondary" type="submit">{automatic ? copy.numbersBuy || "Buy this number" : copy.numbersRequest}</button>
+          <label className="check-option num-terms"><input name="number_terms" type="checkbox" required /> I agree to the Terms of Service for this number.</label>
+          <BuyButton label={automatic ? copy.numbersBuy || "Buy this number" : copy.numbersRequest} />
         </form>
       ))}
     </div>

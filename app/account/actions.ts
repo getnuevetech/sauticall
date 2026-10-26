@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import {
   createSession,
@@ -36,8 +37,10 @@ export async function login(formData: FormData) {
   const needsCode = needsMfa && Boolean(user.mfa_secret);
   await createSession(user.id, needsCode);
   if (user.role === "customer") {
-    const { provisionCustomer } = await import("@/lib/voip-client");
-    await provisionCustomer(user.id).catch(() => undefined);
+    const id = user.id;
+    after(() => {
+      void import("@/lib/voip-client").then(({ provisionCustomer }) => provisionCustomer(id)).catch(() => undefined);
+    });
   }
   audit(user.email, "auth.login", needsCode ? "mfa-pending" : "password");
   if (needsCode) redirect("/account/login?step=code");
@@ -60,11 +63,16 @@ export async function register(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
+  const { normalizeMobile } = await import("@/lib/verify-code");
+  const phone = normalizeMobile(String(formData.get("phone") || ""));
   if (!name || !email || password.length < 8) return { error: "Use your name, email, and a password of at least 8 characters." };
+  if (!phone) return { error: "Enter a mobile number with the country code, such as +1 202 555 0100." };
+  if (formData.get("terms") !== "on") return { error: "Agree to the Terms of Service to create an account." };
+  const now = new Date().toISOString();
   try {
     getDb()
-      .prepare("INSERT INTO users (email, name, password_hash, role, mfa_secret, created_at) VALUES (?, ?, ?, 'customer', NULL, ?)")
-      .run(email, name, hashPassword(password), new Date().toISOString());
+      .prepare("INSERT INTO users (email, name, password_hash, role, mfa_secret, created_at, phone, terms_accepted_at) VALUES (?, ?, ?, 'customer', NULL, ?, ?, ?)")
+      .run(email, name, hashPassword(password), now, phone, now);
   } catch {
     return { error: "An account with that email already exists." };
   }
@@ -74,13 +82,73 @@ export async function register(formData: FormData) {
   if (planName || setup) {
     getDb()
       .prepare("INSERT INTO account_requests (user_id, kind, payload, status, created_at) VALUES (?, 'setup', ?, 'requested', ?)")
-      .run(user.id, JSON.stringify({ plan: planName, prompt: setup }), new Date().toISOString());
+      .run(user.id, JSON.stringify({ plan: planName, prompt: setup }), now);
   }
   await createSession(user.id, false);
-  const { provisionCustomer } = await import("@/lib/voip-client");
-  await provisionCustomer(user.id).catch(() => undefined);
+  const { requestOrigin } = await import("@/lib/payments");
+  const { sendAccountEmail, sendAccountSms } = await import("@/lib/account-verify");
+  const origin = await requestOrigin();
+  const emailResult = await Promise.race([
+    sendAccountEmail(user.id, origin).catch(() => ({ ok: false as const })),
+    new Promise<{ ok: false }>((resolve) => setTimeout(() => resolve({ ok: false }), 6000)),
+  ]);
+  await sendAccountSms(user.id).catch(() => undefined);
+  const id = user.id;
+  after(() => {
+    void import("@/lib/voip-client").then(({ provisionCustomer }) => provisionCustomer(id)).catch(() => undefined);
+  });
   audit(email, "auth.register", planName || "customer");
-  redirect(planName ? `/account/billing?plan=${encodeURIComponent(planName)}` : "/account/billing");
+  const next = planName ? `&plan=${encodeURIComponent(planName)}` : "";
+  redirect(`/account/verify?email=${emailResult.ok ? "sent" : "waiting"}${next}`);
+}
+
+export async function confirmEmailCode(formData: FormData) {
+  const user = await currentUser();
+  if (!user) redirect("/account/login");
+  const { confirmEmailCode: confirm } = await import("@/lib/account-verify");
+  const result = confirm(user.id, String(formData.get("code") || ""));
+  if (!result.ok) redirect(`/account/verify?error=${encodeURIComponent(result.message)}`);
+  redirect("/account/verify?email=ok");
+}
+
+export async function confirmPhoneCode(formData: FormData) {
+  const user = await currentUser();
+  if (!user) redirect("/account/login");
+  const { confirmSmsCode } = await import("@/lib/account-verify");
+  const result = confirmSmsCode(user.id, String(formData.get("code") || ""));
+  if (!result.ok) redirect(`/account/verify?error=${encodeURIComponent(result.message)}`);
+  redirect("/account/verify?phone=ok");
+}
+
+export async function resendEmailVerification() {
+  const user = await currentUser();
+  if (!user) redirect("/account/login");
+  const { requestOrigin } = await import("@/lib/payments");
+  const { sendAccountEmail } = await import("@/lib/account-verify");
+  const result = await sendAccountEmail(user.id, await requestOrigin());
+  if (!result.ok) redirect(`/account/verify?error=${encodeURIComponent(result.message)}`);
+  redirect("/account/verify?email=sent");
+}
+
+export async function saveMobile(formData: FormData) {
+  const user = await currentUser();
+  if (!user) redirect("/account/login");
+  const { normalizeMobile } = await import("@/lib/verify-code");
+  const phone = normalizeMobile(String(formData.get("phone") || ""));
+  if (!phone) redirect("/account/verify?error=Enter%20a%20mobile%20number%20with%20the%20country%20code.");
+  getDb().prepare("UPDATE users SET phone = ?, phone_verified_at = '' WHERE id = ?").run(phone, user.id);
+  const { sendAccountSms } = await import("@/lib/account-verify");
+  await sendAccountSms(user.id).catch(() => undefined);
+  redirect("/account/verify?sms=waiting");
+}
+
+export async function resendPhoneVerification() {
+  const user = await currentUser();
+  if (!user) redirect("/account/login");
+  const { sendAccountSms } = await import("@/lib/account-verify");
+  const result = await sendAccountSms(user.id);
+  if (!result.ok) redirect(`/account/verify?sms=waiting&error=${encodeURIComponent(result.message)}`);
+  redirect("/account/verify?sms=sent");
 }
 
 export async function logout() {
@@ -207,6 +275,7 @@ export async function saveNumber(formData: FormData) {
   if (!emergency) redirect("/account/numbers?error=Add%20the%20emergency%20address%20first.");
   if (!flagOn("numbers.live_search")) redirect("/account/numbers?error=Number%20inventory%20search%20is%20turned%20off.");
   const { normalizeRequestedDid } = await import("@/lib/did-list");
+  if (formData.get("number_terms") !== "on") redirect("/account/numbers?error=Agree%20to%20the%20Terms%20of%20Service%20before%20buying%20a%20number.");
   const did = normalizeRequestedDid(String(formData.get("did") || ""));
   if (!did) redirect("/account/numbers?error=Choose%20a%2010-digit%20number%20from%20the%20inventory%20search.");
   const country = String(formData.get("country") || "US").slice(0, 2).toUpperCase() === "CA" ? "CA" : "US";
@@ -219,7 +288,7 @@ export async function saveNumber(formData: FormData) {
   if (!city.ok) redirect(`/account/numbers?error=${encodeURIComponent(safeCustomerError(city.message, "The city list is not available right now. Try again shortly."))}`);
   const match = await findInventoryDid(country, region, city.city, did);
   if (!match) redirect("/account/numbers?error=That%20number%20is%20not%20in%20the%20current%20inventory.%20Search%20again%20and%20choose%20a%20listed%20number.");
-  const payload = { did: match.did, country, region: (match.state || region).toUpperCase(), ratecenter: (match.ratecenter || city.city).toUpperCase(), emergency };
+  const payload = { did: match.did, country, region: (match.state || region).toUpperCase(), ratecenter: (match.ratecenter || city.city).toUpperCase(), emergency, termsAcceptedAt: new Date().toISOString() };
   const info = getDb()
     .prepare("INSERT INTO account_requests (user_id, kind, payload, status, created_at) VALUES (?, 'number', ?, 'requested', ?)")
     .run(user.id, JSON.stringify(payload), new Date().toISOString());

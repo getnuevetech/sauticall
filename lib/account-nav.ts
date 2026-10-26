@@ -12,6 +12,7 @@ export const accountNav = [
 export function workspaceCrumb(pathname: string) {
   if (pathname === "/account") return { parent: "Workspace", current: "Overview" };
   if (pathname.startsWith("/account/billing")) return { parent: "Account", current: "Usage & billing" };
+  if (pathname.startsWith("/account/verify")) return { parent: "Account", current: "Confirm account" };
   const match = accountNav.find((item) => item.href !== "/account" && (pathname === item.href || pathname.startsWith(`${item.href}/`)));
   return { parent: "Account", current: match?.label || "Account" };
 }
