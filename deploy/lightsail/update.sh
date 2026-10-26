@@ -15,6 +15,7 @@ if [[ -z "${SAUTICALL_UPDATED:-}" ]]; then
 fi
 
 cd "${APP_DIR}"
+echo "Building $(git -c safe.directory="${APP_DIR}" -C "${APP_DIR}" rev-parse --short HEAD)"
 sudo --preserve-env=ADMIN_EMAIL,ADMIN_PASSWORD,SAUTICALL_DATA_DIR,SAUTICALL_UPLOAD_DIR,NODE_ENV,HOSTNAME,PORT \
   -u sauticall bash -lc "set -a; . '${ENV_FILE}'; set +a; cd '${APP_DIR}' && npm ci && npm run build"
 systemctl restart sauticall
