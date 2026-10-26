@@ -31,6 +31,8 @@ const ICONS: Record<string, string> = {
   target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',
   monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
   mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 7 9-7"/>',
+  hash: '<path d="M5 9h14M5 15h14M10 4 8 20M16 4l-2 16"/>',
+  wave: '<path d="M4 10v4M8 6v12M12 3v18M16 6v12M20 10v4"/>',
 };
 
 export const iconNames = Object.keys(ICONS);

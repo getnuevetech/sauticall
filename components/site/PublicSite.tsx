@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Icon } from "../Icon";
 import { SetupAssistant } from "./Interactive";
-import { AiCallCard, CallsMock, DeskMock, DevicePair, ExtTable, NumberPair, QueueCard } from "./PublicMocks";
+import { CallsMock, DeskMock } from "./PublicMocks";
 import { recommendPlan } from "@/lib/setup-assistant";
 import { perMinute, wholeMoney } from "@/lib/account-display";
 import { normalizePlan, planAllows, type FeatureKey } from "@/lib/plan-features";
@@ -232,8 +232,15 @@ export function PublicHome({ page, services, plans, faqs }: { page: Record<strin
 
 export function PublicSolutions({ page, services }: { page: Record<string, unknown>; services: Service[] }) {
   void services;
+  const jumps = [
+    ["#phone", "Phone system"],
+    ["#phones", "Desk & mobile"],
+    ["#ai", "AI receptionist"],
+    ["#center", "Contact center"],
+    ["#numbers", "Numbers & porting"],
+  ];
   return (
-    <main>
+    <main className="sol">
       <section className="pub-hero">
         <div className="wrap pub-hero-grid">
           <div>
@@ -248,18 +255,21 @@ export function PublicSolutions({ page, services }: { page: Record<string, unkno
           <figure className="home-shot"><img src="/marketing/solutions-hero.png" alt="SautiCall on a laptop, a mobile phone, and a desk phone" /></figure>
         </div>
       </section>
+      <nav className="sol-jump" aria-label="On this page">
+        {jumps.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}
+      </nav>
       <section className="section tight">
         <div className="wrap">
           <h2 className="center">What would you like to do?</h2>
-          <div className="do-row">
+          <div className="sol-do">
             {[
               ["phone", "Set up business calling", "#phone"],
               ["users", "Connect my team", "#phones"],
-              ["bot", "Answer with AI", "/ai-receptionist"],
-              ["headset", "Manage more calls", "#center"],
-              ["globe", "Keep my number", "#numbers"],
+              ["wave", "Answer with AI", "#ai"],
+              ["chart", "Manage more calls", "#center"],
+              ["hash", "Keep my number", "#numbers"],
             ].map(([icon, label, href]) => (
-              <Link key={label} className="do-tile" href={href}><span className="pub-ico round"><Icon name={icon} size={18} /></span><span>{label}</span></Link>
+              <Link key={label} href={href}><Icon name={icon} size={20} /><span>{label}</span><Icon name="arrow" size={16} /></Link>
             ))}
           </div>
         </div>
@@ -270,33 +280,71 @@ export function PublicSolutions({ page, services }: { page: Record<string, unkno
             <p className="pub-kicker">Cloud phone system</p>
             <h2>Bring your team onto one phone system.</h2>
             <p>Manage extensions, business hours, voicemail and call routing from your account.</p>
-            <ul className="pub-list"><li>Team extensions</li><li>Business hours and routing</li><li>Voicemail and forwarding</li></ul>
-            <Link className="btn btn-secondary" href="/pricing">Compare phone system plans</Link>
+            <ul className="sol-list"><li><Icon name="checkcircle" size={16} /> Team extensions</li><li><Icon name="checkcircle" size={16} /> Business hours and routing</li><li><Icon name="checkcircle" size={16} /> Voicemail and forwarding</li></ul>
+            <Link className="sol-link" href="/pricing">Compare phone system plans <Icon name="arrow" size={16} /></Link>
           </div>
-          <ExtTable />
+          <article className="sol-ext" aria-hidden="true">
+            <aside>
+              <b><i /> SautiCall</b>
+              {[["home", "Home"], ["phone", "Calls"], ["users", "Extensions"], ["hash", "Numbers"], ["bot", "AI receptionist"], ["headset", "Contact center"], ["settings", "Settings"]].map(([icon, label]) => (
+                <span key={label} className={label === "Extensions" ? "on" : ""}><Icon name={icon} size={14} /> {label}</span>
+              ))}
+            </aside>
+            <div>
+              <header><strong>Extensions</strong><span>Add extension</span></header>
+              <div className="sol-ext-head"><span>Ext</span><span>Name</span><span>Status</span></div>
+              {[["511", "Main Line", "Online", "ok"], ["512", "Support", "Online", "ok"], ["514", "Sales", "Away", "away"]].map(([ext, name, state, tone]) => (
+                <div key={ext}><span>{ext}</span><span>{name}</span><em className={tone}>{state}</em></div>
+              ))}
+            </div>
+          </article>
         </div>
       </section>
-      <section className="section alt" id="phones">
+      <section className="section sol-soft" id="phones">
         <div className="wrap pub-split">
-          <DevicePair />
+          <img className="sol-desk" src="/marketing/solutions-desk.png" alt="A SautiCall desk phone beside the mobile app on a call" />
           <div>
             <p className="pub-kicker">Desk phones & softphones</p>
             <h2>At your desk. On the move. Still your business.</h2>
             <p>Use supported desk phones and softphone apps to stay connected to your business calling setup.</p>
-            <Link href="/contact">Check device compatibility →</Link>
+            <div className="sol-pills">
+              <span><Icon name="phone" size={14} /> Desk phone</span>
+              <span><Icon name="monitor" size={14} /> Desktop</span>
+              <span><Icon name="smartphone" size={14} /> Mobile</span>
+              <span><Icon name="globe" size={14} /> Browser, where supported</span>
+            </div>
+            <Link className="sol-link" href="/contact">Check device compatibility <Icon name="arrow" size={16} /></Link>
           </div>
         </div>
       </section>
-      <section className="section pub-dark" id="ai">
+      <section className="section sol-navy" id="ai">
         <div className="wrap pub-split">
           <div>
             <p className="pub-kicker">AI receptionist</p>
             <h2>A helpful first answer for your callers.</h2>
             <p>Answer routine questions, take messages and route callers to your team.</p>
-            <ul className="pub-list light"><li>Answers</li><li>Messages</li><li>Human handoff</li></ul>
+            <div className="sol-inline">
+              <span><Icon name="message" size={16} /> Answers</span>
+              <span><Icon name="mail" size={16} /> Messages</span>
+              <span><Icon name="users" size={16} /> Human handoff</span>
+            </div>
             <Link className="btn btn-coral" href="/ai-receptionist">Explore AI receptionist</Link>
           </div>
-          <AiCallCard />
+          <div>
+            <article className="sol-ai" aria-hidden="true">
+              <div>
+                <span>Caller asks a question</span>
+                <p>What are your business hours?</p>
+                <div><Icon name="wave" size={22} /><div><b>SautiCall AI</b><small>Checking your business hours...</small></div></div>
+              </div>
+              <ol>
+                <li><Icon name="message" size={14} /> Answer common questions</li>
+                <li><Icon name="mail" size={14} /> Take a message</li>
+                <li><Icon name="users" size={14} /> Route to the right person</li>
+              </ol>
+            </article>
+            <p className="sol-note">AI features and supported languages depend on your plan.</p>
+          </div>
         </div>
       </section>
       <section className="section" id="center">
@@ -305,39 +353,61 @@ export function PublicSolutions({ page, services }: { page: Record<string, unkno
             <p className="pub-kicker">Virtual contact center</p>
             <h2>Give busy teams a clearer way to handle calls.</h2>
             <p>Organize shared calls with ring groups, queues and reporting on eligible plans.</p>
-            <ul className="pub-list"><li>Ring groups and call transfers</li><li>Call queues</li><li>Call reporting</li></ul>
-            <Link className="btn btn-secondary" href="/pricing">Explore team plans</Link>
+            <ul className="sol-list"><li><Icon name="checkcircle" size={16} /> Ring groups and call transfers</li><li><Icon name="checkcircle" size={16} /> Call queues</li><li><Icon name="checkcircle" size={16} /> Call reporting</li></ul>
+            <Link className="sol-link" href="/pricing">Explore Team plans <Icon name="arrow" size={16} /></Link>
           </div>
-          <QueueCard />
+          <article className="sol-queue" aria-hidden="true">
+            <header><b>Support queue</b><em>Live</em></header>
+            <div className="wait"><span><Icon name="phone" size={14} /> Waiting</span><b>2</b></div>
+            <div className="team"><span><Icon name="users" size={14} /> With team</span><b>3</b></div>
+            <header className="sub"><b>Recent calls</b><span>View all</span></header>
+            {[["(302) 555-0123", "2 min ago", "Waiting", "wait"], ["(302) 555-0178", "6 min ago", "With team", "team"], ["(302) 555-0140", "12 min ago", "Completed", "done"]].map(([num, when, state, tone]) => (
+              <p key={num}><Icon name="phone" size={14} /><span>{num}</span><small>{when}</small><em className={tone}>{state}</em></p>
+            ))}
+          </article>
         </div>
       </section>
-      <section className="section alt" id="numbers">
+      <section className="section sol-soft" id="numbers">
         <div className="wrap">
           <p className="pub-kicker">Numbers & porting</p>
           <h2>A new number. Or the one your customers know.</h2>
-          <NumberPair />
-          <p className="pub-fine">Number availability, transfer eligibility and activation depend on carrier approval and service setup.</p>
-          <div className="pub-actions">
-            <Link className="btn btn-secondary" href="/account/register">Explore business numbers</Link>
-            <Link href="/account/porting">Learn about number transfers →</Link>
+          <div className="sol-nums">
+            <article>
+              <header><span className="cost-ico"><Icon name="phone" size={16} /></span><div><h3>Get a business number</h3><p>Search available numbers and review rental and applicable charges before purchase.</p></div></header>
+              <div className="sol-search"><Icon name="search" size={14} /> (302) 555-01</div>
+              <p><Icon name="phone" size={14} /> (302) 555-0101 <em>Available</em></p>
+              <p><Icon name="phone" size={14} /> (302) 555-0102 <em>Available</em></p>
+              <Link className="btn btn-primary" href="/account/register">Explore business numbers</Link>
+            </article>
+            <article>
+              <header><span className="cost-ico"><Icon name="arrow" size={16} /></span><div><h3>Bring your existing number</h3><p>Submit transfer details and documents, then track progress in your account.</p></div></header>
+              <div className="sol-steps"><span className="on"><b>1</b><small>Request</small></span><span><b>2</b><small>Review</small></span><span><b>3</b><small>Transfer</small></span><span><b>4</b><small>Activation</small></span></div>
+              <Link className="btn btn-primary" href="/account/porting">Learn about number transfers</Link>
+            </article>
           </div>
+          <p className="pub-fine center">Number availability, transfer eligibility and activation depend on carrier approval and service setup.</p>
         </div>
       </section>
-      <section className="unsure" id="porting">
+      <section className="section tight sol-soft" id="porting">
         <div className="wrap">
-          <div>
-            <h2>Not sure where to start?</h2>
-            <p>Describe the calls you want handled. The setup assistant can suggest a configuration for you to review.</p>
-          </div>
-          <Link className="btn btn-primary" href="/how-it-works">Find my setup</Link>
+          <article className="sol-unsure">
+            <div>
+              <h2><Icon name="spark" size={18} /> Not sure where to start?</h2>
+              <p>Describe your team and how you want calls handled. The setup assistant can suggest a configuration for you to review.</p>
+            </div>
+            <form action="/how-it-works" method="get">
+              <input name="prompt" required maxLength={400} placeholder="We have four people and need shared calls with business hours..." aria-label="Describe the calls you want handled" />
+              <button className="btn btn-primary" type="submit">Find my setup</button>
+            </form>
+          </article>
         </div>
       </section>
-      <section className="pub-end">
+      <section className="sol-end">
         <div className="wrap">
           <h2>Build the phone setup your business needs.</h2>
           <div className="pub-actions">
-            <Link className="btn btn-secondary" href="/pricing">Compare plans</Link>
-            <Link className="btn btn-primary" href="/contact">Talk to us</Link>
+            <Link className="btn btn-light" href="/pricing">Compare plans</Link>
+            <Link className="btn btn-ghost" href="/contact">Talk to us</Link>
           </div>
         </div>
       </section>
@@ -678,8 +748,8 @@ export function PublicPricing({
   );
 }
 
-export function PublicHow({ home, plans, showDemo }: { home: Record<string, unknown>; plans: Plan[]; showDemo: boolean }) {
-  const sample = str(home, "chatSampleUser");
+export function PublicHow({ home, plans, showDemo, prompt = "" }: { home: Record<string, unknown>; plans: Plan[]; showDemo: boolean; prompt?: string }) {
+  const sample = prompt.trim() || str(home, "chatSampleUser");
   const steps = [
     ["1", "Tell us what you need", "How many people answer calls, where those calls should go, and whether you want the AI receptionist."],
     ["2", "Review the suggested plan", "See the people, outbound minutes, and features on the plan that matches what you described."],
