@@ -4,6 +4,7 @@ import { AuthForm } from "@/components/account/AuthForm";
 import { confirmEmailCode, confirmPhoneCode, resendEmailVerification, resendPhoneVerification, saveMobile } from "../actions";
 import { confirmEmailToken, verificationStatus } from "@/lib/account-verify";
 import { currentUser } from "@/lib/auth";
+import { customerMessage } from "@/lib/customer-message";
 import { redirect } from "next/navigation";
 
 export default async function VerifyPage({ searchParams }: { searchParams: Promise<{ token?: string; email?: string; phone?: string; sms?: string; error?: string; plan?: string }> }) {
@@ -25,7 +26,17 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
   }
   if (user.role !== "customer") redirect("/admin");
   const status = verificationStatus(user.id);
-  const note = params.error || tokenNote || (params.email === "ok" ? "Email confirmed." : params.phone === "ok" ? "Mobile number confirmed." : params.email === "sent" ? "Confirmation email sent." : params.email === "waiting" ? "The confirmation email has not gone out yet. Send it again once outgoing email is set up." : "");
+  const note = [
+    params.error ? customerMessage(params.error, "That confirmation could not be completed. Try again.") : "",
+    tokenNote,
+    params.email === "ok" ? "Email confirmed." : "",
+    params.phone === "ok" ? "Mobile number confirmed." : "",
+    params.email === "sent" ? "Confirmation email sent." : "",
+    params.email === "waiting" ? "The confirmation email has not gone out yet. Send it again once outgoing email is set up." : "",
+    params.sms === "sent" ? "A code was texted to your mobile number." : "",
+    params.sms === "waiting" && !status.smsReady ? "Your number is saved. A text message with the code will be sent when text messages are turned on." : "",
+    params.sms === "waiting" && status.smsReady && !params.error ? "If the text message does not arrive, send the code again." : "",
+  ].filter(Boolean).join(" ");
   const plan = String(params.plan || "");
   return (
     <div className="workspace-page" style={{ maxWidth: 720 }}>
@@ -49,7 +60,7 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
         {!status.phone ? <AuthForm className="pub-form" action={saveMobile} submit="Save mobile number" fields={[{ name: "phone", label: "Mobile number", type: "tel", placeholder: "+1 202 555 0100" }]} /> : null}
         {status.phone && status.phoneVerified ? <p>Confirmed.</p> : status.phone ? (
           <>
-            <p>{status.smsReady ? "Enter the 6-digit code from the text message." : "Your number is saved. A text message with the code will be sent when SMS is turned on."}</p>
+            <p>{status.smsReady ? "Enter the 6-digit code from the text message." : "Your number is saved. A text message with the code will be sent when text messages are turned on."}</p>
             <AuthForm className="pub-form" action={confirmPhoneCode} submit="Confirm mobile number" fields={[{ name: "code", label: "Text message code", placeholder: "123456" }]} />
             <form action={resendPhoneVerification}><button className="ws-btn ghost" type="submit">Send a code</button></form>
           </>

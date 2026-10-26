@@ -18,6 +18,8 @@ function VoipForm() {
       <label>API address <input name="endpoint" defaultValue={config.endpoint || "https://voip.ms/api/v1/rest.php"} /></label>
       <label>Routing <input name="routing" defaultValue={config.routing || ""} placeholder="account:100001" /></label>
       <label>POP <input name="pop" defaultValue={config.pop || ""} placeholder="Point of presence" /></label>
+      <label>Text message number <input name="sms_did" defaultValue={config.sms_did || ""} placeholder="7135550100" inputMode="numeric" autoComplete="off" /></label>
+      <p>Account confirmation codes are texted from this number. It must already be on the VoIP.ms account, and that account must be allowed to send business texts. Leave it blank until both are ready.</p>
       <details className="admin-more">
         <summary>More settings</summary>
         <div className="admin-more-body">

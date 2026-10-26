@@ -192,8 +192,11 @@ export async function testVoipms() {
     const clients = await callVoipms("getClients", {});
     const balance = result.body && typeof result.body === "object" ? String((result.body as { balance?: unknown }).balance || "") : "";
     const reseller = clients.ok || clients.status === "no_client";
+    const from = normalizeRequestedDid(getConnection("voipms").public.sms_did || "");
+    const { smsAccountNote } = await import("./sms-number");
+    const smsNote = reseller && from ? smsAccountNote(await lookupOwnedDid(from)) : "";
     const message = reseller
-      ? `Connected. Balance ${balance || "returned"}. Reseller clients are available on this login.`
+      ? `Connected. Balance ${balance || "returned"}. Reseller clients are available on this login.${smsNote}`
       : `The balance was read, but reseller clients returned ${clients.status}.`;
     recordCheck("voipms", reseller, message);
     return { ok: reseller, message };

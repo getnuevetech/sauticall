@@ -150,6 +150,7 @@ export async function saveConnection(formData: FormData) {
       client_state: String(formData.get("client_state") || "").trim().toUpperCase().slice(0, 2),
       client_country: String(formData.get("client_country") || "") === "CA" ? "CA" : "US",
       client_zip: String(formData.get("client_zip") || "").trim().toUpperCase().slice(0, 10),
+      sms_did: (await import("@/lib/sms-number")).smsDestination(String(formData.get("sms_did") || "")),
     }, secret);
   } else {
     persist(provider, enabled, {
