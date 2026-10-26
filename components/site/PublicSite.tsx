@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Icon } from "../Icon";
-import { AiCallCard, AnswerCards, CallsMock, DeskMock, DevicePair, ExampleCall, ExtTable, HomeFlow, HomeStage, LanguageScene, NumberPair, QueueCard, SettingsPanel, SetupArt, TeamMini, TransferMini, Unfold, WaveMini, DeskMini } from "./PublicMocks";
+import { AiCallCard, AnswerCards, CallsMock, DeskMock, DevicePair, ExampleCall, ExtTable, HomeStage, LanguageScene, NumberPair, QueueCard, SettingsPanel, Unfold } from "./PublicMocks";
 import { perMinute, wholeMoney } from "@/lib/account-display";
 import { normalizePlan, planAllows, type FeatureKey } from "@/lib/plan-features";
 import { planSignupPath } from "@/lib/signup";
@@ -133,8 +133,7 @@ export function PublicHome({ page, services, plans, faqs }: { page: Record<strin
             <p className="pub-fine">{lowest ? `Plans from ${wholeMoney(lowest.price)}/month` : "Plans"} · Number rental and other charges may apply.</p>
           </div>
           <figure className="home-shot">
-            <img src="/marketing/home-hero.jpg" alt="SautiCall on a laptop, a desk phone, and a mobile phone" />
-            <figcaption>Product preview</figcaption>
+            <img src="/marketing/home-hero.png" alt="Product preview of SautiCall on a laptop, a desk phone, and a mobile phone" />
           </figure>
         </div>
       </section>
@@ -161,10 +160,10 @@ export function PublicHome({ page, services, plans, faqs }: { page: Record<strin
             <p>Call queues and reporting on eligible plans.</p>
           </div>
           <div className="home-cards">
-            <article><h3>A phone system for your whole team</h3><p>Give everyone an extension, set business hours and keep your team in sync.</p><TeamMini /><Link href="/solutions#phone">Learn more →</Link></article>
-            <article><h3>A helpful first answer</h3><p>Let your AI receptionist answer routine questions, take messages and route calls to the right person.</p><WaveMini /><Link href="/ai-receptionist">Learn more →</Link></article>
-            <article><h3>Keep your business number</h3><p>Bring your existing number or get a new one. We&apos;ll help you transfer it.</p><TransferMini /><Link href="/solutions#numbers">Learn more →</Link></article>
-            <article><h3>Work from desk or mobile</h3><p>Use desk phones at the office or our mobile and desktop apps on the go.</p><DeskMini /><Link href="/solutions#phones">Learn more →</Link></article>
+            <article><h3>A phone system for your whole team</h3><p>Give everyone an extension, set business hours and keep your team in sync.</p><img src="/marketing/card-team.png" alt="" /><Link href="/solutions#phone">Learn more →</Link></article>
+            <article><h3>A helpful first answer</h3><p>Let your AI receptionist answer routine questions, take messages and route calls to the right person.</p><img src="/marketing/card-wave.png" alt="" /><Link href="/ai-receptionist">Learn more →</Link></article>
+            <article><h3>Keep your business number</h3><p>Bring your existing number or get a new one. We&apos;ll help you transfer it.</p><img src="/marketing/card-number.png" alt="" /><Link href="/solutions#numbers">Learn more →</Link></article>
+            <article><h3>Work from desk or mobile</h3><p>Use desk phones at the office or our mobile and desktop apps on the go.</p><img src="/marketing/card-desk.png" alt="" /><Link href="/solutions#phones">Learn more →</Link></article>
           </div>
         </div>
       </section>
@@ -182,12 +181,12 @@ export function PublicHome({ page, services, plans, faqs }: { page: Record<strin
             <p><Link className="btn btn-coral" href="/ai-receptionist">Explore AI receptionist</Link></p>
             <p className="pub-fine light">Features and supported languages vary by plan.</p>
           </div>
-          <HomeFlow />
+          <img className="home-flow-img" src="/marketing/home-flow.png" alt="An incoming call reaches the AI receptionist, then connects to the team, a person, or voicemail." />
         </div>
       </section>
       <section className="section home-setup">
         <div className="wrap setup-layout">
-          <SetupArt />
+          <img className="setup-art-img" src="/marketing/setup-art.png" alt="" />
           <div>
             <h2 className="section-title">Tell us what you need. We&apos;ll help you find a setup.</h2>
             <form className="setup-ask" action="/how-it-works">
