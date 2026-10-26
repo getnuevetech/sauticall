@@ -411,6 +411,10 @@ export function upgradeContent(database: Database.Database) {
         item.label = "Help";
         navChanged = true;
       }
+      if (item.href === "/ai-receptionist" && item.label === "AI Receptionist") {
+        item.label = "AI receptionist";
+        navChanged = true;
+      }
     }
     if (navChanged) writeJson(database, "nav", navItems);
   }
@@ -425,22 +429,23 @@ export function upgradeContent(database: Database.Database) {
       footerCopy.legalLeft = "© 2026 SautiCall. All rights reserved.";
       footerChanged = true;
     }
-    if (footerCopy.groups.map((group) => group.title).join("|") === "Explore|Company|Platform") {
+    const footerShape = footerCopy.groups.map((group) => group.title).join("|");
+    if (footerShape === "Explore|Company|Platform" || footerShape === "Solutions|Support|Company") {
       footerCopy.groups = [
         { title: "Solutions", links: [
-          { label: "Business phone system", href: "/solutions#phone" },
+          { label: "Business numbers", href: "/solutions#numbers" },
+          { label: "Team extensions", href: "/solutions#phone" },
           { label: "AI receptionist", href: "/ai-receptionist" },
-          { label: "Number transfers", href: "/solutions#porting" },
+          { label: "How it works", href: "/how-it-works" },
           { label: "Pricing", href: "/pricing" },
         ] },
-        { title: "Support", links: [
-          { label: "Help center", href: "/faq" },
-          { label: "Contact us", href: "/contact" },
-          { label: "Sign in for support", href: "/account/login" },
-        ] },
         { title: "Company", links: [
-          { label: "About", href: "/about" },
+          { label: "About us", href: "/about" },
           { label: "Contact", href: "/contact" },
+        ] },
+        { title: "Support", links: [
+          { label: "Help centre", href: "/faq" },
+          { label: "Contact support", href: "/contact" },
         ] },
       ];
       footerCopy.mini = "";

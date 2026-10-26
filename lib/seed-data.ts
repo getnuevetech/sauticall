@@ -40,12 +40,12 @@ export const defaultFlags: Flag[] = [
 
 export const defaultNav: NavLink[] = [
   { label: "Solutions", href: "/solutions", location: "header" },
-  { label: "AI Receptionist", href: "/ai-receptionist", location: "header" },
+  { label: "AI receptionist", href: "/ai-receptionist", location: "header" },
   { label: "How it works", href: "/how-it-works", location: "header" },
   { label: "Pricing", href: "/pricing", location: "header" },
   { label: "Help", href: "/faq", location: "header" },
   { label: "Solutions", href: "/solutions", location: "mobile" },
-  { label: "AI Receptionist", href: "/ai-receptionist", location: "mobile" },
+  { label: "AI receptionist", href: "/ai-receptionist", location: "mobile" },
   { label: "How it works", href: "/how-it-works", location: "mobile" },
   { label: "Pricing", href: "/pricing", location: "mobile" },
   { label: "About SautiCall", href: "/about", location: "mobile" },
@@ -68,25 +68,25 @@ export const defaultFooter = {
     {
       title: "Solutions",
       links: [
-        { label: "Business phone system", href: "/solutions#phone" },
+        { label: "Business numbers", href: "/solutions#numbers" },
+        { label: "Team extensions", href: "/solutions#phone" },
         { label: "AI receptionist", href: "/ai-receptionist" },
-        { label: "Number transfers", href: "/solutions#porting" },
+        { label: "How it works", href: "/how-it-works" },
         { label: "Pricing", href: "/pricing" },
-      ],
-    },
-    {
-      title: "Support",
-      links: [
-        { label: "Help center", href: "/faq" },
-        { label: "Contact us", href: "/contact" },
-        { label: "Sign in for support", href: "/account/login" },
       ],
     },
     {
       title: "Company",
       links: [
-        { label: "About", href: "/about" },
+        { label: "About us", href: "/about" },
         { label: "Contact", href: "/contact" },
+      ],
+    },
+    {
+      title: "Support",
+      links: [
+        { label: "Help centre", href: "/faq" },
+        { label: "Contact support", href: "/contact" },
       ],
     },
   ],

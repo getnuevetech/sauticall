@@ -1,3 +1,86 @@
+export function TeamMini() {
+  const rows = [["SC", "Sarah Chen", "Ext. 101", "ok"], ["ML", "Marcus Lee", "Ext. 102", "busy"], ["PS", "Priya Shah", "Ext. 103", "ok"]];
+  return (
+    <div className="mini-card" aria-hidden="true">
+      <b>Team members</b>
+      {rows.map(([mark, name, ext, tone]) => (
+        <div key={ext} className="mini-row"><i>{mark}</i><span><strong>{name}</strong><small>{ext}</small></span><em className={tone} /></div>
+      ))}
+    </div>
+  );
+}
+
+export function WaveMini() {
+  return (
+    <div className="mini-card wave-mini" aria-hidden="true">
+      <div className="wave-badge">AI</div>
+      <b>SautiCall AI receptionist</b>
+      <div className="bars">{[10, 18, 26, 16, 22, 12, 20, 14].map((height, index) => <i key={index} style={{ height }} />)}</div>
+      <small>Greet. Answer. Route.</small>
+    </div>
+  );
+}
+
+export function TransferMini() {
+  return (
+    <div className="mini-card" aria-hidden="true">
+      <b>Number transfer</b>
+      <div className="xfer"><span>(302) 555-0101</span><em>✓</em></div>
+      <div className="xfer-bar"><i /></div>
+      <small>Transfer in progress</small>
+    </div>
+  );
+}
+
+export function DeskMini() {
+  return (
+    <div className="mini-card desk-mini" aria-hidden="true">
+      <div className="mini-desk"><b>SautiCall</b></div>
+      <div className="mini-phone"><b>SautiCall</b><small>Answer</small></div>
+    </div>
+  );
+}
+
+export function HomeFlow() {
+  return (
+    <div className="home-flow" aria-hidden="true">
+      <article className="hf-in">
+        <span className="hf-phone" />
+        <b>Incoming call</b>
+        <small>(302) 555-0101</small>
+      </article>
+      <span className="hf-arrow">→</span>
+      <article className="hf-ai">
+        <div className="bars">{[8, 16, 24, 14, 20, 10].map((height, index) => <i key={index} style={{ height }} />)}</div>
+        <b>AI receptionist</b>
+        <small>Greet. Answer. Route.</small>
+        <p>Thanks for calling. How can I help you today?</p>
+        <ul>
+          <li>Answers common questions</li>
+          <li>Takes a message</li>
+          <li>Routes to the right person</li>
+        </ul>
+      </article>
+      <span className="hf-arrow">→</span>
+      <div className="hf-stack">
+        <article><b>Connect to your team</b><small>Route to a team member or department</small></article>
+        <article><b>Human handoff</b><small>Transfer to a team member when needed</small></article>
+        <article><b>Send to voicemail</b><small>Take a message and notify your team</small></article>
+      </div>
+    </div>
+  );
+}
+
+export function SetupArt() {
+  return (
+    <div className="setup-art" aria-hidden="true">
+      <span className="blob a" />
+      <span className="blob b" />
+      <span className="blob c" />
+    </div>
+  );
+}
+
 export function HomeStage() {
   const people = [
     ["SC", "Sarah Chen", "Ext. 101", "Available"],
