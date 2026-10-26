@@ -21,7 +21,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     <Frame pathname="/account/login">
       <AuthSplit
         kicker={params.step === "code" ? "Confirm it is you" : "Sign in"}
-        title={params.step === "code" ? text("mfaTitle") : "Your business calls. All together."}
+        scene="calls"
+        title={params.step === "code" ? text("mfaTitle") : <>Your business calls. <span className="accent">All together.</span></>}
         lead={params.step === "code" ? text("mfaBody") : "Manage your numbers, team and call handling in one place."}
         step={params.step === "code" ? "code" : undefined}
       >

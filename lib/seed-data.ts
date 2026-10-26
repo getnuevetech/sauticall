@@ -63,39 +63,35 @@ export const defaultNav: NavLink[] = [
 
 export const defaultFooter = {
   blurb: "Business calls, connected.",
-  mini: "Made for small businesses, growing teams, and people building something.",
+  mini: "",
   groups: [
     {
-      title: "Explore",
+      title: "Solutions",
       links: [
-        { label: "All services", href: "/solutions" },
+        { label: "Business phone system", href: "/solutions#phone" },
         { label: "AI receptionist", href: "/ai-receptionist" },
-        { label: "How it works", href: "/how-it-works" },
-        { label: "Plans & pricing", href: "/pricing" },
-        { label: "Custom plan", href: "/custom" },
-        { label: "FAQ", href: "/faq" },
+        { label: "Number transfers", href: "/solutions#porting" },
+        { label: "Pricing", href: "/pricing" },
+      ],
+    },
+    {
+      title: "Support",
+      links: [
+        { label: "Help center", href: "/faq" },
+        { label: "Contact us", href: "/contact" },
+        { label: "Sign in for support", href: "/account/login" },
       ],
     },
     {
       title: "Company",
       links: [
-        { label: "About us", href: "/about" },
+        { label: "About", href: "/about" },
         { label: "Contact", href: "/contact" },
-        { label: "Request a demo", href: "/contact" },
-      ],
-    },
-    {
-      title: "Platform",
-      links: [
-        { label: "AI-guided setup", href: "/how-it-works" },
-        { label: "Desk & softphones", href: "/solutions#phones" },
-        { label: "Phone numbers", href: "/solutions#numbers" },
-        { label: "Keep your number", href: "/solutions#porting" },
       ],
     },
   ],
   legalLeft: "© 2026 SautiCall. All rights reserved.",
-  legalRight: "Payments and phone orders run only after an administrator connects them.",
+  legalRight: "",
 };
 
 export const defaultServices: Service[] = [
@@ -314,13 +310,13 @@ export const defaultPages: Record<string, Record<string, unknown>> = {
     estimateCta: "Ask about pricing",
     estimateHref: "/contact",
     faqEyebrow: "A FEW THINGS TO KNOW",
-    faqTitle: "Questions? We have answers.",
+    faqTitle: "Frequently asked questions.",
     faqBody: "These are the basics to help you explore SautiCall.",
     endEyebrow: "READY WHEN YOU ARE",
-    endTitle: "Make every call count.",
-    endBody: "Tell us what you need. SautiCall will help turn it into a phone system that makes sense for your business.",
-    endCta: "Start with your idea",
-    endHref: "/account/register",
+    endTitle: "Let's find the right plan for your team.",
+    endBody: "",
+    endCta: "Talk to us",
+    endHref: "/contact",
   },
   about: {
     metaTitle: "About · SautiCall",

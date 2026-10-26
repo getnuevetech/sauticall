@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { Icon } from "../Icon";
-import { SetupAssistant } from "./Interactive";
-import { perMinute, planHighlights, wholeMoney } from "@/lib/account-display";
+import { AiCallCard, AnswerCards, CallsMock, DeskMock, DevicePair, DeviceSketch, ExampleCall, ExtTable, HomeStage, LanguageScene, NumberPair, NumberSketch, QueueCard, SettingsPanel, SystemSketch, Unfold, WaveSketch } from "./PublicMocks";
+import { perMinute, wholeMoney } from "@/lib/account-display";
 import { normalizePlan, planAllows, type FeatureKey } from "@/lib/plan-features";
 import { planSignupPath } from "@/lib/signup";
-import { recommendPlan } from "@/lib/setup-assistant";
 import type { Faq, Plan, Service } from "@/lib/types";
 
 function str(page: Record<string, unknown>, key: string, fallback = "") {
@@ -16,33 +15,83 @@ function pricedPlans(plans: Plan[]) {
   return plans.filter((plan) => !plan.custom && plan.price > 0).map((plan) => normalizePlan(plan)).sort((a, b) => a.price - b.price);
 }
 
-export function PublicPlans({ plans }: { plans: Plan[] }) {
+const BLURB: Record<string, string> = {
+  Solo: "For one-person businesses.",
+  "Small Business": "For small teams.",
+  Team: "For busier teams.",
+};
+
+function cardLines(plan: Plan, period = false) {
+  const seats = plan.seats && plan.seats > 0 ? plan.seats : 1;
+  const people = seats === 1 ? "1 person" : `Up to ${seats} people`;
+  const minutes = `${plan.includedMinutes.toLocaleString("en-US")} outbound minutes${period ? " per plan period" : ""}`;
+  const has = (key: FeatureKey) => planAllows(plan, key);
+  if (plan.name === "Team" && has("queues")) {
+    return [
+      ["users", people],
+      ["phone", minutes],
+      ["check", "Everything in Small Business"],
+      ["check", "Call queues"],
+      ["check", "Call reporting"],
+    ];
+  }
+  if (plan.name === "Small Business") {
+    return [
+      ["users", people],
+      ["phone", minutes],
+      ["check", "Desk phone support"],
+      ["check", "Business hours"],
+      ["check", "Ring groups"],
+      ["check", "AI receptionist"],
+    ].filter((line) => line[0] !== "check" || (line[1] === "Desk phone support" ? has("desk_phones") : line[1] === "AI receptionist" ? has("ai") : true));
+  }
+  return [
+    ["users", people],
+    ["phone", minutes],
+    ...(has("softphone") ? [["check", "Softphones"]] : []),
+    ...(has("voicemail") ? [["check", "Voicemail & forwarding"]] : []),
+  ];
+}
+
+export function PublicPlans({ plans, verb = "Choose", period = false }: { plans: Plan[]; verb?: string; period?: boolean }) {
   const ordered = pricedPlans(plans);
   return (
     <div className="pub-plans">
-      {ordered.map((plan, index) => {
-        const lines = planHighlights(plan, index > 0 ? ordered[index - 1] : null);
-        return (
-          <article key={plan.name} className={plan.popular ? "popular" : ""}>
-            {plan.popular ? <span className="pub-ribbon">Best for most teams</span> : null}
-            <h3>{plan.name}</h3>
-            <p>{plan.desc}</p>
-            <p className="pub-price">{wholeMoney(plan.price)} <small>/ month</small></p>
-            <ul>
-              {lines.map((line, lineIndex) => (
-                <li key={line} className={lineIndex < 2 ? "meta" : "check"}>
-                  {lineIndex < 2 ? <Icon name={lineIndex === 0 ? "users" : "phone"} size={16} /> : null}
-                  {line}
-                </li>
-              ))}
-            </ul>
-            <Link className={`btn ${plan.popular ? "btn-primary" : "btn-secondary"}`} href={planSignupPath(plan.name)}>Choose {plan.name}</Link>
-          </article>
-        );
-      })}
+      {ordered.map((plan) => (
+        <article key={plan.name} className={plan.popular ? "popular" : ""}>
+          <div className="ws-split"><h3>{plan.name}</h3>{plan.popular ? <span className="pub-ribbon">Best for most teams</span> : null}</div>
+          <p>{BLURB[plan.name] || plan.desc}</p>
+          <p className="pub-price">{wholeMoney(plan.price)} <small>/ month</small></p>
+          <ul>
+            {cardLines(plan, period).map(([kind, line]) => (
+              <li key={line} className={kind === "check" ? "check" : "meta"}>
+                {kind !== "check" ? <Icon name={kind} size={16} /> : null}
+                {line}
+              </li>
+            ))}
+          </ul>
+          <Link className={`btn ${plan.popular ? "btn-primary" : "btn-secondary"}`} href={planSignupPath(plan.name)}>{verb} {plan.name}</Link>
+        </article>
+      ))}
     </div>
   );
 }
+
+const HOME_FAQS: Faq[] = [
+  { q: "Can callers speak to a person?", a: "Yes. The receptionist can transfer the call to a person, an extension, or a ring group you set up." },
+  { q: "What information can the receptionist answer from?", a: "It answers from the business information you save, such as hours, services, and the approved answers on the account." },
+  { q: "What happens outside business hours?", a: "After hours, the receptionist follows the message and routing you set. It can take a message or send the call to voicemail." },
+  { q: "Which languages are supported?", a: "Any-language understanding is included only on plans where that feature is turned on." },
+  { q: "Which plans include the AI receptionist?", a: "Small Business and Team include it when that feature is turned on for the plan." },
+];
+
+const PRICE_FAQS: Faq[] = [
+  { q: "Is this price per account or per person?", a: "The monthly price is for the account. It covers the number of people listed on that plan." },
+  { q: "Are phone numbers and desk phones included?", a: "The plan includes the calling features listed on the card. A business number has its own rental, and a desk phone is not included in the monthly price." },
+  { q: "How do included and purchased minutes work?", a: "Each plan includes outbound minutes for the billing period. Extra minutes can be bought as bundles and last until they are used." },
+  { q: "What AI usage and languages are included?", a: "The AI receptionist is included on plans that list it. Any-language understanding is included only when that feature is turned on for the plan." },
+  { q: "How do upgrades and downgrades affect billing?", a: "Changing plans starts a new payment for that plan’s monthly price. The account uses the new plan after the payment is confirmed." },
+];
 
 function FaqBlock({ faqs }: { faqs: Faq[] }) {
   return (
@@ -57,67 +106,51 @@ function FaqBlock({ faqs }: { faqs: Faq[] }) {
   );
 }
 
-function Scene() {
-  return (
-    <div className="pub-scene" aria-hidden="true">
-      <div className="pub-laptop">
-        <header><span>SautiCall</span><span>Team extensions</span></header>
-        <div className="pub-rows">
-          <div><span>Sales</span><b>Available</b></div>
-          <div><span>Support</span><b>Available</b></div>
-          <div><span>Main line</span><span>Open</span></div>
-        </div>
-      </div>
-      <div className="pub-float"><strong>Incoming call</strong><span>Answer, route, or take a message</span></div>
-      <div className="pub-handset" />
-    </div>
-  );
-}
-
-export function PublicHome({ page, services, plans, faqs, showDemo }: { page: Record<string, unknown>; services: Service[]; plans: Plan[]; faqs: Faq[]; showDemo: boolean }) {
-  const sample = str(page, "chatSampleUser");
+export function PublicHome({ page, services, plans, faqs }: { page: Record<string, unknown>; services: Service[]; plans: Plan[]; faqs: Faq[]; showDemo?: boolean }) {
   const lowest = pricedPlans(plans)[0];
+  void services;
+  void faqs;
   return (
     <main>
       <section className="pub-hero">
         <div className="wrap pub-hero-grid">
           <div>
-            <p className="pub-kicker">{str(page, "eyebrow", "Business calling, connected")}</p>
-            <h1>{str(page, "titleLead", "Your business phone system.")} {str(page, "titleAccent", "Your AI receptionist. One place.")}</h1>
+            <p className="pub-kicker">Business calling, connected</p>
+            <h1>Your business phone system. <span className="accent">Your AI receptionist. One place.</span></h1>
             <p>{str(page, "lead", "Bring your business number, team extensions, desk phones and AI call handling together with SautiCall.")}</p>
             <div className="pub-actions">
-              <Link className="btn btn-primary" href={str(page, "primaryHref", "/pricing")}>{str(page, "primaryCta", "View plans")}</Link>
-              <Link className="btn btn-secondary" href={str(page, "secondaryHref", "/contact")}>{str(page, "secondaryCta", "Talk to us")}</Link>
+              <Link className="btn btn-primary" href="/pricing">View plans</Link>
+              <Link className="btn btn-secondary" href="/contact">Talk to us</Link>
             </div>
             <p className="pub-fine">{lowest ? `Plans from ${wholeMoney(lowest.price)}/month. ` : ""}Number rental and other charges may apply.</p>
           </div>
-          <Scene />
+          <HomeStage />
         </div>
       </section>
       <section>
         <div className="wrap pub-band">
           {[
-            ["globe", "Local or toll-free numbers", "Get a business number, or bring the one customers already know."],
-            ["users", "Team extensions", "Give each person a place on the phone system."],
-            ["bot", "AI call handling", "Greet callers, answer approved questions, and route the call."],
-            ["settings", "One account", "Manage numbers, users, and settings together."],
-          ].map(([icon, title, body]) => (
-            <article key={title}><span className="pub-ico"><Icon name={icon} size={18} /></span><h3>{title}</h3><p>{body}</p></article>
+            ["blue", "globe", "Local or toll-free numbers", "Get a business number for your business."],
+            ["green", "users", "Team extensions", "Give each person connected at your business."],
+            ["violet", "bot", "AI call handling", "Greet, answer and route calls automatically."],
+            ["amber", "settings", "One account", "Manage numbers, users and settings together."],
+          ].map(([tone, icon, title, body]) => (
+            <article key={title} className="pub-tile">
+              <span className={`feature-ico ${tone}`}><Icon name={icon} size={18} /></span>
+              <h3>{title}</h3>
+              <p>{body}</p>
+            </article>
           ))}
         </div>
       </section>
       <section className="section">
         <div className="wrap">
-          <h2>Everything your calls need, working together.</h2>
+          <h2 className="section-title">Everything your calls need, working together.</h2>
           <div className="pub-grid-4">
-            {services.slice(0, 4).map((service) => (
-              <article key={service.title} className="pub-card">
-                <span className="pub-ico"><Icon name={service.icon} size={18} /></span>
-                <h3>{service.title}</h3>
-                <p>{service.desc}</p>
-                <Link href={service.href || "/solutions"}>Learn more</Link>
-              </article>
-            ))}
+            <article className="pub-tile"><SystemSketch /><h3>A phone system for your whole team</h3><p>One number, extensions, voicemail, business hours and routing.</p><Link href="/solutions#phone">Learn more →</Link></article>
+            <article className="pub-tile"><WaveSketch /><h3>A helpful first answer</h3><p>Let your AI receptionist answer routine questions, take messages and route calls to the right person.</p><Link href="/ai-receptionist">Learn more →</Link></article>
+            <article className="pub-tile"><NumberSketch /><h3>Keep your business number</h3><p>Bring your existing number, or get a new one. We&apos;ll help you transfer it.</p><Link href="/solutions#numbers">Learn more →</Link></article>
+            <article className="pub-tile"><DeviceSketch /><h3>Work from desk or mobile</h3><p>Use desk phones at the office, or the mobile and desktop apps on the go.</p><Link href="/solutions#phones">Learn more →</Link></article>
           </div>
         </div>
       </section>
@@ -126,39 +159,43 @@ export function PublicHome({ page, services, plans, faqs, showDemo }: { page: Re
           <div>
             <p className="pub-kicker">AI receptionist</p>
             <h2>Give every caller a clear next step.</h2>
-            <p>Your AI receptionist can greet callers, answer questions you approve, take a message, and connect the call to the right person.</p>
-            <p><Link className="btn btn-primary" href="/ai-receptionist">Explore AI receptionist</Link></p>
+            <p>Let your AI receptionist answer routine questions, take messages and connect callers to your team.</p>
+            <ul className="pub-list light">
+              <li>Business-specific answers</li>
+              <li>Human handoff</li>
+              <li>Voicemail when needed</li>
+            </ul>
+            <p><Link className="btn btn-coral" href="/ai-receptionist">Explore AI receptionist</Link></p>
           </div>
-          <div className="pub-flow">
-            <article><strong>Incoming call</strong><p>A customer calls your business.</p></article>
+          <div className="flow-board">
+            <article><span className="dot green" /><strong>Incoming call</strong><p>(302) 555-0101</p></article>
             <span>→</span>
-            <article><strong>AI receptionist</strong><p>Greets the caller and follows your instructions.</p></article>
+            <article><span className="orb sm">AI</span><strong>AI receptionist</strong><p>Thanks for calling. How can I help today?</p></article>
             <span>→</span>
-            <article><strong>Next step</strong><p>Connect a person, or take a message.</p></article>
+            <div className="flow-stack">
+              <article><strong>Connect to your team</strong><p>Route to the right person.</p></article>
+              <article><strong>Send to voicemail</strong><p>Take a message when no one is free.</p></article>
+            </div>
           </div>
         </div>
       </section>
       <section className="section">
-        <div className="wrap">
-          <h2>Tell us what you need. We&apos;ll help you find a setup.</h2>
-          <div className="pub-steps">
-            <div><b>1</b><strong>Choose a plan</strong><span>Pick the size that fits your team.</span></div>
-            <div><b>2</b><strong>Add your business information</strong><span>Save the company name and the people who answer.</span></div>
-            <div><b>3</b><strong>Connect your number</strong><span>Buy a new number or start a transfer.</span></div>
-            <div><b>4</b><strong>Set up your team</strong><span>Add extensions and choose where calls go.</span></div>
+        <div className="wrap setup-panel">
+          <div className="setup-card">
+            <WaveSketch />
+            <p>We&apos;re a team of four. We need a business number and call routing.</p>
           </div>
-          {showDemo ? (
-            <SetupAssistant
-              title={str(page, "chatTitle", "Find a setup")}
-              sub={str(page, "chatSub")}
-              status={str(page, "chatStatus", "Ready")}
-              placeholder={str(page, "chatPlaceholder")}
-              hello={str(page, "chatHello")}
-              proposal={str(page, "chatProposal", "Recommended plan")}
-              sample={sample}
-              initial={sample ? recommendPlan(plans, sample) : null}
-            />
-          ) : <Link className="btn btn-primary" href="/account/register">Find my setup</Link>}
+          <div>
+            <h2 className="section-title">Tell us what you need. We&apos;ll help you find a setup.</h2>
+            <div className="pub-steps">
+              <div><b>1</b><strong>Choose a plan</strong><span>Pick the right plan for your team.</span></div>
+              <div><b>2</b><strong>Add your business information</strong><span>Hours, answers, and the people who take calls.</span></div>
+              <div><b>3</b><strong>Connect your number</strong><span>A new number, or the one you already use.</span></div>
+              <div><b>4</b><strong>Set up your team</strong><span>Extensions and where each call should go.</span></div>
+            </div>
+            <Link className="btn btn-primary" href="/how-it-works">Find my setup</Link>
+            <p className="pub-fine">A completed setup is required before calls go live. Number transfer needs carrier approval.</p>
+          </div>
         </div>
       </section>
       <section className="section" id="plans">
@@ -171,7 +208,7 @@ export function PublicHome({ page, services, plans, faqs, showDemo }: { page: Re
         </div>
       </section>
       <section className="section">
-        <div className="wrap"><h2>Frequently asked questions.</h2><FaqBlock faqs={faqs.slice(0, 6)} /></div>
+        <div className="wrap"><h2>Frequently asked questions.</h2><FaqBlock faqs={HOME_FAQS} /></div>
       </section>
       <section className="pub-end">
         <div className="wrap">
@@ -190,34 +227,35 @@ export function PublicHome({ page, services, plans, faqs, showDemo }: { page: Re
 }
 
 export function PublicSolutions({ page, services }: { page: Record<string, unknown>; services: Service[] }) {
+  void services;
   return (
     <main>
       <section className="pub-hero">
         <div className="wrap pub-hero-grid">
           <div>
             <p className="pub-kicker">{str(page, "eyebrow", "Solutions")}</p>
-            <h1>{str(page, "title", "The right tools for")} {str(page, "titleEm", "every business call.")}</h1>
+            <h1>The right tools for every business call.</h1>
             <p>{str(page, "lead", "Connect your numbers, team and call handling in one SautiCall account.")}</p>
             <div className="pub-actions">
-              <Link className="btn btn-primary" href="/solutions#phone">Explore solutions</Link>
+              <Link className="btn btn-primary" href="#phone">Explore solutions</Link>
               <Link className="btn btn-secondary" href="/pricing">Compare plans</Link>
             </div>
           </div>
-          <Scene />
+          <HomeStage />
         </div>
       </section>
-      <section className="section">
+      <section className="section tight">
         <div className="wrap">
-          <h2>What would you like to do?</h2>
-          <div className="pub-grid-4">
+          <h2 className="center">What would you like to do?</h2>
+          <div className="do-row">
             {[
-              ["phone", "Set up business calling", "/solutions#phone"],
-              ["smartphone", "Connect my team", "/solutions#phones"],
+              ["phone", "Set up business calling", "#phone"],
+              ["users", "Connect my team", "#phones"],
               ["bot", "Answer with AI", "/ai-receptionist"],
-              ["users", "Manage more calls", "/solutions#center"],
-              ["globe", "Keep my number", "/solutions#porting"],
+              ["headset", "Manage more calls", "#center"],
+              ["globe", "Keep my number", "#numbers"],
             ].map(([icon, label, href]) => (
-              <Link key={label} className="pub-card" href={href}><span className="pub-ico"><Icon name={icon} size={18} /></span><h3>{label}</h3></Link>
+              <Link key={label} className="do-tile" href={href}><span className="pub-ico round"><Icon name={icon} size={18} /></span><span>{label}</span></Link>
             ))}
           </div>
         </div>
@@ -227,21 +265,21 @@ export function PublicSolutions({ page, services }: { page: Record<string, unkno
           <div>
             <p className="pub-kicker">Cloud phone system</p>
             <h2>Bring your team onto one phone system.</h2>
-            <p>{services[0]?.desc}</p>
+            <p>Manage extensions, business hours, voicemail and call routing from your account.</p>
             <ul className="pub-list"><li>Team extensions</li><li>Business hours and routing</li><li>Voicemail and forwarding</li></ul>
             <Link className="btn btn-secondary" href="/pricing">Compare phone system plans</Link>
           </div>
-          <Scene />
+          <ExtTable />
         </div>
       </section>
-      <section className="section" id="phones">
+      <section className="section alt" id="phones">
         <div className="wrap pub-split">
-          <div className="pub-scene"><div className="pub-handset" style={{ position: "relative", left: 24, bottom: 0 }} /><div className="pub-float" style={{ position: "relative" }}><strong>On the desk or in the app</strong><span>Desk phones and the phone app stay on the same business line.</span></div></div>
+          <DevicePair />
           <div>
-            <p className="pub-kicker">{str(page, "phonesEyebrow", "Desk phones and softphones")}</p>
-            <h2>{str(page, "phonesTitle", "At your desk. On the move.")} {str(page, "phonesTitleEm", "Still your business.")}</h2>
-            <p>{str(page, "phonesBody")}</p>
-            <Link className="btn btn-secondary" href="/contact">Ask about desk phones</Link>
+            <p className="pub-kicker">Desk phones & softphones</p>
+            <h2>At your desk. On the move. Still your business.</h2>
+            <p>Use supported desk phones and softphone apps to stay connected to your business calling setup.</p>
+            <Link href="/contact">Check device compatibility →</Link>
           </div>
         </div>
       </section>
@@ -250,41 +288,53 @@ export function PublicSolutions({ page, services }: { page: Record<string, unkno
           <div>
             <p className="pub-kicker">AI receptionist</p>
             <h2>A helpful first answer for your callers.</h2>
-            <p>Answer routine questions, take messages, and route callers to your team.</p>
-            <Link className="btn btn-primary" href="/ai-receptionist">Explore AI receptionist</Link>
+            <p>Answer routine questions, take messages and route callers to your team.</p>
+            <ul className="pub-list light"><li>Answers</li><li>Messages</li><li>Human handoff</li></ul>
+            <Link className="btn btn-coral" href="/ai-receptionist">Explore AI receptionist</Link>
           </div>
-          <div className="pub-card"><strong>What are your hours?</strong><p>The receptionist answers from the business information you save, then routes the call.</p></div>
+          <AiCallCard />
         </div>
       </section>
       <section className="section" id="center">
         <div className="wrap pub-split">
           <div>
-            <p className="pub-kicker">Shared calling</p>
+            <p className="pub-kicker">Virtual contact center</p>
             <h2>Give busy teams a clearer way to handle calls.</h2>
-            <p>Ring groups and call queues are included on the plans that list them. Call reporting is included on Team.</p>
+            <p>Organize shared calls with ring groups, queues and reporting on eligible plans.</p>
+            <ul className="pub-list"><li>Ring groups and call transfers</li><li>Call queues</li><li>Call reporting</li></ul>
             <Link className="btn btn-secondary" href="/pricing">Explore team plans</Link>
           </div>
-          <div className="pub-card"><h3>Shared queue</h3><p>Waiting callers stay in the queue until someone on the plan that includes queues can answer.</p></div>
+          <QueueCard />
         </div>
       </section>
-      <section className="section" id="numbers">
-        <div className="wrap pub-grid-3">
-          <article className="pub-card" id="porting">
-            <h3>{str(page, "numbersTitle", "Get a business number")}</h3>
-            <p>{str(page, "numbersBody")}</p>
-            <Link href="/account/register">Explore business numbers</Link>
-          </article>
-          <article className="pub-card">
-            <h3>{str(page, "portingTitle", "Bring your existing number")}</h3>
-            <p>{str(page, "portingBody")}</p>
-            <Link href="/account/porting">Learn about number transfers</Link>
-          </article>
+      <section className="section alt" id="numbers">
+        <div className="wrap">
+          <p className="pub-kicker">Numbers & porting</p>
+          <h2>A new number. Or the one your customers know.</h2>
+          <NumberPair />
+          <p className="pub-fine">Number availability, transfer eligibility and activation depend on carrier approval and service setup.</p>
+          <div className="pub-actions">
+            <Link className="btn btn-secondary" href="/account/register">Explore business numbers</Link>
+            <Link href="/account/porting">Learn about number transfers →</Link>
+          </div>
+        </div>
+      </section>
+      <section className="unsure" id="porting">
+        <div className="wrap">
+          <div>
+            <h2>Not sure where to start?</h2>
+            <p>Describe the calls you want handled. The setup assistant can suggest a configuration for you to review.</p>
+          </div>
+          <Link className="btn btn-primary" href="/how-it-works">Find my setup</Link>
         </div>
       </section>
       <section className="pub-end">
         <div className="wrap">
-          <div><h2>Not sure where to start?</h2><p>Describe the calls you want handled. The setup assistant suggests a plan you can subscribe to.</p></div>
-          <Link className="btn btn-primary" href="/how-it-works">Find my setup</Link>
+          <h2>Build the phone setup your business needs.</h2>
+          <div className="pub-actions">
+            <Link className="btn btn-secondary" href="/pricing">Compare plans</Link>
+            <Link className="btn btn-primary" href="/contact">Talk to us</Link>
+          </div>
         </div>
       </section>
     </main>
@@ -292,90 +342,88 @@ export function PublicSolutions({ page, services }: { page: Record<string, unkno
 }
 
 export function PublicAi({ page, plans, faqs }: { page: Record<string, unknown>; plans: Plan[]; faqs: Faq[] }) {
+  void faqs;
+  const aiPlans = plans.filter((plan) => planAllows(normalizePlan(plan), "ai")).map((plan) => plan.name);
   return (
     <main>
-      <section className="pub-hero">
+      <section className="pub-hero ai-hero">
         <div className="wrap pub-hero-grid">
           <div>
             <p className="pub-kicker">{str(page, "eyebrow", "AI receptionist")}</p>
-            <h1>{str(page, "title", "A warm welcome.")} {str(page, "titleEm", "A clear next step.")}</h1>
-            <p>{str(page, "lead")}</p>
+            <h1>A warm welcome. <span className="accent">A clear next step.</span></h1>
+            <p>{str(page, "lead", "Greet callers, answer approved business questions, take messages and connect people to your team.")}</p>
             <div className="pub-actions">
               <Link className="btn btn-primary" href="/pricing">View AI-enabled plans</Link>
               <Link className="btn btn-secondary" href="/contact">Talk to us</Link>
             </div>
           </div>
-          <div className="pub-card">
-            <p className="pub-kicker">Example call</p>
-            <strong>Thanks for calling. How can I help?</strong>
-            <p>Caller: Can I speak to sales?</p>
-            <p>Result: Transfer to sales.</p>
-          </div>
+          <div className="ai-stage"><ExampleCall /></div>
         </div>
       </section>
       <section>
         <div className="wrap pub-band">
-          {["Welcome callers", "Answer routine questions", "Capture messages", "Connect your team"].map((item) => (
-            <article key={item}><span className="pub-ico"><Icon name="check" size={16} /></span><h3>{item}</h3></article>
+          {[
+            ["blue", "phone", "Welcome callers", "A friendly, consistent greeting for every call."],
+            ["green", "message", "Answer routine questions", "Share approved information about your business."],
+            ["amber", "mic", "Capture messages", "Take messages with key details when needed."],
+            ["violet", "users", "Connect your team", "Transfer callers to the right person or department."],
+          ].map(([tone, icon, title, body]) => (
+            <article key={title} className="pub-tile flat">
+              <span className={`feature-ico ${tone}`}><Icon name={icon} size={18} /></span>
+              <h3>{title}</h3>
+              <p>{body}</p>
+            </article>
           ))}
+        </div>
+      </section>
+      <section className="section pub-dark">
+        <div className="wrap">
+          <p className="pub-kicker">See how a call can unfold</p>
+          <h2>Your business information and routing rules guide each step.</h2>
+          <Unfold />
         </div>
       </section>
       <section className="section">
         <div className="wrap">
-          <h2>See how a call can unfold.</h2>
-          <p>Your business information and routing rules guide each step.</p>
-          <div className="pub-flow">
-            <article><strong>Incoming caller</strong><p>A customer calls the business.</p></article>
-            <span>→</span>
-            <article><strong>AI receptionist</strong><p>Greets the caller from the greeting you save.</p></article>
-            <span>→</span>
-            <article><strong>Answer, connect, or take a message</strong><p>Uses the answers, destinations, and hours on the account.</p></article>
-          </div>
+          <h2 className="center">Built around your business.</h2>
+          <AnswerCards />
         </div>
       </section>
-      <section className="section">
-        <div className="wrap pub-grid-3">
-          <article className="pub-card"><h3>Your approved answers</h3><p>The receptionist uses the business information you save, such as hours and the services you offer.</p></article>
-          <article className="pub-card"><h3>Your transfer destinations</h3><p>Send the caller to a person or a ring group that is already on the phone system.</p></article>
-          <article className="pub-card"><h3>Your message preferences</h3><p>Choose what to capture when nobody can take the call, and where that message should go.</p></article>
+      <section className="section alt">
+        <div className="wrap pub-split">
+          <div>
+            <h2>You choose how it answers.</h2>
+            <p>Configure the greeting, approved information and transfer rules from your SautiCall account.</p>
+            <ul className="pub-list">
+              <li>Customize your greeting</li>
+              <li>Choose where calls are transferred</li>
+              <li>Set after-hours messages</li>
+            </ul>
+          </div>
+          <SettingsPanel />
         </div>
       </section>
       <section className="section">
         <div className="wrap pub-split">
+          <LanguageScene />
           <div>
-            <h2>You choose how it answers.</h2>
-            <p>{str(page, "controlBody", "Greeting, approved answers, transfer rules, and after-hours handling are set in the SautiCall account.")}</p>
-            <ul className="pub-list">
-              <li>Customize the greeting</li>
-              <li>Choose where calls are transferred</li>
-              <li>Set after-hours messages</li>
-            </ul>
-            <Link className="btn btn-primary" href="/account/register?product=ai">Set this up in your account</Link>
-          </div>
-          <div className="pub-card">
-            <h3>What the account controls</h3>
-            <p>Greeting, business information, message settings, and after-hours routing.</p>
-            <p>Those settings are saved after you sign in. This page does not change a live phone system.</p>
+            <h2>Help callers in supported languages.</h2>
+            <p>Check available languages and plan eligibility before choosing your setup.</p>
+            <p><Link href="/pricing">Ask about language support →</Link></p>
           </div>
         </div>
       </section>
-      <section className="section">
-        <div className="wrap">
-          <h2>{str(page, "languageTitle", "Help callers in supported languages.")}</h2>
-          <p>{str(page, "languageBody", "Any-language understanding is included only on plans where that feature is turned on.")}</p>
-          <p><Link href="/pricing">Check plan features</Link></p>
-        </div>
-      </section>
-      <section className="section">
+      <section className="section alt">
         <div className="wrap">
           <h2>From setup to your first test call.</h2>
-          <div className="pub-steps">
-            <div><b>1</b><strong>Choose an AI-enabled plan</strong><span>Small Business and Team include the receptionist when that feature is on the plan.</span></div>
-            <div><b>2</b><strong>Add your business information</strong><span>Save the answers the receptionist is allowed to give.</span></div>
-            <div><b>3</b><strong>Set transfer and message rules</strong><span>Choose where calls go during the day and after hours.</span></div>
-            <div><b>4</b><strong>Test before activation</strong><span>Place a test call and confirm the experience.</span></div>
+          <div className="pub-steps line">
+            <div><b>1</b><strong>Choose an AI-enabled plan</strong><span>Select a plan that includes the AI receptionist.</span></div>
+            <div><b>2</b><strong>Add your business information</strong><span>Provide your approved answers and details.</span></div>
+            <div><b>3</b><strong>Set transfer and message rules</strong><span>Choose where to transfer calls and what to capture.</span></div>
+            <div><b>4</b><strong>Test before activation</strong><span>Have a test call to confirm the experience.</span></div>
           </div>
-          <form className="pub-note" action="/account/register" method="get">
+          <p className="pub-fine">An active plan and completed service setup are required for live calls.</p>
+          <form className="finder" action="/account/register" method="get">
             <input type="hidden" name="product" value="ai" />
             <label>Team size
               <select name="people" defaultValue="5">
@@ -384,19 +432,24 @@ export function PublicAi({ page, plans, faqs }: { page: Record<string, unknown>;
                 <option value="10">Up to 10 people</option>
               </select>
             </label>
-            <label className="check-option"><input type="checkbox" name="language" value="1" /> Callers can use any language</label>
+            <label>Preferred caller language
+              <select name="language" defaultValue="">
+                <option value="">Select a language</option>
+                <option value="1">Any language</option>
+              </select>
+            </label>
             <button className="btn btn-primary" type="submit">See matching plans</button>
           </form>
-          <p className="pub-fine">{plans.filter((plan) => planAllows(normalizePlan(plan), "ai")).map((plan) => plan.name).join(", ") || "No published plan"} include the AI receptionist.</p>
+          <p className="pub-fine">{aiPlans.join(" and ") || "No published plan"} include the AI receptionist. <Link href="/account/login">Already a customer? Sign in to configure.</Link></p>
         </div>
       </section>
-      <section className="section"><div className="wrap"><h2>Frequently asked questions.</h2><FaqBlock faqs={faqs.slice(0, 5)} /></div></section>
+      <section className="section"><div className="wrap"><h2>Frequently asked questions.</h2><FaqBlock faqs={HOME_FAQS} /></div></section>
       <section className="pub-end">
         <div className="wrap">
           <h2>Give your callers a better first hello.</h2>
           <div className="pub-actions">
-            <Link className="btn btn-primary" href="/pricing">View plans</Link>
-            <Link className="btn btn-secondary" href="/contact">Talk to us</Link>
+            <Link className="btn btn-secondary" href="/pricing">View plans</Link>
+            <Link className="btn btn-primary" href="/contact">Talk to us</Link>
           </div>
         </div>
       </section>
@@ -428,10 +481,11 @@ export function PublicPricing({
   bundles: { name: string; minutes: number; price: number }[];
 }) {
   const ordered = pricedPlans(plans);
+  void faqs;
   return (
     <main>
       <section className="pub-hero">
-        <div className="wrap">
+        <div className="wrap center">
           <p className="pub-kicker">{str(page, "eyebrow", "Plans & pricing")}</p>
           <h1>{str(page, "title", "Choose the right fit")} {str(page, "titleEm", "for your business calls.")}</h1>
           <p>{str(page, "lead", "Compare team capacity, outbound minutes and the features your business needs.")}</p>
@@ -439,9 +493,9 @@ export function PublicPricing({
       </section>
       <section className="section">
         <div className="wrap">
-          <PublicPlans plans={plans} />
+          <PublicPlans plans={plans} verb="Explore" period />
           <p className="pub-fine">Desk phone support means a compatible phone can be connected. The phone itself is not included in the monthly price.</p>
-          <div className="pub-note"><span>Need a different setup? Describe the team size, call handling, and requirements.</span><Link className="btn btn-primary" href="/custom">Request a custom quote</Link></div>
+          <div className="pub-note"><span><b>Need a different setup?</b> Discuss team size, call handling and specific requirements.</span><Link className="btn btn-coral" href="/custom">Request a custom quote</Link></div>
         </div>
       </section>
       <section className="section">
@@ -470,10 +524,14 @@ export function PublicPricing({
         <div className="wrap">
           <h2>Understand the full cost.</h2>
           <div className="pub-grid-4">
-            <article className="pub-card"><h3>Business numbers</h3><p>Number rental and any setup charges are shown when you select a number.</p></article>
-            <article className="pub-card"><h3>Emergency calling</h3><p>An emergency address is required before a number is bought.</p></article>
-            <article className="pub-card"><h3>AI receptionist</h3><p>Included on plans that list it. Any-language understanding is a separate plan feature.</p></article>
-            <article className="pub-card"><h3>Taxes and other charges</h3><p>Taxes and charges outside the plan price are shown at checkout.</p></article>
+            {[
+              ["phone", "Business numbers", "Number rental and any setup charges are shown when selecting a number."],
+              ["shield", "Emergency calling", "Applicable emergency registration or recurring charges must be disclosed before purchase."],
+              ["bot", "AI usage & languages", "Review supported languages, usage allowances and any additional AI charges."],
+              ["card", "Taxes & calling rates", "Review taxes, eligible destinations and charges outside included allowances."],
+            ].map(([icon, title, body]) => (
+              <article key={title} className="pub-card"><span className="cost-ico"><Icon name={icon} size={16} /></span><h3>{title}</h3><p>{body}</p></article>
+            ))}
           </div>
         </div>
       </section>
@@ -483,7 +541,8 @@ export function PublicPricing({
             <h2>Need more outbound minutes?</h2>
             <div className="pub-grid-3">
               {bundles.map((bundle) => (
-                <article key={bundle.name} className="pub-card">
+                <article key={bundle.name} className="pub-card bundle-card">
+                  <span className="cost-ico"><Icon name="phone" size={16} /></span>
                   <h3>{bundle.minutes.toLocaleString("en-US")} minutes</h3>
                   <p className="pub-price">{wholeMoney(bundle.price)}</p>
                   <p>{perMinute(bundle.price, bundle.minutes)}</p>
@@ -496,26 +555,28 @@ export function PublicPricing({
       ) : null}
       <section className="section">
         <div className="wrap">
-          <h2>Not sure which plan fits?</h2>
-          <form className="pub-note" action="/account/register" method="get">
-            <label>Team size
-              <select name="people" defaultValue="5">
-                <option value="1">1 person</option>
-                <option value="5">Up to 5 people</option>
-                <option value="10">Up to 10 people</option>
-              </select>
-            </label>
-            <label className="check-option"><input type="checkbox" name="ai" value="1" /> I need AI call answering</label>
-            <button className="btn btn-primary" type="submit">Find a suitable plan</button>
-          </form>
+          <div className="finder-row">
+            <div><h2>Not sure which plan fits?</h2><p>Tell us a bit about your needs and we&apos;ll suggest a plan.</p></div>
+            <form className="finder" action="/account/register" method="get">
+              <label>Team size
+                <select name="people" defaultValue="5">
+                  <option value="1">1 person</option>
+                  <option value="5">Up to 5 people</option>
+                  <option value="10">Up to 10 people</option>
+                </select>
+              </label>
+              <label className="check-option"><input type="checkbox" name="ai" value="1" /> I need AI call answering</label>
+              <button className="btn btn-primary" type="submit">Find a suitable plan</button>
+            </form>
+          </div>
         </div>
       </section>
-      <section className="section"><div className="wrap"><h2>{str(page, "faqTitle", "Frequently asked questions.")}</h2><FaqBlock faqs={faqs} /></div></section>
+      <section className="section"><div className="wrap"><h2>Frequently asked questions.</h2><FaqBlock faqs={PRICE_FAQS} /></div></section>
       <section className="pub-end">
         <div className="wrap">
-          <h2>{str(page, "endTitle", "Let's find the right plan for your team.")}</h2>
+          <h2>Let&apos;s find the right plan for your team.</h2>
           <div className="pub-actions">
-            <Link className="btn btn-primary" href="/contact">Talk to us</Link>
+            <Link className="btn btn-coral" href="/contact">Talk to us</Link>
             <Link className="btn btn-secondary" href="/solutions">Explore solutions</Link>
           </div>
         </div>
@@ -531,18 +592,20 @@ export function AuthSplit({
   children,
   points,
   step,
+  scene = "desk",
 }: {
-  title: string;
+  title: React.ReactNode;
   lead: string;
   kicker: string;
   children: React.ReactNode;
   points?: string[];
   step?: "account" | "code";
+  scene?: "desk" | "calls";
 }) {
   return (
     <main>
       <div className="pub-authbar">
-        <Link className="brand" href="/">SautiCall</Link>
+        <Link className="brand" href="/"><span className="brand-mark" aria-hidden="true"><span className="mark-wave" /><span className="mark-wave" /><span className="mark-wave" /></span>SautiCall</Link>
         <nav>
           <Link href="/">Back to website →</Link>
           <Link href="/contact">Need help?</Link>
@@ -552,14 +615,14 @@ export function AuthSplit({
         <section className="pub-auth-side">
           <h1>{title}</h1>
           <p>{lead}</p>
-          <div style={{ marginTop: 24 }}><Scene /></div>
+          <div style={{ marginTop: 24 }}>{scene === "calls" ? <CallsMock /> : <DeskMock />}</div>
           {points ? <div className="pub-checks">{points.map((point) => <div key={point}><Icon name="checkcircle" size={16} /> {point}</div>)}</div> : null}
           <p className="pub-legal"><span>© 2026 SautiCall</span><Link href="/contact">Help</Link></p>
         </section>
         <section className="pub-auth-main">
           <p className="pub-kicker">{kicker}</p>
           {step === "account" ? (
-            <div className="pub-steps-line"><span className="on">1 Account</span><span>—</span><span>2 Plan & payment</span></div>
+            <div className="pub-steps-line"><span className="n on">1</span><span className="on">Account</span><span>—</span><span className="n">2</span><span>Plan & payment</span></div>
           ) : null}
           {children}
         </section>

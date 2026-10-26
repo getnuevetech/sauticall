@@ -40,7 +40,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
     <Frame pathname="/account/register">
       <AuthSplit
         kicker="Create account"
-        title="Your next business call starts here."
+        title={<>Your next business <span className="accent">call starts here.</span></>}
         lead="Bring your numbers, team and call handling together with SautiCall."
         step="account"
         points={["One account for your business", "Guided setup for your team", "Review your plan before payment"]}
@@ -53,7 +53,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
           <AuthForm
             className="pub-form"
             action={register}
-            submit="Create account"
+            submit="Create account →"
             fields={[
               { name: "name", label: "Full name", placeholder: "Your full name" },
               { name: "email", label: "Email address", type: "email", placeholder: "you@business.com" },

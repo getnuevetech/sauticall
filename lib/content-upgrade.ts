@@ -378,6 +378,8 @@ export function upgradeContent(database: Database.Database) {
       "Sound big.": "for your business calls.",
       "Choose a plan and create the account. The monthly price is the price on the plan.": "Compare team capacity, outbound minutes and the features your business needs.",
       "Choose Solo, Small Business, or Team and create the account.": "Compare Solo, Small Business, and Team. Prices, minutes, and features are the plans you can subscribe to.",
+      "Questions? We have answers.": "Frequently asked questions.",
+      "Make every call count.": "Let's find the right plan for your team.",
     },
   };
   for (const [key, replacements] of Object.entries(approvedCopy)) {
@@ -412,7 +414,7 @@ export function upgradeContent(database: Database.Database) {
     }
     if (navChanged) writeJson(database, "nav", navItems);
   }
-  const footerCopy = readJson<{ blurb?: string; legalLeft?: string; groups: { title: string; links: { label: string; href: string }[] }[] }>(database, "footer");
+  const footerCopy = readJson<{ blurb?: string; mini?: string; legalLeft?: string; legalRight?: string; groups: { title: string; links: { label: string; href: string }[] }[] }>(database, "footer");
   if (footerCopy) {
     let footerChanged = false;
     if (footerCopy.blurb === "Business calls, your way. One approachable platform for modern phone systems and intelligent call handling.") {
@@ -421,6 +423,28 @@ export function upgradeContent(database: Database.Database) {
     }
     if (typeof footerCopy.legalLeft === "string" && footerCopy.legalLeft.includes("design concept")) {
       footerCopy.legalLeft = "© 2026 SautiCall. All rights reserved.";
+      footerChanged = true;
+    }
+    if (footerCopy.groups.map((group) => group.title).join("|") === "Explore|Company|Platform") {
+      footerCopy.groups = [
+        { title: "Solutions", links: [
+          { label: "Business phone system", href: "/solutions#phone" },
+          { label: "AI receptionist", href: "/ai-receptionist" },
+          { label: "Number transfers", href: "/solutions#porting" },
+          { label: "Pricing", href: "/pricing" },
+        ] },
+        { title: "Support", links: [
+          { label: "Help center", href: "/faq" },
+          { label: "Contact us", href: "/contact" },
+          { label: "Sign in for support", href: "/account/login" },
+        ] },
+        { title: "Company", links: [
+          { label: "About", href: "/about" },
+          { label: "Contact", href: "/contact" },
+        ] },
+      ];
+      footerCopy.mini = "";
+      if (footerCopy.legalRight === "Payments and phone orders run only after an administrator connects them.") footerCopy.legalRight = "";
       footerChanged = true;
     }
     if (footerChanged) writeJson(database, "footer", footerCopy);
