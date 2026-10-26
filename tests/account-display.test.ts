@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { invoiceNumber, money, personFirstName, personInitials, planHighlights, usagePercent, wholeMoney } from "../lib/account-display.ts";
+import { formatPhone, invoiceNumber, money, monthlyPrice, personFirstName, personInitials, planHighlights, usagePercent, wholeMoney } from "../lib/account-display.ts";
 import { navIsActive, workspaceCrumb } from "../lib/account-nav.ts";
 
 test("a signed-in name becomes a greeting and initials", () => {
@@ -26,6 +26,8 @@ test("billing amounts and minute use stay inside the period", () => {
   assert.equal(usagePercent(320, 800), 40);
   assert.equal(usagePercent(0, 0), 0);
   assert.equal(invoiceNumber(1), "INV-001");
+  assert.equal(formatPhone("3025550101"), "(302) 555-0101");
+  assert.equal(monthlyPrice("1.1"), "$1.10");
 });
 
 test("the account shell names the overview and the billing pages", () => {

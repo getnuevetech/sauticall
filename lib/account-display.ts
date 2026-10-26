@@ -79,3 +79,16 @@ export function planHighlights(plan: { name: string; seats?: number; includedMin
 export function invoiceNumber(id: number) {
   return `INV-${String(id).padStart(3, "0")}`;
 }
+
+export function formatPhone(did: string) {
+  const digits = did.replace(/\D/g, "");
+  const ten = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  if (!/^\d{10}$/.test(ten)) return did;
+  return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
+}
+
+export function monthlyPrice(value: string) {
+  const amount = Number(value);
+  if (!value || !Number.isFinite(amount)) return "";
+  return `$${amount.toFixed(2)}`;
+}

@@ -64,10 +64,13 @@ export function PlaceSelects({
   return (
     <>
       <label>{countryLabel}
-        <select name={countryName} value={country} onChange={(event) => { setCountry(event.target.value); setRegion(""); setCity(""); }}>
-          <option value="US">United States</option>
-          <option value="CA">Canada</option>
-        </select>
+        <span className="place-country">
+          <span aria-hidden="true">{country === "CA" ? "🇨🇦" : "🇺🇸"}</span>
+          <select name={countryName} value={country} onChange={(event) => { setCountry(event.target.value); setRegion(""); setCity(""); }}>
+            <option value="US">United States</option>
+            <option value="CA">Canada</option>
+          </select>
+        </span>
       </label>
       <label>{regionLabel}
         <select name={regionName} value={region} required onChange={(event) => { setRegion(event.target.value); setCity(""); }}>
