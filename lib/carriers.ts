@@ -57,22 +57,28 @@ function voipmsEndpoint(value: string) {
 }
 
 export async function callVoipms(method: string, params: Record<string, string>) {
-  const connection = getConnection("voipms");
-  if (!connection.enabled || !connection.public.api_username || !connection.secret) {
-    return { ok: false, status: "not_configured", message: "VoIP.ms is not enabled or is missing credentials.", body: null };
+  try {
+    const connection = getConnection("voipms");
+    if (!connection.enabled || !connection.public.api_username || !connection.secret) {
+      return { ok: false, status: "not_configured", message: "VoIP.ms is not enabled or is missing credentials.", body: null };
+    }
+    const url = voipmsEndpoint(connection.public.endpoint || "https://voip.ms/api/v1/rest.php");
+    url.searchParams.set("api_username", connection.public.api_username);
+    url.searchParams.set("api_password", connection.secret);
+    url.searchParams.set("method", method);
+    url.searchParams.set("content_type", "json");
+    for (const [key, value] of Object.entries(params)) {
+      if (value) url.searchParams.set(key, value);
+    }
+    const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(20000) });
+    const body = (await response.json().catch(() => null)) as { status?: string } | null;
+    const status = body?.status || `http_${response.status}`;
+    return { ok: status === "success", status, message: status, body };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "VoIP.ms could not be reached.";
+    console.error(`[sauticall] voip.ms ${method}: ${message}`);
+    return { ok: false, status: "unreachable", message, body: null };
   }
-  const url = voipmsEndpoint(connection.public.endpoint || "https://voip.ms/api/v1/rest.php");
-  url.searchParams.set("api_username", connection.public.api_username);
-  url.searchParams.set("api_password", connection.secret);
-  url.searchParams.set("method", method);
-  url.searchParams.set("content_type", "json");
-  for (const [key, value] of Object.entries(params)) {
-    if (value) url.searchParams.set(key, value);
-  }
-  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(20000) });
-  const body = (await response.json().catch(() => null)) as { status?: string } | null;
-  const status = body?.status || `http_${response.status}`;
-  return { ok: status === "success", status, message: status, body };
 }
 
 export function inventoryReady() {

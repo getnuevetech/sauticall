@@ -31,7 +31,12 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
       {params.error ? <p className="form-feedback">{params.error}</p> : null}
       {rows.length === 0 ? <p>No requests yet.</p> : null}
       {rows.map((row) => {
-        const payload = JSON.parse(row.payload) as { did?: string; detail?: string; numbers?: string; emergency?: Record<string, string>; plan?: string; prompt?: string };
+        let payload: { did?: string; detail?: string; numbers?: string; emergency?: Record<string, string>; plan?: string; prompt?: string } = {};
+        try {
+          payload = JSON.parse(row.payload) as { did?: string; detail?: string; numbers?: string; emergency?: Record<string, string>; plan?: string; prompt?: string };
+        } catch {
+          payload = {};
+        }
         const emergency = payload.emergency ? parseEmergency(payload.emergency) : null;
         const kind = row.kind === "number" ? "Number" : row.kind === "setup" ? "Signup" : "Transfer";
         return (

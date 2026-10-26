@@ -178,7 +178,12 @@ export async function orderSavedNumber(formData: FormData) {
   const id = Number(formData.get("id"));
   const row = database().prepare("SELECT user_id, payload, kind FROM account_requests WHERE id = ?").get(id) as { user_id: number; payload: string; kind: string } | undefined;
   if (!row || row.kind !== "number") redirect("/admin/requests?error=That%20request%20is%20not%20a%20number.");
-  const payload = JSON.parse(row.payload) as { did?: string };
+  let payload: { did?: string } = {};
+  try {
+    payload = JSON.parse(row.payload) as { did?: string };
+  } catch {
+    payload = {};
+  }
   if (!payload.did) redirect("/admin/requests?error=This%20request%20has%20no%20specific%20number%20to%20order.");
   const { purchaseNumber } = await import("@/lib/lines");
   const result = await purchaseNumber({ requestId: id, userId: row.user_id, did: payload.did });

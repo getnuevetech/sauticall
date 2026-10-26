@@ -59,8 +59,9 @@ export function parseEmergency(input: Record<string, string>): { ok: true; addre
 
 export function formatAddress(address: EmergencyAddress) {
   const unit = address.address_type && address.address_number ? ` ${address.address_type} ${address.address_number}` : "";
-  const zip = address.country === "CA" ? `${address.zip.slice(0, 3)} ${address.zip.slice(3)}` : address.zip;
-  return `${address.full_name}, ${address.street_number} ${address.street_name}${unit}, ${address.city}, ${address.state} ${zip}`;
+  const zipText = typeof address.zip === "string" ? address.zip : "";
+  const zip = address.country === "CA" ? `${zipText.slice(0, 3)} ${zipText.slice(3)}`.trim() : zipText;
+  return `${address.full_name || ""}, ${address.street_number || ""} ${address.street_name || ""}${unit}, ${address.city || ""}, ${address.state || ""} ${zip}`.replace(/\s+,/g, ",").trim();
 }
 
 export function getEmergency(userId: number): EmergencyAddress | null {

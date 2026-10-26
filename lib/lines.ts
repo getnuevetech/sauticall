@@ -170,35 +170,46 @@ export function markTrunkDone(lineId: number, note: string) {
 }
 
 export async function purchaseNumber(input: { requestId: number; userId: number; did: string }): Promise<{ ok: boolean; pending?: boolean; message: string }> {
-  const client = await ensureVoipClient(input.userId);
-  if (!client.ok) return { ok: false, message: "The phone company account for this customer is not ready yet. An administrator can finish it on the customer page." };
-  const sub = await ensureSubaccount(input.userId, client.clientId);
-  if (!sub.ok) {
-    getDb().prepare("UPDATE voip_clients SET last_message = ?, updated_at = ? WHERE user_id = ?").run(sub.message.slice(0, 400), new Date().toISOString(), input.userId);
-    return { ok: false, message: "The phone company line for this customer is not ready yet. An administrator can finish it on the customer page." };
+  let sent = false;
+  try {
+    const client = await ensureVoipClient(input.userId);
+    if (!client.ok) return { ok: false, message: "The phone company account for this customer is not ready yet. An administrator can finish it on the customer page." };
+    const sub = await ensureSubaccount(input.userId, client.clientId);
+    if (!sub.ok) {
+      getDb().prepare("UPDATE voip_clients SET last_message = ?, updated_at = ? WHERE user_id = ?").run(sub.message.slice(0, 400), new Date().toISOString(), input.userId);
+      return { ok: false, message: "The phone company line for this customer is not ready yet. An administrator can finish it on the customer page." };
+    }
+    const current = await lookupOwnedDid(input.did);
+    if (!current.ok) return { ok: false, message: `VoIP.ms could not be checked before buying (${current.message}).` };
+    if (!current.owned) {
+      const ordered = await orderDid(input.did, `account:${sub.account}`, sub.account);
+      if (!ordered.ok) return { ok: false, message: `VoIP.ms did not buy this number (${ordered.message}).` };
+      sent = true;
+      const owned = await lookupOwnedDid(input.did);
+      if (!owned.ok) return { ok: false, pending: true, message: `The order was sent, but VoIP.ms did not confirm this number (${owned.message}).` };
+      if (!owned.owned) return { ok: false, message: "VoIP.ms did not add this number to the account." };
+    } else {
+      sent = true;
+    }
+    const existing = getDb().prepare("SELECT id FROM phone_lines WHERE request_id = ?").get(input.requestId) as { id: number } | undefined;
+    let lineId = existing?.id || 0;
+    if (!lineId) {
+      const info = getDb().prepare(
+        "INSERT INTO phone_lines (user_id, request_id, did, status, trunk_id, last_message, created_at) VALUES (?, ?, ?, 'ordered', 0, '', ?)",
+      ).run(input.userId, input.requestId, input.did, new Date().toISOString());
+      lineId = Number(info.lastInsertRowid);
+    }
+    await syncCustomerDids(input.userId);
+    const trunk = await attachTrunk(lineId);
+    const limited = await enforceUser(input.userId);
+    const { sendEmergency } = await import("./e911");
+    const emergency = await sendEmergency(lineId);
+    const message = `${trunk.message} ${limited.message} ${emergency.message}`.trim();
+    return { ok: true, message };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "The purchase could not be finished.";
+    console.error("[sauticall] purchase", detail);
+    if (sent) return { ok: false, pending: true, message: "The order was sent, but connecting this number could not be finished." };
+    return { ok: false, message: "The phone company could not be reached. Try again shortly." };
   }
-  const current = await lookupOwnedDid(input.did);
-  if (!current.ok) return { ok: false, message: `VoIP.ms could not be checked before buying (${current.message}).` };
-  if (!current.owned) {
-    const ordered = await orderDid(input.did, `account:${sub.account}`, sub.account);
-    if (!ordered.ok) return { ok: false, message: `VoIP.ms did not buy this number (${ordered.message}).` };
-    const owned = await lookupOwnedDid(input.did);
-    if (!owned.ok) return { ok: false, pending: true, message: `The order was sent, but VoIP.ms did not confirm this number (${owned.message}).` };
-    if (!owned.owned) return { ok: false, message: "VoIP.ms did not add this number to the account." };
-  }
-  const existing = getDb().prepare("SELECT id FROM phone_lines WHERE request_id = ?").get(input.requestId) as { id: number } | undefined;
-  let lineId = existing?.id || 0;
-  if (!lineId) {
-    const info = getDb().prepare(
-      "INSERT INTO phone_lines (user_id, request_id, did, status, trunk_id, last_message, created_at) VALUES (?, ?, ?, 'ordered', 0, '', ?)",
-    ).run(input.userId, input.requestId, input.did, new Date().toISOString());
-    lineId = Number(info.lastInsertRowid);
-  }
-  await syncCustomerDids(input.userId);
-  const trunk = await attachTrunk(lineId);
-  const limited = await enforceUser(input.userId);
-  const { sendEmergency } = await import("./e911");
-  const emergency = await sendEmergency(lineId);
-  const message = `${trunk.message} ${limited.message} ${emergency.message}`.trim();
-  return { ok: true, message };
 }

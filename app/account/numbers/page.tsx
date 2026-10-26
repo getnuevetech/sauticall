@@ -85,9 +85,14 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
             <div className="faq-list" style={{ marginTop: 28 }}>
               {lines.map((line) => <p key={line.did}>{line.did} · {customerLineStatus(line.status)}{line.status === "not_on_carrier" ? "" : ` · ${E911[line.e911_status] || "In progress"}`}</p>)}
               {rows.map((row) => {
-                const payload = JSON.parse(row.payload) as { did?: string; detail?: string; emergency?: EmergencyAddress };
+                let payload: { did?: string; detail?: string; emergency?: EmergencyAddress } = {};
+                try {
+                  payload = JSON.parse(row.payload) as { did?: string; detail?: string; emergency?: EmergencyAddress };
+                } catch {
+                  payload = {};
+                }
                 const where = payload.emergency ? formatAddress(payload.emergency) : "No emergency address";
-                return <p key={row.id}>{customerNumberStatus(row.status, row.provider_ref, payload.did || "")} · {payload.did || payload.detail} · {where}</p>;
+                return <p key={row.id}>{customerNumberStatus(row.status, row.provider_ref, payload.did || "")} · {payload.did || payload.detail || "Number request"} · {where}</p>;
               })}
             </div>
           </div>

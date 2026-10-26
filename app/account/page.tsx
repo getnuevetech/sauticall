@@ -15,7 +15,14 @@ export default async function AccountHome() {
   const text = (key: string) => (typeof copy[key] === "string" ? String(copy[key]) : "");
   const requests = getDb().prepare("SELECT kind, status, payload, created_at FROM account_requests WHERE user_id = ? ORDER BY id DESC LIMIT 5").all(user.id) as { kind: string; status: string; payload: string; created_at: string }[];
   const setup = requests.find((item) => item.kind === "setup");
-  const setupPayload = setup ? JSON.parse(setup.payload) as { plan?: string; prompt?: string } : null;
+  let setupPayload: { plan?: string; prompt?: string } | null = null;
+  if (setup) {
+    try {
+      setupPayload = JSON.parse(setup.payload) as { plan?: string; prompt?: string };
+    } catch {
+      setupPayload = null;
+    }
+  }
   const minutes = minuteBalance(user.id);
   const plan = paidPlan(user.id);
   const lines = getDb().prepare("SELECT status FROM phone_lines WHERE user_id = ?").all(user.id) as { status: string }[];
