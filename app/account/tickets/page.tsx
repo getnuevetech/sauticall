@@ -1,28 +1,36 @@
-import Link from "next/link";
+import { SupportHome } from "@/components/account/SupportHome";
 import { guardAccount } from "@/lib/guard";
-import { formatWhen } from "@/lib/format-when";
-import { loadSite } from "@/lib/site";
+import { getDb, readDoc } from "@/lib/db";
+import { accountHelp, chicagoDate, helpTopic, type HelpTopic } from "@/lib/account-display";
 import { customerTickets, statusLabel } from "@/lib/tickets";
 
-export default async function AccountTicketsPage() {
+function plain(value: string) {
+  return value.replace(/[#*_`>]/g, "").replace(/\s+/g, " ").trim();
+}
+
+export default async function AccountTicketsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const user = await guardAccount();
-  const copy = loadSite().account;
-  const text = (key: string) => (typeof copy[key] === "string" ? String(copy[key]) : "");
+  const params = await searchParams;
+  const faqs = readDoc<{ q: string; a: string }[]>("faqs");
+  const posts = getDb().prepare("SELECT slug, title, excerpt, body FROM faq_posts WHERE published = 1 ORDER BY updated_at DESC").all() as { slug: string; title: string; excerpt: string; body: string }[];
+  const seen = new Set(accountHelp.map((item) => item.title.toLowerCase()));
+  const articles: { id: string; category: HelpTopic; title: string; body: string; href?: string; link?: string }[] = accountHelp.map((item, index) => ({ ...item, id: `help-${index}` }));
+  for (const post of posts) {
+    if (seen.has(post.title.toLowerCase())) continue;
+    seen.add(post.title.toLowerCase());
+    articles.push({ id: post.slug, category: helpTopic(post.title), title: post.title, body: plain(post.excerpt || post.body).slice(0, 500) });
+  }
+  for (const faq of faqs) {
+    if (seen.has(faq.q.toLowerCase())) continue;
+    seen.add(faq.q.toLowerCase());
+    articles.push({ id: faq.q, category: helpTopic(faq.q), title: faq.q, body: plain(faq.a).slice(0, 500) });
+  }
   const tickets = customerTickets(user.id);
   return (
-    <div className="workspace-page">
-      <header className="workspace-page-head">
-        <h1>{text("ticketsTitle")}</h1>
-        <p>{text("ticketsBody")}</p>
-      </header>
-            <p><Link className="btn btn-primary" href="/account/tickets/new">{text("ticketsNew")}</Link></p>
-            {tickets.length === 0 ? <p>{text("ticketsEmpty")}</p> : null}
-            {tickets.map((ticket) => (
-              <article key={ticket.id} className="feature-card" style={{ marginBottom: 12 }}>
-                <h3><Link href={`/account/tickets/${ticket.id}`}>SC-{ticket.id} · {ticket.subject}</Link></h3>
-                <p>{statusLabel(ticket.status)} · {formatWhen(ticket.updated_at)}</p>
-              </article>
-            ))}
-    </div>
+    <SupportHome
+      initialTab={params.tab || "help"}
+      articles={articles}
+      tickets={tickets.map((ticket) => ({ id: ticket.id, subject: ticket.subject, status: statusLabel(ticket.status), when: chicagoDate(ticket.updated_at) }))}
+    />
   );
 }

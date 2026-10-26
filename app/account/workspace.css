@@ -164,6 +164,83 @@
   .num-modal-scrim{padding:0}
   .num-modal{width:100%;max-height:100vh;border-radius:16px 16px 0 0}
 }
+.num-tabs button{display:inline-flex;align-items:center;gap:6px}
+.cv-page,.sup-page,.set-page,.pbx-page{max-width:1120px}
+.cv-page a,.sup-page a,.set-page a,.pbx-page a{color:#2f49d6;font-weight:700}
+.cv-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.cv-stats article,.cv-note{background:#fff;border:1px solid #e7edf5;border-radius:16px;padding:16px 18px}
+.cv-stats span{color:#667085;font-size:.86rem;font-weight:700}
+.cv-stats strong{display:block;margin:8px 0 4px;font-size:2rem;letter-spacing:-.04em;color:#172033}
+.cv-stats p,.cv-sync,.cv-note p{margin:0;color:#667085}
+.cv-sync{display:flex;gap:12px;align-items:center;margin:12px 0}
+.cv-sync button,.cv-sync form{background:none;border:0;color:#2f49d6;font-weight:700;padding:0}
+.cv-bundles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0}
+.cv-bundles article{border:1px solid #e7edf5;border-radius:14px;padding:14px;display:grid;gap:6px}
+.cv-bundles article.active{border-color:#2f5bff;box-shadow:0 0 0 3px #edf3ff}
+.cv-bundles h3{margin:0;font-size:1rem}
+.cv-price{font-size:1.6rem;font-weight:800;color:#172033;letter-spacing:-.03em;margin:0}
+.cv-bundles .ws-btn,.cv-pay .ws-btn{justify-content:center}
+.cv-pay{margin-top:8px}
+.cv-note{display:flex;gap:12px;align-items:flex-start;background:#f3f7ff;margin:14px 0}
+.cv-note strong{color:#172033}
+.cv-mail,.sup-layout,.pbx-split,.pbx-bottom,.set-grid{display:grid;gap:14px}
+.cv-mail,.sup-layout,.pbx-split{grid-template-columns:minmax(0,1.5fr) minmax(260px,.8fr)}
+.pbx-bottom,.set-grid{grid-template-columns:1fr 1fr}
+.set-grid{grid-template-columns:1fr 1fr}
+.cv-empty{display:grid;justify-items:center;text-align:center;gap:6px;padding:18px 8px}
+.cv-mail select,.sup-search input,.pbx-filters input,.pbx-filters select,.set-form input,.pbx-add input,.pbx-hours input,.pbx-group input,.pbx-group select,.pbx-name-form input{border:1px solid #e1e7f2;border-radius:10px;padding:10px 12px;width:100%;background:#fff;color:#1d2433}
+.sup-search h2{margin-bottom:8px}
+.sup-topics{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}
+.sup-topics button{border:0;background:#f2f4f7;color:#475467;border-radius:999px;padding:6px 12px;font-weight:700}
+.sup-topics button.active{background:#2f5bff;color:#fff}
+.sup-faq{border-top:1px solid #eef2f7}
+.sup-faq button{width:100%;display:flex;justify-content:space-between;gap:12px;background:none;border:0;padding:12px 0;text-align:left;font-weight:700;color:#172033}
+.sup-faq.open{background:#f3f7ff;border-radius:12px;padding:0 12px;margin:4px 0}
+.sup-faq a{font-weight:700}
+.sup-foot{display:flex;gap:8px;align-items:center;color:#667085}
+.set-tile{display:flex;gap:12px;text-align:left;background:#fff;border:1px solid #e7edf5;border-radius:16px;padding:16px;align-items:flex-start}
+.set-tile strong,.set-tile small,.set-tile em,.set-tile b{display:block}
+.set-tile small{color:#667085;font-weight:500;margin:4px 0}
+.set-tile em{color:#2f49d6;font-style:normal;font-weight:700}
+.set-tile b{margin:6px 0;background:#f2f4f7;border-radius:999px;padding:3px 8px;font-size:.75rem;width:max-content}
+.set-tile b.ok{background:#e8f8ef;color:#17803d}
+.set-ico{width:36px;height:36px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.set-ico.blue{background:#e8eeff;color:#2f5bff}
+.set-ico.violet{background:#f3e8ff;color:#7a3ff2}
+.set-ico.green{background:#e8f8ef;color:#17803d}
+.set-ico.amber{background:#fff4e5;color:#b54708}
+.set-ico.rose{background:#ffe8ea;color:#d92d20}
+.set-ico.lilac{background:#f4e8ff;color:#7a3ff2}
+.set-form,.pbx-add,.pbx-hours,.pbx-group{display:grid;gap:10px}
+.set-form label,.pbx-add label,.pbx-hours label,.pbx-group label{display:grid;gap:6px;font-size:.78rem;font-weight:700;color:#475467}
+.set-person{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+.set-links a{margin-right:14px}
+.pbx-company{display:flex;gap:14px;align-items:center;background:#fff;border:1px solid #e7edf5;border-radius:16px;padding:12px 16px;margin-bottom:8px}
+.pbx-company span{margin-left:auto;color:#667085}
+.pbx-name{display:inline-flex;gap:8px;align-items:center;background:none;border:0;font-size:1.05rem}
+.pbx-name-form{display:flex;gap:8px;align-items:center;flex:1}
+.pbx-filters{display:grid;grid-template-columns:1fr 200px;gap:10px;margin:12px 0}
+.pbx-user{display:flex;gap:10px;align-items:center}
+.pbx-user small{display:block;color:#667085;font-weight:500}
+.pbx-status{display:inline-flex;border-radius:999px;padding:2px 8px;font-size:.75rem;font-weight:700;background:#f2f4f7;color:#475467}
+.pbx-status.ok{background:#e8f8ef;color:#17803d}
+.pbx-status.warn{background:#fff4e5;color:#b54708}
+.pbx-status.wait{background:#eef4ff;color:#2f49d6}
+.pbx-panel p:has(> span){display:flex;justify-content:space-between;gap:12px}
+.cv-mail label{display:grid;gap:6px;margin:12px 0;font-size:.78rem;font-weight:700;color:#475467}
+.pbx-panel-tabs{display:flex;gap:14px;border-bottom:1px solid #e7edf5;margin-bottom:8px}
+.pbx-panel-tabs button{background:none;border:0;border-bottom:2px solid transparent;padding:8px 0;font-weight:700;color:#667085}
+.pbx-panel-tabs button.active{color:#2f49d6;border-color:#2f49d6}
+.pbx-add,.pbx-hours{grid-template-columns:1fr 1fr auto auto}
+.pbx-groups{display:grid;gap:10px;margin-top:12px}
+.pbx-groups article{border-top:1px solid #eef2f7;padding-top:10px}
+.pbx-groups div{display:flex;gap:8px;flex-wrap:wrap}
+.pbx-group fieldset{border:1px solid #e7edf5;border-radius:12px;padding:10px}
+@media(max-width:980px){
+  .cv-stats,.cv-bundles,.cv-mail,.sup-layout,.pbx-split,.pbx-bottom,.set-grid,.pbx-filters,.pbx-add,.pbx-hours{grid-template-columns:1fr}
+  .pbx-company{flex-direction:column;align-items:flex-start}
+  .pbx-company span{margin-left:0}
+}
 @media(max-width:980px){
   .ws-side{position:fixed;z-index:20;transform:translateX(-105%)}
   .workspace.nav-open .ws-side{transform:none}

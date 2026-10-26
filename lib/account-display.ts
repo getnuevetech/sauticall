@@ -92,3 +92,53 @@ export function monthlyPrice(value: string) {
   if (!value || !Number.isFinite(amount)) return "";
   return `$${amount.toFixed(2)}`;
 }
+
+export function perMinute(price: number, minutes: number) {
+  if (!Number.isFinite(price) || !Number.isFinite(minutes) || minutes <= 0) return "";
+  return `$${(price / minutes).toFixed(2)} / min`;
+}
+
+export function callDuration(seconds: number) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  const minutes = Math.floor(total / 60);
+  return `${minutes}:${String(total % 60).padStart(2, "0")}`;
+}
+
+export function chicagoClock(iso: string) {
+  const time = Date.parse(iso);
+  if (!Number.isFinite(time)) return "";
+  return new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(time));
+}
+
+export function clockLabel(value: string) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return value || "";
+  const hour = Number(match[1]);
+  const suffix = hour >= 12 ? "PM" : "AM";
+  return `${String(hour % 12 || 12).padStart(2, "0")}:${match[2]} ${suffix}`;
+}
+
+export function extensionSetup(status: string) {
+  if (status === "removed") return { label: "Removed", tone: "muted" as const };
+  if (status === "created" || status === "manual") return { label: "Provisioned", tone: "ok" as const };
+  if (status === "failed") return { label: "Needs attention", tone: "warn" as const };
+  return { label: "Waiting", tone: "wait" as const };
+}
+
+export type HelpTopic = "started" | "numbers" | "billing" | "phone";
+
+export function helpTopic(title: string): HelpTopic {
+  const text = title.toLowerCase();
+  if (/number|port|transfer|e911|emergency address/.test(text)) return "numbers";
+  if (/minute|bill|plan|pay|invoice|price|subscription/.test(text)) return "billing";
+  if (/extension|voicemail|queue|ring|phone system|team member|business hour|person/.test(text)) return "phone";
+  return "started";
+}
+
+export const accountHelp = [
+  { category: "numbers" as const, title: "How do I get my first business number?", body: "Open Phone numbers, choose a state and city, and search. Select a number, add the emergency address, then review the purchase. Selecting a number does not buy it.", href: "/account/numbers", link: "Go to phone numbers" },
+  { category: "numbers" as const, title: "How can I transfer my existing number?", body: "Open the transfer page and send the numbers and the current account details. SautiCall tracks the request while the transfer is completed.", href: "/account/porting", link: "Start a transfer" },
+  { category: "billing" as const, title: "Where can I check my remaining minutes?", body: "Calls & voicemail shows the minutes left on your plan, any extra minutes you bought, and the outbound minutes used in the current period.", href: "/account/minutes", link: "View minutes" },
+  { category: "phone" as const, title: "How do I set up voicemail?", body: "Each person gets a mailbox with their extension. Messages stay in the phone app. After-hours calls go to voicemail once business hours are saved on the phone system.", href: "/account/minutes", link: "Open calls & voicemail" },
+  { category: "phone" as const, title: "How do I add a team member?", body: "Save the company name on the phone system, then add the person with their name and email. They are added to that company department.", href: "/account/phone", link: "Go to phone system" },
+];

@@ -99,7 +99,7 @@ export async function enrollMfa(formData: FormData) {
   getDb().prepare("UPDATE users SET mfa_secret = ? WHERE id = ?").run(secret, user.id);
   await markMfaComplete();
   audit(user.email, "auth.mfa.enroll", "");
-  redirect("/account/security");
+  redirect("/account/security?tab=security");
 }
 
 export async function clearOwnMfa() {
@@ -108,7 +108,17 @@ export async function clearOwnMfa() {
   if (accountNeedsMfa(user)) redirect("/account/security");
   getDb().prepare("UPDATE users SET mfa_secret = NULL WHERE id = ?").run(user.id);
   audit(user.email, "auth.mfa.clear", "");
-  redirect("/account/security");
+  redirect("/account/security?tab=security");
+}
+
+export async function saveDisplayName(formData: FormData) {
+  const user = await currentUser();
+  if (!user || user.role !== "customer") redirect("/account/login");
+  const name = String(formData.get("name") || "").trim().replace(/\s+/g, " ").slice(0, 80);
+  if (name.length < 2) redirect("/account/security?tab=profile&error=Enter%20the%20name%20for%20this%20account.");
+  getDb().prepare("UPDATE users SET name = ? WHERE id = ?").run(name, user.id);
+  audit(user.email, "account.name", name);
+  redirect("/account/security?tab=profile&saved=name");
 }
 
 export async function revealAppPassword(extensionId: number, code: string): Promise<{ error?: string; password?: string }> {
@@ -395,8 +405,11 @@ export async function saveDepartmentName(formData: FormData) {
   const { applyDepartmentName } = await import("@/lib/pbx");
   const result = await applyDepartmentName(user.id, String(formData.get("company_name") || ""));
   audit(user.email, "pbx.department", result.ok ? "saved" : (result.detail || result.message).slice(0, 400));
-  if (!result.ok) redirect(`/account/phone?error=${encodeURIComponent(safeCustomerError(result.message, "The company name could not be saved. Check the name rules and try again."))}`);
-  redirect("/account/phone?saved=department");
+  const settings = String(formData.get("next") || "") === "settings";
+  const back = settings ? "/account/security" : "/account/phone";
+  const tab = settings ? "&tab=business" : "";
+  if (!result.ok) redirect(`${back}?error=${encodeURIComponent(safeCustomerError(result.message, "The company name could not be saved. Check the name rules and try again."))}${tab}`);
+  redirect(`${back}?saved=department${tab}`);
 }
 
 export async function savePhoneHours(formData: FormData) {
