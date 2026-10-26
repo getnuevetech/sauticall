@@ -1,5 +1,3 @@
-import { Frame } from "@/components/site/Frame";
-import { AccountHero, AccountNav } from "@/components/account/Portal";
 import { refreshMinutes, startBundleCheckout } from "../actions";
 import { guardAccount } from "@/lib/guard";
 import { flagOn, getDb, readDoc } from "@/lib/db";
@@ -19,12 +17,11 @@ export default async function MinutesPage({ searchParams }: { searchParams: Prom
   const gateways = getDb().prepare("SELECT id, public_label, secret FROM gateways WHERE enabled = 1 ORDER BY priority").all() as { id: number; public_label: string; secret: string }[];
   const ready = gateways.filter((gateway) => readGatewaySecret(gateway.secret).key);
   return (
-    <Frame pathname="/account/minutes">
-      <main>
-        <AccountHero eyebrow="CALL MINUTES" title={text("minutesTitle")} body={text("minutesBody")} />
-        <section className="section">
-          <div className="wrap" style={{ maxWidth: 760 }}>
-            <AccountNav pathname="/account/minutes" />
+    <div className="workspace-page">
+      <header className="workspace-page-head">
+        <h1>{text("minutesTitle")}</h1>
+        <p>{text("minutesBody")}</p>
+      </header>
             {params.error ? <p className="form-feedback">{customerMessage(params.error, "Call minutes could not be updated. Please try again, or contact support.")}</p> : null}
             {params.saved ? <p>Minutes updated from the phone company.</p> : null}
             <div className="features-grid" style={{ marginBottom: 24 }}>
@@ -50,9 +47,6 @@ export default async function MinutesPage({ searchParams }: { searchParams: Prom
                 ))}
               </article>
             )) : null}
-          </div>
-        </section>
-      </main>
-    </Frame>
+    </div>
   );
 }

@@ -1,5 +1,3 @@
-import { Frame } from "@/components/site/Frame";
-import { AccountHero, AccountNav } from "@/components/account/Portal";
 import { openTicket } from "../../desk-actions";
 import { guardAccount } from "@/lib/guard";
 import { getDb } from "@/lib/db";
@@ -13,12 +11,11 @@ export default async function NewTicketPage({ searchParams }: { searchParams: Pr
   const text = (key: string) => (typeof copy[key] === "string" ? String(copy[key]) : "");
   const topics = getDb().prepare("SELECT id, name FROM ticket_topics WHERE enabled = 1 ORDER BY name").all() as { id: number; name: string }[];
   return (
-    <Frame pathname="/account/tickets">
-      <main>
-        <AccountHero eyebrow="SUPPORT" title={text("ticketsNew")} body={text("ticketsBody")} />
-        <section className="section">
-          <div className="wrap">
-            <AccountNav pathname="/account/tickets" />
+    <div className="workspace-page">
+      <header className="workspace-page-head">
+        <h1>{text("ticketsNew")}</h1>
+        <p>{text("ticketsBody")}</p>
+      </header>
             {params.error ? <p className="form-feedback">{customerMessage(params.error, "The ticket could not be sent. Please try again, or contact support.")}</p> : null}
             {topics.length === 0 ? <p>{text("ticketsClosed")}</p> : (
               <form className="contact-form" action={openTicket}>
@@ -40,9 +37,6 @@ export default async function NewTicketPage({ searchParams }: { searchParams: Pr
                 <button className="btn btn-primary" type="submit">{text("ticketsSend")}</button>
               </form>
             )}
-          </div>
-        </section>
-      </main>
-    </Frame>
+    </div>
   );
 }

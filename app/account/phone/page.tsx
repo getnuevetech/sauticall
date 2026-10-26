@@ -1,5 +1,3 @@
-import { Frame } from "@/components/site/Frame";
-import { AccountHero, AccountNav } from "@/components/account/Portal";
 import { addPerson, removePerson, saveDepartmentName, savePhoneHours } from "../actions";
 import { chooseDaytimeGroup, createQueue, createRingGroup, deleteCallGroup } from "../desk-actions";
 import { guardAccount } from "@/lib/guard";
@@ -57,12 +55,11 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
   const groups = getDb().prepare("SELECT * FROM call_groups WHERE user_id = ? ORDER BY kind, id").all(user.id) as CallGroup[];
   const saved = params.saved === "department" ? "Company name saved. People are added to this department." : params.saved === "group" ? text("phoneGroupSaved") : params.saved === "hours" ? text("phoneHoursSaved") : params.saved === "removed" ? "This person was removed. Their name, email, and extension stay in the record." : params.saved ? text("phoneSaved") : "";
   return (
-    <Frame pathname="/account/phone">
-      <main>
-        <AccountHero eyebrow="PHONE SYSTEM" title={text("phoneTitle")} body={text("phoneBody")} />
-        <section className="section">
-          <div className="wrap">
-            <AccountNav pathname="/account/phone" />
+    <div className="workspace-page">
+      <header className="workspace-page-head">
+        <h1>{text("phoneTitle")}</h1>
+        <p>{text("phoneBody")}</p>
+      </header>
             {saved ? <p className="form-feedback">{saved}{params.note ? ` ${customerMessage(params.note, "")}` : ""}</p> : null}
             {params.error ? <p className="form-feedback">{customerMessage(params.error, "Something went wrong. Please try again, or contact support.")}</p> : null}
             {plan && !connected ? <p className="form-feedback">{bought ? "Your number is bought. Connecting it for calls is still being finished." : "Buy a business number before these extensions can make or receive calls."} {bought ? null : <a href="/account/numbers">Buy a number</a>}</p> : null}
@@ -170,9 +167,6 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
                 );
               })}
             </div>
-          </div>
-        </section>
-      </main>
-    </Frame>
+    </div>
   );
 }

@@ -1,5 +1,3 @@
-import { Frame } from "@/components/site/Frame";
-import { AccountHero, AccountNav } from "@/components/account/Portal";
 import { PortForm } from "@/components/account/PortForm";
 import { guardAccount } from "@/lib/guard";
 import { flagOn, getDb } from "@/lib/db";
@@ -32,12 +30,11 @@ export default async function PortingPage({ searchParams }: { searchParams: Prom
     submit: text("portSubmit"),
   };
   return (
-    <Frame pathname="/account/porting">
-      <main>
-        <AccountHero eyebrow="TRANSFER" title={text("portingTitle")} body={text("portingBody")} />
-        <section className="section">
-          <div className="wrap">
-            <AccountNav pathname="/account/porting" />
+    <div className="workspace-page">
+      <header className="workspace-page-head">
+        <h1>{text("portingTitle")}</h1>
+        <p>{text("portingBody")}</p>
+      </header>
             {params.saved ? <p className="form-feedback">{text("portingSaved")}</p> : null}
             {params.error ? <p className="form-feedback">{customerMessage(params.error, "Something went wrong. Please try again, or contact support.")}</p> : null}
             {!included ? <div className="contact-form"><p>Number transfer is not included on your plan.</p></div> : open ? <PortForm labels={labels} /> : <div className="contact-form"><p>{text("portingClosed")}</p></div>}
@@ -48,9 +45,6 @@ export default async function PortingPage({ searchParams }: { searchParams: Prom
                 return <p key={row.created_at}>{customerRequestStatus(row.status)} · {payload.numbers}{reference}</p>;
               })}
             </div>
-          </div>
-        </section>
-      </main>
-    </Frame>
+    </div>
   );
 }

@@ -1,5 +1,4 @@
-import { Frame } from "@/components/site/Frame";
-import { AccountHero, AccountNav } from "@/components/account/Portal";
+import Link from "next/link";
 import { NumberSearch } from "@/components/account/NumberSearch";
 import { PlaceSelects } from "@/components/account/PlaceSelects";
 import { saveEmergencyAddress } from "../actions";
@@ -36,12 +35,12 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
   const labels = Object.fromEntries(["numbersCountryLabel", "numbersStateLabel", "numbersRateLabel", "numbersRatePlaceholder", "numbersSearchLabel", "numbersEmpty", "numbersRequest", "numbersBuy", "numbersLiveOff", "numbersDetailLabel", "numbersDetailPlaceholder", "numbersModeLabel", "numbersQueryNumber", "numbersQueryPrefix", "numbersQuerySuffix"].map((key) => [key, text(key)]));
   const purchase = numberPurchaseMode(flagOn("numbers.live_order"), flagOn("numbers.auto_order"));
   return (
-    <Frame pathname="/account/numbers">
-      <main>
-        <AccountHero eyebrow="NUMBERS" title={text("numbersTitle")} body={text("numbersBody")} />
-        <section className="section">
-          <div className="wrap" style={{ maxWidth: 760 }}>
-            <AccountNav pathname="/account/numbers" />
+    <div className="workspace-page">
+      <header className="workspace-page-head">
+        <h1>{text("numbersTitle")}</h1>
+        <p>{text("numbersBody")}</p>
+        <p><Link href="/account/porting">Transfer a number you already have</Link></p>
+      </header>
             {params.saved === "ordered" ? <p className="form-feedback">{text("numbersOrdered")}</p> : null}
             {params.saved === "pending" ? <p className="form-feedback">The order was sent. This number stays unmarked until the phone company lists it.</p> : null}
             {params.saved === "held" ? <p className="form-feedback">{text("numbersHeld")}</p> : null}
@@ -95,9 +94,6 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
                 return <p key={row.id}>{customerNumberStatus(row.status, row.provider_ref, payload.did || "")} · {payload.did || payload.detail || "Number request"} · {where}</p>;
               })}
             </div>
-          </div>
-        </section>
-      </main>
-    </Frame>
+    </div>
   );
 }

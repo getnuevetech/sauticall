@@ -1,6 +1,4 @@
 import { notFound } from "next/navigation";
-import { Frame } from "@/components/site/Frame";
-import { AccountHero, AccountNav } from "@/components/account/Portal";
 import { replyToTicket } from "../../desk-actions";
 import { guardAccount } from "@/lib/guard";
 import { formatWhen } from "@/lib/format-when";
@@ -17,12 +15,11 @@ export default async function AccountTicketPage({ params, searchParams }: { para
   const copy = loadSite().account;
   const text = (key: string) => (typeof copy[key] === "string" ? String(copy[key]) : "");
   return (
-    <Frame pathname="/account/tickets">
-      <main>
-        <AccountHero eyebrow={`SC-${found.ticket.id}`} title={found.ticket.subject} body={`${statusLabel(found.ticket.status)} · ${formatWhen(found.ticket.updated_at)}`} />
-        <section className="section">
-          <div className="wrap">
-            <AccountNav pathname="/account/tickets" />
+    <div className="workspace-page">
+      <header className="workspace-page-head">
+        <h1>{found.ticket.subject}</h1>
+        <p>SC-{found.ticket.id} · {statusLabel(found.ticket.status)} · {formatWhen(found.ticket.updated_at)}</p>
+      </header>
             {query.error ? <p className="form-feedback">{customerMessage(query.error, "The reply could not be sent. Please try again, or contact support.")}</p> : null}
             {query.saved ? <p className="form-feedback">{customerMessage(query.saved, "Saved.")}</p> : null}
             <div className="ticket-thread">
@@ -41,9 +38,6 @@ export default async function AccountTicketPage({ params, searchParams }: { para
                 <button className="btn btn-primary" type="submit">{text("ticketsReply")}</button>
               </form>
             )}
-          </div>
-        </section>
-      </main>
-    </Frame>
+    </div>
   );
 }

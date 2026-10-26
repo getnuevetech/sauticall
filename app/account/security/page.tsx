@@ -1,5 +1,3 @@
-import { Frame } from "@/components/site/Frame";
-import { AccountHero, AccountNav } from "@/components/account/Portal";
 import { AuthForm } from "@/components/account/AuthForm";
 import { AuthenticatorGuide } from "@/components/account/AuthenticatorGuide";
 import { clearOwnMfa, enrollMfa } from "../actions";
@@ -21,13 +19,14 @@ export default async function SecurityPage() {
   const secret = base32Encode(crypto.randomBytes(20));
   const uri = authenticatorUri(user.email, secret);
   const qr = await authenticatorQr(uri);
+  const heading = text("mfaTitle") || "Confirm it is you";
+  const intro = user.mfa_secret ? "An authenticator is on for this account. Use the code from that app when SautiCall asks for one." : required ? (text("mfaOnHint") || "An authenticator is required for this account.") : "An authenticator can be added for this account. Revealing an app password asks for a code once it is on.";
   return (
-    <Frame pathname="/account/security">
-      <main>
-        <AccountHero eyebrow="SECURITY" title={text("mfaTitle") || "Confirm it is you"} body={user.mfa_secret ? "An authenticator is on for this account. Use the code from that app when SautiCall asks for one." : required ? (text("mfaOnHint") || "An authenticator is required for this account.") : "An authenticator can be added for this account. Revealing an app password asks for a code once it is on."} />
-        <section className="section">
-          <div className="wrap" style={{ maxWidth: 760 }}>
-            <AccountNav pathname="/account/security" />
+    <div className="workspace-page">
+      <header className="workspace-page-head">
+        <h1>{heading}</h1>
+        <p>{intro}</p>
+      </header>
             {!user.mfa_secret ? (
               <div className="contact-form">
                 <p>{required ? "This account needs an authenticator before you can continue. An app password stays hidden until you enter a code." : "You can add an authenticator now. An administrator can also require it for this account. Once it is on, revealing an app password asks for a code."}</p>
@@ -44,9 +43,6 @@ export default async function SecurityPage() {
                 {!required ? <form action={clearOwnMfa}><button className="btn btn-secondary" type="submit">Remove authenticator</button></form> : null}
               </div>
             )}
-          </div>
-        </section>
-      </main>
-    </Frame>
+    </div>
   );
 }

@@ -1,6 +1,4 @@
 import Link from "next/link";
-import { Frame } from "@/components/site/Frame";
-import { AccountHero, AccountNav } from "@/components/account/Portal";
 import { guardAccount } from "@/lib/guard";
 import { formatWhen } from "@/lib/format-when";
 import { loadSite } from "@/lib/site";
@@ -12,12 +10,11 @@ export default async function AccountTicketsPage() {
   const text = (key: string) => (typeof copy[key] === "string" ? String(copy[key]) : "");
   const tickets = customerTickets(user.id);
   return (
-    <Frame pathname="/account/tickets">
-      <main>
-        <AccountHero eyebrow="SUPPORT" title={text("ticketsTitle")} body={text("ticketsBody")} />
-        <section className="section">
-          <div className="wrap">
-            <AccountNav pathname="/account/tickets" />
+    <div className="workspace-page">
+      <header className="workspace-page-head">
+        <h1>{text("ticketsTitle")}</h1>
+        <p>{text("ticketsBody")}</p>
+      </header>
             <p><Link className="btn btn-primary" href="/account/tickets/new">{text("ticketsNew")}</Link></p>
             {tickets.length === 0 ? <p>{text("ticketsEmpty")}</p> : null}
             {tickets.map((ticket) => (
@@ -26,9 +23,6 @@ export default async function AccountTicketsPage() {
                 <p>{statusLabel(ticket.status)} · {formatWhen(ticket.updated_at)}</p>
               </article>
             ))}
-          </div>
-        </section>
-      </main>
-    </Frame>
+    </div>
   );
 }
