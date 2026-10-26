@@ -88,18 +88,23 @@ export async function register(formData: FormData) {
   const { requestOrigin } = await import("@/lib/payments");
   const { sendAccountEmail, sendAccountSms } = await import("@/lib/account-verify");
   const origin = await requestOrigin();
-  const emailResult = await Promise.race([
-    sendAccountEmail(user.id, origin).catch(() => ({ ok: false as const })),
-    new Promise<{ ok: false }>((resolve) => setTimeout(() => resolve({ ok: false }), 6000)),
+  const [emailResult, smsResult] = await Promise.all([
+    Promise.race([
+      sendAccountEmail(user.id, origin).catch(() => ({ ok: false as const })),
+      new Promise<{ ok: false }>((resolve) => setTimeout(() => resolve({ ok: false }), 6000)),
+    ]),
+    Promise.race([
+      sendAccountSms(user.id).catch(() => ({ ok: false as const })),
+      new Promise<{ ok: false }>((resolve) => setTimeout(() => resolve({ ok: false }), 6000)),
+    ]),
   ]);
-  await sendAccountSms(user.id).catch(() => undefined);
   const id = user.id;
   after(() => {
     void import("@/lib/voip-client").then(({ provisionCustomer }) => provisionCustomer(id)).catch(() => undefined);
   });
   audit(email, "auth.register", planName || "customer");
   const next = planName ? `&plan=${encodeURIComponent(planName)}` : "";
-  redirect(`/account/verify?email=${emailResult.ok ? "sent" : "waiting"}${next}`);
+  redirect(`/account/verify?email=${emailResult.ok ? "sent" : "waiting"}&sms=${smsResult.ok ? "sent" : "waiting"}${next}`);
 }
 
 export async function confirmEmailCode(formData: FormData) {
@@ -138,8 +143,10 @@ export async function saveMobile(formData: FormData) {
   if (!phone) redirect("/account/verify?error=Enter%20a%20mobile%20number%20with%20the%20country%20code.");
   getDb().prepare("UPDATE users SET phone = ?, phone_verified_at = '' WHERE id = ?").run(phone, user.id);
   const { sendAccountSms } = await import("@/lib/account-verify");
-  await sendAccountSms(user.id).catch(() => undefined);
-  redirect("/account/verify?sms=waiting");
+  const result = await sendAccountSms(user.id).catch(() => ({ ok: false as const, message: "The text message could not be sent. Try again in a minute." }));
+  if (result.ok) redirect("/account/verify?sms=sent");
+  const error = "message" in result && result.message ? `&error=${encodeURIComponent(result.message)}` : "";
+  redirect(`/account/verify?sms=waiting${error}`);
 }
 
 export async function resendPhoneVerification() {

@@ -11,10 +11,13 @@ export default async function CustomerPage({ params, searchParams }: { params: P
   const actor = await requirePermission("users.customers");
   const { id } = await params;
   const query = await searchParams;
-  const person = getDb().prepare("SELECT id, name, email, disabled, mfa_required, created_at FROM users WHERE id = ? AND role = 'customer'").get(Number(id)) as {
+  const person = getDb().prepare("SELECT id, name, email, phone, email_verified_at, phone_verified_at, disabled, mfa_required, created_at FROM users WHERE id = ? AND role = 'customer'").get(Number(id)) as {
     id: number;
     name: string;
     email: string;
+    phone: string;
+    email_verified_at: string;
+    phone_verified_at: string;
     disabled: number;
     mfa_required: number;
     created_at: string;
@@ -28,6 +31,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
   const funding = flagOn("billing.fund_client");
   const people = getDb().prepare("SELECT number, former_number, first_name, last_name, email, status FROM pbx_extensions WHERE user_id = ? ORDER BY id").all(person.id) as { number: string; former_number: string; first_name: string; last_name: string; email: string; status: string }[];
   const seeTickets = userCan(actor, "tickets.view") || userCan(actor, "tickets.view_all") || userCan(actor, "tickets.reply");
+  const latestSms = getDb().prepare("SELECT status, detail, created_at FROM sms_outbox WHERE user_id = ? ORDER BY id DESC LIMIT 1").get(person.id) as { status: string; detail: string; created_at: string } | undefined;
   return (
     <>
       <span className="eyebrow">Customers</span>
@@ -48,6 +52,12 @@ export default async function CustomerPage({ params, searchParams }: { params: P
         <button className="btn btn-primary" type="submit">Save customer</button>
       </form>
       <div className="desk">
+        <section className="desk-card">
+          <h3>Account confirmation</h3>
+          <p>Email {person.email_verified_at ? `confirmed ${formatWhen(person.email_verified_at)}` : "not confirmed yet"}.</p>
+          <p>Mobile {person.phone || "not saved"}{person.phone_verified_at ? `, confirmed ${formatWhen(person.phone_verified_at)}` : person.phone ? ", not confirmed yet" : ""}.</p>
+          {latestSms ? <p>Last text {latestSms.status} {formatWhen(latestSms.created_at)}{latestSms.detail ? `: ${latestSms.detail}` : ""}.</p> : null}
+        </section>
         <section className="desk-card">
           <h3>People on the phone system</h3>
           {people.length === 0 ? <p>No extensions yet.</p> : (
