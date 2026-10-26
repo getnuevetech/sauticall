@@ -56,7 +56,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
           <h3>Account confirmation</h3>
           <p>Email {person.email_verified_at ? `confirmed ${formatWhen(person.email_verified_at)}` : "not confirmed yet"}.</p>
           <p>Mobile {person.phone || "not saved"}{person.phone_verified_at ? `, confirmed ${formatWhen(person.phone_verified_at)}` : person.phone ? ", not confirmed yet" : ""}.</p>
-          {latestSms ? <p>Last text {latestSms.status} {formatWhen(latestSms.created_at)}{latestSms.detail ? `: ${latestSms.detail}` : ""}.</p> : null}
+          {latestSms ? <p>Last text {latestSms.status} {formatWhen(latestSms.created_at)}{latestSms.detail ? `: ${latestSms.detail}` : "."}</p> : null}
         </section>
         <section className="desk-card">
           <h3>People on the phone system</h3>
