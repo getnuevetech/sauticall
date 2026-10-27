@@ -524,3 +524,16 @@ export async function savePhoneHours(formData: FormData) {
   audit(user.email, "pbx.hours", `${open}-${close}`);
   redirect("/account/phone?saved=hours");
 }
+
+export async function saveOwnLineVariables(formData: FormData) {
+  const user = await currentUser();
+  if (!user || user.role !== "customer") redirect("/account/login");
+  const { listLineVariables, saveCustomerLineValues } = await import("@/lib/line-variable-store");
+  const { customerCanEdit } = await import("@/lib/line-variables");
+  const entries = listLineVariables()
+    .filter((item) => customerCanEdit(item))
+    .map((item) => ({ key: item.key, value: String(formData.get(`value_${item.key}`) || "") }));
+  saveCustomerLineValues(user.id, entries);
+  audit(user.email, "line.variables", "customer");
+  redirect("/account/billing?saved=variables");
+}

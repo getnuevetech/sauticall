@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Icon } from "@/components/Icon";
+import { saveOwnLineVariables } from "../actions";
 import { guardAccount } from "@/lib/guard";
 import { accountUsage } from "@/lib/account-usage";
 import { chicagoDate, chicagoDay, invoiceNumber, money, usagePercent, wholeMoney } from "@/lib/account-display";
 import { customerMessage } from "@/lib/customer-message";
+import { customerValues, listLineVariables, planPaidAt } from "@/lib/line-variable-store";
+import { calendarLabel, customerCanEdit, nextBillingDate, resolveVariable } from "@/lib/line-variables";
 
-export default async function BillingPage({ searchParams }: { searchParams: Promise<{ error?: string; plan?: string }> }) {
+export default async function BillingPage({ searchParams }: { searchParams: Promise<{ error?: string; plan?: string; saved?: string }> }) {
   const user = await guardAccount();
   const params = await searchParams;
   if (params.plan) redirect(`/account/billing/plan?review=${encodeURIComponent(params.plan)}`);
@@ -14,6 +17,13 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const plan = usage.plan;
   const percent = usagePercent(usage.usedMinutes, usage.included);
   const lastPaid = usage.planPayment;
+  const variables = listLineVariables();
+  const mine = customerValues(user.id);
+  const billing = variables.find((item) => item.key === "billing_days");
+  const billingDays = billing ? resolveVariable(billing, mine.get(billing.key) || "") || "30" : "30";
+  const paidAt = planPaidAt(user.id);
+  const billDate = calendarLabel(nextBillingDate(paidAt, billingDays));
+  const editable = variables.filter((item) => customerCanEdit(item));
   return (
     <div className="workspace-page" style={{ maxWidth: 1080 }}>
       <h1>Usage & billing</h1>
@@ -25,6 +35,22 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         <a href="#payment">Payment methods</a>
       </nav>
       {params.error ? <p className="form-feedback">{customerMessage(params.error, "That billing step could not be completed. Please try again, or contact support.")}</p> : null}
+      {params.saved === "variables" ? <p className="form-feedback">Your billing choices were saved.</p> : null}
+      <section className="ws-card" style={{ marginBottom: 14 }}>
+        <h2>Next phone bill</h2>
+        <p>{billDate}. {paidAt ? "It starts on the day you paid." : "There is no plan payment yet, so it starts today."} The number of days set for this account is added until the date is after today.</p>
+        {editable.length ? (
+          <form className="pub-form" action={saveOwnLineVariables}>
+            {editable.map((item) => (
+              <label key={item.key}>
+                {item.label}
+                <input name={`value_${item.key}`} type={item.kind === "days" ? "number" : "text"} min={item.kind === "days" ? 1 : undefined} max={item.kind === "days" ? 365 : undefined} defaultValue={mine.get(item.key) || item.adminValue} required={item.kind === "days"} />
+              </label>
+            ))}
+            <button className="ws-btn primary" type="submit">Save</button>
+          </form>
+        ) : <p>The number of days is set by the team.</p>}
+      </section>
       <div className="ws-grid-2 bill-top">
         <section className="ws-card">
           <div className="ws-split"><span>Current plan</span>{plan ? <span className="ws-pill live">Active</span> : null}</div>
