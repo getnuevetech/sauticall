@@ -1,9 +1,9 @@
-import { rotateMailSecret, saveOutboundMail, saveRoutingGroup, saveRoutingMembers, saveRoutingTopic, tryInboundMail } from "../../desk-actions";
+import { rotateMailSecret, saveOutboundMail, saveRoutingGroup, saveRoutingMembers, saveRoutingTopic, sendTestMail, tryInboundMail } from "../../desk-actions";
 import { requirePermission } from "@/lib/access";
 import { getDb } from "@/lib/db";
 import { mailSettings } from "@/lib/tickets";
 
-export default async function TicketSettingsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export default async function TicketSettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; sent?: string }> }) {
   await requirePermission("tickets.manage");
   const params = await searchParams;
   const groups = getDb().prepare("SELECT id, name, description FROM ticket_groups ORDER BY name").all() as { id: number; name: string; description: string }[];
@@ -27,7 +27,7 @@ export default async function TicketSettingsPage({ searchParams }: { searchParam
       </article>
       <form className="contact-form" action={saveOutboundMail} style={{ marginBottom: 18 }}>
         <h3>Outgoing email</h3>
-        <p>Replies to customers and notices to the group are sent from here. Leave the password blank to keep the saved one.</p>
+        <p>Replies to customers, notices to the group, and account confirmation codes are sent from here. Leave the password blank to keep the saved one.</p>
         <div className="form-grid">
           <label>SMTP host <input name="smtp_host" defaultValue={mail?.smtp_host || ""} placeholder="smtp.example.com" /></label>
           <label>Port <input name="smtp_port" type="number" defaultValue={mail?.smtp_port || 587} /></label>
@@ -39,6 +39,13 @@ export default async function TicketSettingsPage({ searchParams }: { searchParam
         <label>From address <input name="smtp_from" type="email" defaultValue={mail?.smtp_from || ""} placeholder="support@sauticall.com" /></label>
         <label className="check-option"><input type="checkbox" name="smtp_secure" defaultChecked={mail?.smtp_secure === 1} /> Use a secure connection from the start (port 465). Port 587 upgrades after hello.</label>
         <button className="btn btn-primary" type="submit">Save outgoing email</button>
+      </form>
+      <form className="contact-form" action={sendTestMail} style={{ marginBottom: 18 }}>
+        <h3>Send a test email</h3>
+        <p>This uses the saved outgoing mail. If it fails, the mail server’s reply is shown here and kept under Failed requests.</p>
+        {params.sent ? <p className="form-feedback">Test email sent.</p> : null}
+        <label>To <input name="to" type="email" required placeholder="you@example.com" /></label>
+        <button className="btn btn-secondary" type="submit">Send a test</button>
       </form>
       <form className="contact-form" action={tryInboundMail} style={{ marginBottom: 18 }}>
         <h3>Try an inbound email</h3>

@@ -1,7 +1,7 @@
 import { getDb } from "./db";
 import { redactSecret } from "./provider-error";
 
-export const FAILURE_AREAS = ["number", "extension", "group", "payment", "trunk", "transfer", "emergency", "minutes", "client", "connection"] as const;
+export const FAILURE_AREAS = ["number", "extension", "group", "payment", "trunk", "transfer", "emergency", "minutes", "client", "connection", "email"] as const;
 
 export type FailureArea = (typeof FAILURE_AREAS)[number];
 

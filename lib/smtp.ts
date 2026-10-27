@@ -15,6 +15,24 @@ export type OutboundMail = {
   inReplyTo?: string;
 };
 
+const SESSION_MS = 15000;
+
+export function mailboxAddress(value: string) {
+  const trimmed = value.trim();
+  const wrapped = trimmed.match(/<([^<>\s]+@[^<>\s]+)>/);
+  const candidate = (wrapped?.[1] || trimmed).replace(/^mailto:/i, "");
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate) ? candidate : "";
+}
+
+export function ehloName(from: string) {
+  const domain = mailboxAddress(from).split("@")[1]?.toLowerCase() || "";
+  return /^[a-z0-9.-]+$/.test(domain) && domain.includes(".") ? domain : "sauticall.com";
+}
+
+function oneLine(value: string) {
+  return value.replace(/[\r\n]+/g, " ").trim();
+}
+
 function commandCode(reply: string) {
   const lines = reply.split(/\r?\n/).filter(Boolean);
   const last = lines[lines.length - 1] || "";
@@ -22,37 +40,43 @@ function commandCode(reply: string) {
 }
 
 function createReader(socket: net.Socket) {
-  let pending = "";
+  let pending = Buffer.alloc(0);
   const waiters: { resolve: (value: string) => void; reject: (error: Error) => void }[] = [];
   const take = () => {
-    const lines = pending.split(/\r?\n/);
-    let end = -1;
-    for (let index = 0; index < lines.length; index += 1) {
-      if (/^\d{3} /.test(lines[index])) end = index;
+    let start = 0;
+    while (start < pending.length) {
+      const newline = pending.indexOf(0x0a, start);
+      if (newline < 0) return "";
+      const line = pending.subarray(start, newline).toString("latin1").replace(/\r$/, "");
+      if (/^\d{3} /.test(line)) {
+        const reply = pending.subarray(0, newline).toString("latin1").replace(/\r$/, "");
+        pending = pending.subarray(newline + 1);
+        return reply;
+      }
+      start = newline + 1;
     }
-    if (end < 0) return "";
-    const reply = lines.slice(0, end + 1).join("\r\n");
-    pending = lines.slice(end + 1).join("\n");
-    return reply;
+    return "";
+  };
+  const fail = (error: Error) => {
+    while (waiters.length) waiters.shift()?.reject(error);
   };
   const onData = (chunk: Buffer) => {
-    pending += chunk.toString("utf8");
+    pending = Buffer.concat([pending, chunk]);
     while (waiters.length) {
       const reply = take();
       if (!reply) break;
       waiters.shift()?.resolve(reply);
     }
   };
-  const onError = (error: Error) => {
-    while (waiters.length) waiters.shift()?.reject(error);
-  };
+  const onClose = () => fail(new Error("The mail server closed the connection."));
   socket.on("data", onData);
-  socket.on("error", onError);
+  socket.on("error", fail);
+  socket.on("close", onClose);
   function read() {
     const ready = take();
     if (ready) return Promise.resolve(ready);
     return new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("The mail server took too long.")), 20000);
+      const timer = setTimeout(() => reject(new Error("The mail server took too long.")), SESSION_MS);
       waiters.push({
         resolve: (value) => {
           clearTimeout(timer);
@@ -67,9 +91,15 @@ function createReader(socket: net.Socket) {
   }
   return {
     read,
+    unread() {
+      const leftover = pending;
+      pending = Buffer.alloc(0);
+      return leftover;
+    },
     stop() {
       socket.off("data", onData);
-      socket.off("error", onError);
+      socket.off("error", fail);
+      socket.off("close", onClose);
     },
   };
 }
@@ -77,12 +107,39 @@ function createReader(socket: net.Socket) {
 async function expectOk(read: () => Promise<string>, label: string) {
   const reply = await read();
   const code = commandCode(reply);
-  if (code < 200 || code >= 400) throw new Error(`${label} was refused by the mail server.`);
+  if (code < 200 || code >= 400) {
+    const detail = reply.replace(/[\r\n]+/g, " ").trim().slice(0, 300);
+    throw new Error(`${label} was refused by the mail server: ${detail}`);
+  }
   return reply;
 }
 
 function write(socket: net.Socket, line: string) {
   socket.write(`${line}\r\n`);
+}
+
+function connectMail(host: string, port: number, implicitTls: boolean) {
+  return new Promise<net.Socket | tls.TLSSocket>((resolve, reject) => {
+    let settled = false;
+    const next = implicitTls
+      ? tls.connect({ host, port, servername: host }, () => {
+        settled = true;
+        resolve(next);
+      })
+      : net.connect({ host, port, autoSelectFamily: true }, () => {
+        settled = true;
+        resolve(next);
+      });
+    next.setTimeout(SESSION_MS);
+    next.once("timeout", () => {
+      if (settled) return;
+      next.destroy();
+      reject(new Error("The mail server took too long."));
+    });
+    next.once("error", (error) => {
+      if (!settled) reject(error instanceof Error ? error : new Error("Email could not be sent."));
+    });
+  });
 }
 
 async function upgrade(socket: net.Socket, host: string) {
@@ -92,32 +149,43 @@ async function upgrade(socket: net.Socket, host: string) {
   });
 }
 
+function messageIdentity(messageId: string, from: string) {
+  const cleaned = messageId.replace(/[<>\s]/g, "");
+  const domain = cleaned.split("@")[1] || "";
+  if (domain.includes(".")) return cleaned;
+  const local = cleaned.split("@")[0] || "sauticall";
+  return `${local}@${ehloName(from)}`;
+}
+
 export async function sendMail(message: OutboundMail) {
-  if (!message.host || !message.from || message.to.length === 0) return { ok: false, message: "Outgoing email is not set up." };
+  const from = mailboxAddress(message.from);
+  const recipients = message.to.map((item) => mailboxAddress(item));
+  if (!message.host || !from || recipients.some((item) => !item)) return { ok: false, message: "Outgoing email is not set up." };
+  const port = message.port || 587;
+  const implicitTls = message.secure || port === 465;
   let socket: net.Socket | tls.TLSSocket | null = null;
   try {
-    socket = await new Promise<net.Socket | tls.TLSSocket>((resolve, reject) => {
-      const next = message.secure
-        ? tls.connect({ host: message.host, port: message.port, servername: message.host }, () => resolve(next))
-        : net.connect({ host: message.host, port: message.port }, () => resolve(next));
-      next.setTimeout(5000);
-      next.once("timeout", () => {
-        next.destroy();
-        reject(new Error("The mail server took too long."));
-      });
-      next.once("error", reject);
+    socket = await connectMail(message.host, port, implicitTls);
+    socket.setTimeout(SESSION_MS, () => {
+      socket?.destroy(new Error("The mail server took too long."));
     });
     let reader = createReader(socket);
     await expectOk(reader.read, "Greeting");
-    write(socket, "EHLO sauticall");
+    const helloName = ehloName(from);
+    write(socket, `EHLO ${helloName}`);
     const hello = await expectOk(reader.read, "Hello");
-    if (!message.secure && /STARTTLS/i.test(hello)) {
+    if (!implicitTls && /STARTTLS/i.test(hello)) {
       write(socket, "STARTTLS");
       await expectOk(reader.read, "Secure connection");
+      const leftover = reader.unread();
       reader.stop();
+      if (leftover.length) socket.unshift(leftover);
       socket = await upgrade(socket, message.host);
+      socket.setTimeout(SESSION_MS, () => {
+        socket?.destroy(new Error("The mail server took too long."));
+      });
       reader = createReader(socket);
-      write(socket, "EHLO sauticall");
+      write(socket, `EHLO ${helloName}`);
       await expectOk(reader.read, "Hello");
     }
     if (message.user) {
@@ -128,19 +196,21 @@ export async function sendMail(message: OutboundMail) {
       write(socket, Buffer.from(message.pass).toString("base64"));
       await expectOk(reader.read, "Sign-in");
     }
-    write(socket, `MAIL FROM:<${message.from}>`);
+    write(socket, `MAIL FROM:<${from}>`);
     await expectOk(reader.read, "Sender");
-    for (const recipient of message.to) {
+    for (const recipient of recipients) {
       write(socket, `RCPT TO:<${recipient}>`);
       await expectOk(reader.read, "Recipient");
     }
     write(socket, "DATA");
     await expectOk(reader.read, "Message");
-    const subject = message.subject.replace(/[\r\n]+/g, " ").slice(0, 180);
-    const references = message.inReplyTo ? `In-Reply-To: <${message.inReplyTo}>\r\nReferences: <${message.inReplyTo}>\r\n` : "";
+    const subject = oneLine(message.subject).slice(0, 180);
+    const fromHeader = message.from.includes("<") ? oneLine(message.from) : `SautiCall <${from}>`;
+    const references = message.inReplyTo ? `In-Reply-To: <${oneLine(message.inReplyTo)}>\r\nReferences: <${oneLine(message.inReplyTo)}>\r\n` : "";
     const body = message.text.replace(/\r?\n/g, "\r\n").replace(/^\./gm, "..");
+    const identity = messageIdentity(message.messageId, from);
     socket.write(
-      `From: ${message.from}\r\nTo: ${message.to.join(", ")}\r\nSubject: ${subject}\r\nDate: ${new Date().toUTCString()}\r\nMessage-ID: <${message.messageId}>\r\n${references}MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${body}\r\n.\r\n`,
+      `From: ${fromHeader}\r\nTo: ${recipients.join(", ")}\r\nSubject: ${subject}\r\nDate: ${new Date().toUTCString()}\r\nMessage-ID: <${identity}>\r\n${references}MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n${body}\r\n.\r\n`,
     );
     await expectOk(reader.read, "Delivery");
     write(socket, "QUIT");
@@ -148,6 +218,7 @@ export async function sendMail(message: OutboundMail) {
     return { ok: true, message: "Email sent." };
   } catch (error) {
     socket?.destroy();
-    return { ok: false, message: error instanceof Error ? error.message : "Email could not be sent." };
+    const detail = error instanceof Error ? error.message : "Email could not be sent.";
+    return { ok: false, message: detail.replace(/\s+/g, " ").trim().slice(0, 400) };
   }
 }

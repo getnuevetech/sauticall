@@ -1,4 +1,5 @@
 import { getDb } from "./db";
+import { recordFailure } from "./failure-log";
 import { sendSms, smsReady } from "./sms";
 import { challengeOpen, codeSalt, codesMatch, digest, hashCode, newCode, newToken } from "./verify-code";
 
@@ -50,9 +51,14 @@ export function verificationStatus(userId: number) {
 function saveChallenge(input: { userId: number; channel: string; destination: string; code: string; token?: string; ttl: number }) {
   const salt = codeSalt();
   const expires = new Date(Date.now() + input.ttl).toISOString();
-  getDb()
+  const info = getDb()
     .prepare("INSERT INTO verification_challenges (user_id, channel, destination, code_hash, salt, token_hash, expires_at, attempts, used_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, '', ?)")
     .run(input.userId, input.channel, input.destination, hashCode(input.code, salt), salt, input.token ? digest(input.token) : "", expires, new Date().toISOString());
+  return Number(info.lastInsertRowid);
+}
+
+function dropUnsent(challengeId: number) {
+  getDb().prepare("DELETE FROM verification_challenges WHERE id = ? AND used_at = ''").run(challengeId);
 }
 
 export function issueEmailChallenge(userId: number) {
@@ -62,8 +68,8 @@ export function issueEmailChallenge(userId: number) {
   if (tooSoon(latest(userId, "email"))) return { ok: false as const, message: "Wait a minute before sending another email." };
   const code = newCode();
   const token = newToken();
-  saveChallenge({ userId, channel: "email", destination: user.email, code, token, ttl: EMAIL_MS });
-  return { ok: true as const, already: false as const, code, token, email: user.email, name: user.name };
+  const challengeId = saveChallenge({ userId, channel: "email", destination: user.email, code, token, ttl: EMAIL_MS });
+  return { ok: true as const, already: false as const, code, token, email: user.email, name: user.name, challengeId };
 }
 
 export function issueSmsChallenge(userId: number) {
@@ -76,13 +82,22 @@ export function issueSmsChallenge(userId: number) {
   return { ok: true as const, already: false as const, code, phone: user.phone };
 }
 
+function emailFailed(userId: number, email: string, challengeId: number, detail: string) {
+  dropUnsent(challengeId);
+  recordFailure({ area: "email", userId, subject: email, detail });
+  const setup = detail.startsWith("Outgoing email is not set up");
+  const slow = detail.startsWith("The mail server took too long");
+  const message = setup ? detail : slow ? "The mail server took too long. Try again shortly." : "The confirmation email could not be sent. Try again shortly.";
+  return { ok: false as const, message };
+}
+
 export async function sendAccountEmail(userId: number, origin: string) {
   const issued = issueEmailChallenge(userId);
   if (!issued.ok || issued.already) return issued;
   const { mailSettings } = await import("./tickets");
   const { sendMail } = await import("./smtp");
   const settings = mailSettings();
-  if (!settings?.smtp_host || !settings.smtp_from) return { ok: false as const, message: "Outgoing email is not set up, so the confirmation was not sent." };
+  if (!settings?.smtp_host || !settings.smtp_from) return emailFailed(userId, issued.email, issued.challengeId, "Outgoing email is not set up, so the confirmation was not sent.");
   const link = `${origin}/account/verify?token=${issued.token}`;
   const result = await sendMail({
     host: settings.smtp_host,
@@ -93,10 +108,11 @@ export async function sendAccountEmail(userId: number, origin: string) {
     from: settings.smtp_from,
     to: [issued.email],
     subject: "Confirm your SautiCall account",
-    text: `Hi ${issued.name},\n\nConfirm your email for SautiCall:\n${link}\n\nOr enter this code: ${issued.code}\n\nThe link and code expire in 30 minutes.`,
+    text: `Hi ${issued.name},\n\nConfirm your email for SautiCall:\n${link}\n\nOr enter this code: ${issued.code}\n\nThe link and code expire in 30 minutes. If you ask for another email, use the newest code.`,
     messageId: `sc-verify-${userId}-${digest(issued.token).slice(0, 12)}@sauticall`,
   });
-  return result.ok ? { ok: true as const, message: "Confirmation email sent." } : { ok: false as const, message: "The confirmation email could not be sent." };
+  if (!result.ok) return emailFailed(userId, issued.email, issued.challengeId, result.message);
+  return { ok: true as const, message: "Confirmation email sent." };
 }
 
 export async function sendAccountSms(userId: number) {

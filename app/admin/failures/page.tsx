@@ -15,6 +15,7 @@ const AREAS = [
   { value: "minutes", label: "Call minutes" },
   { value: "client", label: "Phone-company client" },
   { value: "connection", label: "Connection check" },
+  { value: "email", label: "Email" },
 ];
 
 type Row = { id: number; area: string; subject: string; detail: string; created_at: string; email: string | null };
@@ -39,7 +40,7 @@ export default async function FailuresPage({ searchParams }: { searchParams: Pro
     <>
       <span className="eyebrow">Customers</span>
       <h2>Failed requests</h2>
-      <p>This is the reply from VoIP.ms, 3CX, Stripe, PayPal, or Square when a request does not succeed. Customers still see a short message. The text here is the one the other system sent.</p>
+      <p>This is the reply from VoIP.ms, 3CX, Stripe, PayPal, Square, or the mail server when a request does not succeed. Customers still see a short message. The text here is the one the other system sent.</p>
       <p>
         {AREAS.map((item) => (
           <Link key={item.value || "all"} href={item.value ? `/admin/failures?area=${item.value}` : "/admin/failures"} style={{ marginRight: 12, fontWeight: item.value === area ? 800 : 500 }}>
