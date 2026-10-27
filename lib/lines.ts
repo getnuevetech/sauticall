@@ -231,8 +231,6 @@ export async function purchaseNumber(input: { requestId: number; userId: number;
       }
       if (!ordered.ok) return stop("The phone company did not buy this number. The balance and line account need another look.", tries.join(" | "));
       sent = true;
-      const owned = await lookupOwnedDid(input.did);
-      if (!owned.ok || !owned.owned) return stop("The order was sent, but the phone company has not listed this number yet.", owned.ok ? `orderDID succeeded but getDIDsInfo does not list ${input.did} yet. ${tries.join(" | ")}` : `orderDID succeeded. getDIDsInfo ${input.did}: ${owned.message}`, true);
     } else {
       sent = true;
     }
@@ -248,6 +246,7 @@ export async function purchaseNumber(input: { requestId: number; userId: number;
     if (linked) {
       recordFailure({ area: "number", userId: input.userId, subject: input.did, detail: `connectDID ${input.did} to ${sub.account} returned ${linked}.` });
     }
+    const confirmed = await lookupOwnedDid(input.did);
     const userId = input.userId;
     finishAfterResponse(async () => {
       await attachTrunk(lineId);
@@ -255,6 +254,11 @@ export async function purchaseNumber(input: { requestId: number; userId: number;
       const { sendEmergency } = await import("./e911");
       await sendEmergency(lineId);
     });
+    if (!confirmed.ok || !confirmed.owned) {
+      const reason = confirmed.ok ? `orderDID succeeded but getDIDsInfo does not list ${input.did} yet.` : `orderDID succeeded. getDIDsInfo ${input.did}: ${confirmed.message}`;
+      const linkNote = linked ? ` connectDID to ${sub.account} returned ${linked}.` : ` connectDID to ${sub.account} was sent.`;
+      return stop("The order was sent, but the phone company has not listed this number yet.", `${reason}${linkNote}`, true);
+    }
     if (linked) return { ok: false, pending: true, message: "The number was ordered. Linking it to the phone-company account still needs another look.", detail: `Number ${input.did} was ordered. connectDID to ${sub.account} returned ${linked}.` };
     const bought = "This number was bought on the phone-company account.";
     return { ok: true, message: bought, detail: bought };
