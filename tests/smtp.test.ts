@@ -4,7 +4,11 @@ import fs from "node:fs";
 import net from "net";
 import test from "node:test";
 import tls from "tls";
-import { ehloName, mailboxAddress, sendMail } from "../lib/smtp.ts";
+import { MAIL_REPLY_MS, ehloName, mailboxAddress, sendMail } from "../lib/smtp.ts";
+
+test("a mail server reply can take twenty seconds", () => {
+  assert.equal(MAIL_REPLY_MS, 20000);
+});
 
 test("the sender address and hello name come from the from line", () => {
   assert.equal(mailboxAddress("Support <hello@sauticall.com>"), "hello@sauticall.com");

@@ -15,7 +15,9 @@ export type OutboundMail = {
   inReplyTo?: string;
 };
 
-const SESSION_MS = 8000;
+export const MAIL_REPLY_MS = 20000;
+
+const SESSION_MS = MAIL_REPLY_MS;
 
 export function mailboxAddress(value: string) {
   const trimmed = value.trim();
