@@ -9,6 +9,9 @@ export async function Frame({ pathname, children }: { pathname: string; children
   const home = site.home;
   const talk = typeof home.headerTalk === "string" ? home.headerTalk : "Talk to us";
   const talkHref = typeof home.headerTalkHref === "string" ? home.headerTalkHref : "/contact";
+  const signInLabel = typeof home.headerSignIn === "string" && home.headerSignIn ? home.headerSignIn : "Sign in";
+  const startLabel = typeof home.headerCta === "string" && home.headerCta ? home.headerCta : "Get started";
+  const startHref = typeof home.headerCtaHref === "string" && home.headerCtaHref ? home.headerCtaHref : "/account/register";
   const auth = pathname === "/account/login" || pathname === "/account/register";
   const shell = pathname.startsWith("/admin") ? "" : auth ? "pub pub-auth" : "pub";
   return (
@@ -25,6 +28,9 @@ export async function Frame({ pathname, children }: { pathname: string; children
         accountLabel={user?.role === "customer" ? "Account" : "Admin"}
         talkLabel={talk}
         talkHref={talkHref}
+        signInLabel={signInLabel}
+        startLabel={startLabel}
+        startHref={startHref}
       />
       {children}
       {auth ? null : <SiteFooter theme={site.theme} footer={site.footer} />}

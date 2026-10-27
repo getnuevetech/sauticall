@@ -18,6 +18,8 @@ test("seeded access levels only use known permissions", () => {
   const website = ADMIN_NAV[0].links.map((link) => link.href);
   assert.ok(website.includes("/admin/theme"));
   assert.ok(website.includes("/admin/content/page.home"));
+  assert.ok(website.includes("/admin/content/page.help"));
+  assert.equal(permissionForDocument("page.help"), "content.faqs");
   assert.equal(website.includes("/admin/gateways"), false);
   assert.equal(website.includes("/admin/content/plans"), false);
   assert.ok(ADMIN_NAV.find((group) => group.title === "Catalog")?.links.some((link) => link.href === "/admin/content/plans"));

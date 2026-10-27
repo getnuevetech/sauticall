@@ -37,6 +37,9 @@ export function SiteHeader({
   accountLabel,
   talkLabel,
   talkHref,
+  signInLabel = "Sign in",
+  startLabel = "Get started",
+  startHref = "/account/register",
 }: {
   nav: NavLink[];
   theme: Theme;
@@ -47,9 +50,20 @@ export function SiteHeader({
   accountLabel: string;
   talkLabel: string;
   talkHref: string;
+  signInLabel?: string;
+  startLabel?: string;
+  startHref?: string;
 }) {
   const header = nav.filter((item) => item.location === "header");
   const mobile = nav.filter((item) => item.location === "mobile");
+  const solutionsMenu = nav.filter((item) => item.location === "menu");
+  const drops = solutionsMenu.length ? solutionsMenu : [
+    { label: "Phone system", href: "/solutions#phone" },
+    { label: "Desk & mobile", href: "/solutions#phones" },
+    { label: "AI receptionist", href: "/ai-receptionist" },
+    { label: "Contact center", href: "/solutions#center" },
+    { label: "Numbers & porting", href: "/solutions#numbers" },
+  ];
   return (
     <header className="site-header">
       <div className="wrap nav-inner">
@@ -59,11 +73,7 @@ export function SiteHeader({
             <span className="nav-drop" key={item.href + item.label}>
               <Link className={pathname === item.href ? "active" : ""} href={item.href}>{item.label} <Icon name="arrowdown" size={14} /></Link>
               <span className="nav-drop-menu">
-                <Link href="/solutions#phone">Phone system</Link>
-                <Link href="/solutions#phones">Desk & mobile</Link>
-                <Link href="/ai-receptionist">AI receptionist</Link>
-                <Link href="/solutions#center">Contact center</Link>
-                <Link href="/solutions#numbers">Numbers & porting</Link>
+                {drops.map((item) => <Link key={item.href + item.label} href={item.href}>{item.label}</Link>)}
               </span>
             </span>
           ) : (
@@ -71,19 +81,19 @@ export function SiteHeader({
           ))}
         </nav>
         <div className="nav-actions">
-          {signedIn ? <Link className="nav-sign nav-account" href={accountHref}>{accountLabel}</Link> : showSignIn ? <Link className="nav-sign" href="/account/login">Sign in</Link> : null}
+          {signedIn ? <Link className="nav-sign nav-account" href={accountHref}>{accountLabel}</Link> : showSignIn ? <Link className="nav-sign" href="/account/login">{signInLabel}</Link> : null}
           <Link className="nav-sign nav-talk" href={talkHref}>{talkLabel}</Link>
           {signedIn ? (
             <SignOut className="btn btn-primary nav-cta" />
           ) : (
-            <Link className="btn btn-primary nav-cta" href="/account/register">Get started <Icon name="arrow" size={17} /></Link>
+            <Link className="btn btn-primary nav-cta" href={startHref}>{startLabel} <Icon name="arrow" size={17} /></Link>
           )}
           <MenuButton />
         </div>
       </div>
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {signedIn ? <Link href={accountHref}>{accountLabel}</Link> : <Link href="/account/register">Get started</Link>}
-        {signedIn ? <SignOut className="nav-menu-action" /> : showSignIn ? <Link href="/account/login">Sign in</Link> : null}
+        {signedIn ? <Link href={accountHref}>{accountLabel}</Link> : <Link href={startHref}>{startLabel}</Link>}
+        {signedIn ? <SignOut className="nav-menu-action" /> : showSignIn ? <Link href="/account/login">{signInLabel}</Link> : null}
         <Link href={talkHref}>{talkLabel}</Link>
         {mobile.map((item) => <Link key={`m-${item.href}-${item.label}`} href={item.href}>{item.label}</Link>)}
       </nav>

@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import { normalizePlans } from "./plan-features";
+import { liveCopy, mergeMissingDeep, solutionsMenu } from "./public-copy";
 import { defaultFlags, defaultPages, defaultPersonas, defaultPlans } from "./seed-data";
 import type { Faq, Flag, NavLink, Persona, Plan } from "./types";
 
@@ -455,7 +456,32 @@ export function upgradeContent(database: Database.Database) {
     if (footerChanged) writeJson(database, "footer", footerCopy);
   }
 
-  for (const key of ["page.home", "page.solutions", "page.ai", "page.how", "page.about", "page.pricing", "page.contact", "page.custom", "page.account", "services", "faqs"]) {
+  for (const [key, extras] of Object.entries(liveCopy)) {
+    if (key === "page.help") {
+      const help = readJson<Record<string, unknown>>(database, key);
+      if (!help) {
+        database.prepare("INSERT INTO documents (key, json, updated_at) VALUES (?, ?, ?)").run(key, JSON.stringify(extras), new Date().toISOString());
+      } else if (mergeMissingDeep(help, extras)) writeJson(database, key, help);
+      continue;
+    }
+    const page = readJson<Record<string, unknown>>(database, key);
+    if (!page) continue;
+    let changed = mergeMissingDeep(page, extras);
+    if (key === "page.home" && page.headerCta === "Create account" && page.headerCtaHref === "/account/register") {
+      page.headerCta = "Get started";
+      changed = true;
+    }
+    if (changed) writeJson(database, key, page);
+  }
+  for (const link of solutionsMenu) {
+    const nav = readJson<NavLink[]>(database, "nav");
+    if (nav && !nav.some((item) => item.href === link.href && item.location === link.location)) {
+      nav.push(link);
+      writeJson(database, "nav", nav);
+    }
+  }
+
+  for (const key of ["page.home", "page.solutions", "page.ai", "page.how", "page.about", "page.pricing", "page.contact", "page.custom", "page.account", "page.help", "services", "faqs"]) {
     const current = readJson<unknown>(database, key);
     if (!current) continue;
     const cleaned = scrubCustomerValue(current);
