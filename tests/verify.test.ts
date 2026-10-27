@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { challengeOpen, codesMatch, hashCode, normalizeMobile } from "../lib/verify-code.ts";
+import { acceptsTestCode, challengeOpen, codesMatch, hashCode, normalizeMobile } from "../lib/verify-code.ts";
+import { defaultFlags } from "../lib/seed-data.ts";
+
+test("123456 is accepted only while the temporary test code is on", () => {
+  assert.equal(acceptsTestCode("123456", true), true);
+  assert.equal(acceptsTestCode("123 456", true), true);
+  assert.equal(acceptsTestCode("123456", false), false);
+  assert.equal(acceptsTestCode("654321", true), false);
+  const flag = defaultFlags.find((item) => item.key === "auth.test_code");
+  assert.equal(flag?.label, "Temporary test code");
+  assert.equal(flag?.enabled, false);
+});
 
 test("a mobile number is stored with a country code", () => {
   assert.equal(normalizeMobile("(202) 555-0100"), "+12025550100");
