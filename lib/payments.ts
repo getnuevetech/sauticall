@@ -57,7 +57,7 @@ function attemptById(id: number) {
 }
 
 async function postForm(url: string, headers: Record<string, string>, body: URLSearchParams) {
-  const response = await fetch(url, { method: "POST", headers, body, cache: "no-store", signal: AbortSignal.timeout(20000) });
+  const response = await fetch(url, { method: "POST", headers, body, cache: "no-store", signal: AbortSignal.timeout(8000) });
   const payload = await response.json().catch(() => null);
   return { response, payload };
 }
@@ -93,7 +93,7 @@ export async function testGateway(id: number) {
       const response = await fetch("https://api.stripe.com/v1/balance", {
         headers: { authorization: `Bearer ${secret.key}` },
         cache: "no-store",
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(8000),
       });
       const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
       if (!response.ok) throw new Error(payload?.error?.message || "Stripe did not accept the secret key.");
@@ -105,7 +105,7 @@ export async function testGateway(id: number) {
       const response = await fetch(`${squareHost(gateway.mode)}/v2/locations/${encodeURIComponent(config.location_id)}`, {
         headers: { authorization: `Bearer ${secret.key}`, "Square-Version": "2026-09-16" },
         cache: "no-store",
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(8000),
       });
       const payload = (await response.json().catch(() => null)) as { errors?: { detail?: string }[] } | null;
       if (!response.ok) throw new Error(payload?.errors?.[0]?.detail || "Square did not accept the access token.");
@@ -170,7 +170,7 @@ export async function beginCheckout(attemptId: number, origin: string): Promise<
           payment_source: { paypal: { experience_context: { return_url: `${origin}/pay/${attempt.id}`, cancel_url: `${origin}/pay/${attempt.id}?cancelled=1`, user_action: "PAY_NOW" } } },
         }),
         cache: "no-store",
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(8000),
       });
       const order = (await response.json().catch(() => null)) as { id?: string; links?: { rel?: string; href?: string }[]; message?: string } | null;
       const url = order?.links?.find((link) => link.rel === "payer-action" || link.rel === "approve")?.href;
@@ -189,7 +189,7 @@ export async function beginCheckout(attemptId: number, origin: string): Promise<
           checkout_options: { redirect_url: `${origin}/pay/${attempt.id}` },
         }),
         cache: "no-store",
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(8000),
       });
       const payload = (await response.json().catch(() => null)) as { payment_link?: { url?: string; order_id?: string }; errors?: { detail?: string }[] } | null;
       const link = payload?.payment_link;
@@ -238,7 +238,7 @@ export async function confirmReturn(attemptId: number, query: { session_id?: str
       const response = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(attempt.provider_ref)}`, {
         headers: { authorization: `Bearer ${secret.key}` },
         cache: "no-store",
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(8000),
       });
       const session = (await response.json().catch(() => null)) as { payment_status?: string; amount_total?: number; client_reference_id?: string; currency?: string } | null;
       if (response.ok && session?.payment_status === "paid" && session.client_reference_id === String(attempt.id) && session.amount_total === attempt.amount_cents && session.currency?.toUpperCase() === attempt.currency) {
@@ -250,7 +250,7 @@ export async function confirmReturn(attemptId: number, query: { session_id?: str
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
         cache: "no-store",
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(8000),
       });
       const order = (await response.json().catch(() => null)) as { status?: string; purchase_units?: { amount?: { value?: string; currency_code?: string }; custom_id?: string }[] } | null;
       const unit = order?.purchase_units?.[0];
@@ -261,7 +261,7 @@ export async function confirmReturn(attemptId: number, query: { session_id?: str
       const response = await fetch(`${squareHost(gateway.mode)}/v2/orders/${encodeURIComponent(attempt.provider_ref)}`, {
         headers: { authorization: `Bearer ${secret.key}`, "Square-Version": "2026-09-16" },
         cache: "no-store",
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(8000),
       });
       const payload = (await response.json().catch(() => null)) as { order?: { state?: string; total_money?: { amount?: number; currency?: string } } } | null;
       const order = payload?.order;

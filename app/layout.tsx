@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./design.css";
 import "./public.css";
+import { ClickAck } from "@/components/site/ClickAck";
 import { loadSite } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body><ClickAck />{children}</body>
     </html>
   );
 }

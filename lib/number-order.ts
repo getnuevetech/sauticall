@@ -31,6 +31,7 @@ export function customerNumberStatus(status: string, providerRef: string, did: s
   if (status === "ordered" || status === "completed") return numberIsBought(status, providerRef, did) ? "Bought" : "Needs attention";
   const labels: Record<string, string> = {
     requested: "Saved",
+    ordering: "Buying",
     submitted: "Sent",
     exception: "Needs attention",
     cancelled: "Cancelled",

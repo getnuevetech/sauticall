@@ -86,6 +86,7 @@ export function NumberSearch({
           <input type="hidden" name="country" value={country} />
           <input type="hidden" name="region" value={item.state || ""} />
           <input type="hidden" name="ratecenter" value={item.ratecenter} />
+          <input type="hidden" name="monthly" value={item.monthly} />
           <strong>{item.did}</strong>
           <p>{[item.ratecenter, item.state, item.monthly ? `$${item.monthly}/mo` : ""].filter(Boolean).join(" · ")}</p>
           <label className="check-option num-terms"><input name="number_terms" type="checkbox" required /> I agree to the Terms of Service for this number.</label>

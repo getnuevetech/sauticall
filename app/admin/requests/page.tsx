@@ -5,12 +5,13 @@ import { requestStatusLabel, requestStatuses } from "@/lib/admin-labels";
 import { flagOn, getDb } from "@/lib/db";
 import { numberIsBought, numberPurchaseMode } from "@/lib/number-order";
 import { reconcileBoughtNumbers } from "@/lib/number-purchase";
+import { after } from "next/server";
 
 type Row = { id: number; email: string; kind: string; payload: string; status: string; provider_ref: string; staff_note: string; created_at: string };
 
 export default async function RequestsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   await requirePermission("inbox.requests");
-  await reconcileBoughtNumbers();
+  after(() => reconcileBoughtNumbers());
   const params = await searchParams;
   const rows = getDb().prepare(
     `SELECT r.id, u.email, r.kind, r.payload, r.status, r.provider_ref, r.staff_note, r.created_at

@@ -100,6 +100,11 @@ export async function sendMail(message: OutboundMail) {
       const next = message.secure
         ? tls.connect({ host: message.host, port: message.port, servername: message.host }, () => resolve(next))
         : net.connect({ host: message.host, port: message.port }, () => resolve(next));
+      next.setTimeout(5000);
+      next.once("timeout", () => {
+        next.destroy();
+        reject(new Error("The mail server took too long."));
+      });
       next.once("error", reject);
     });
     let reader = createReader(socket);

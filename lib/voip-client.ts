@@ -51,14 +51,32 @@ async function connectDid(did: string, account: string) {
   const result = await callVoipms("connectDID", {
     did,
     account,
-    monthly: "0",
-    setup: "0",
-    minute: "0",
+    monthly: "0.00",
+    setup: "0.00",
+    minute: "0.00",
     dont_charge_setup: "true",
     dont_charge_monthly: "true",
   });
   if (result.ok || /already|connect|duplicate/i.test(result.status)) return "";
   return result.status;
+}
+
+export async function billDidToClient(did: string, account: string, fees: { monthly: string; setup: string; minute: string }, alreadyCharged: boolean) {
+  const result = await callVoipms("connectDID", {
+    did,
+    account,
+    monthly: fees.monthly,
+    setup: fees.setup,
+    minute: fees.minute,
+    ...(alreadyCharged ? { dont_charge_setup: "true", dont_charge_monthly: "true" } : {}),
+  });
+  if (result.ok || /already|connect|duplicate/i.test(result.status)) return "";
+  return result.status;
+}
+
+export async function readFundedBalance(clientId: string) {
+  const current = await callVoipms("getResellerBalance", { client: clientId });
+  return current.ok ? readClientBalance(current.body) : null;
 }
 
 export async function syncCustomerDids(userId: number) {

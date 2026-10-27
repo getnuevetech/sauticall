@@ -56,7 +56,7 @@ function voipmsEndpoint(value: string) {
   return url;
 }
 
-export async function callVoipms(method: string, params: Record<string, string>) {
+export async function callVoipms(method: string, params: Record<string, string>, timeoutMs = 5000) {
   try {
     const connection = getConnection("voipms");
     if (!connection.enabled || !connection.public.api_username || !connection.secret) {
@@ -70,7 +70,7 @@ export async function callVoipms(method: string, params: Record<string, string>)
     for (const [key, value] of Object.entries(params)) {
       if (value) url.searchParams.set(key, value);
     }
-    const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(20000) });
+    const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(timeoutMs) });
     const body = (await response.json().catch(() => null)) as { status?: string } | null;
     const status = body?.status || `http_${response.status}`;
     return { ok: status === "success", status, message: status, body };
@@ -86,12 +86,19 @@ export function inventoryReady() {
   return Boolean(connection.enabled && connection.hasSecret && connection.public.api_username);
 }
 
+const placeCache = new Map<string, { at: number; places: string[] }>();
+
 export async function listRateCenters(country: string, region: string) {
+  const cacheKey = `${country}:${region.toUpperCase()}`;
+  const cached = placeCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < 10 * 60 * 1000) return { ok: true, message: "", places: cached.places };
   const method = country === "CA" ? "getRateCentersCAN" : "getRateCentersUSA";
   const key = country === "CA" ? "province" : "state";
   const result = await callVoipms(method, { [key]: region.toUpperCase() });
   if (!result.ok) return { ok: false, message: result.message, places: [] as string[] };
-  return { ok: true, message: "", places: readRateCenters(result.body) };
+  const places = readRateCenters(result.body);
+  placeCache.set(cacheKey, { at: Date.now(), places });
+  return { ok: true, message: "", places };
 }
 
 export async function listedCity(country: string, region: string, city: string) {
@@ -122,18 +129,13 @@ export async function searchPatternDids(country: string, region: string, search:
   return { ok: true, message: "success", dids };
 }
 
-export async function findInventoryDid(country: string, region: string, ratecenter: string, did: string) {
+export async function findInventoryDid(country: string, region: string, _ratecenter: string, did: string) {
   const wanted = did.replace(/\D/g, "");
   const normalized = wanted.length === 11 && wanted.startsWith("1") ? wanted.slice(1) : wanted;
   if (!/^[2-9]\d{9}$/.test(normalized)) return null;
-  const centers = ratecenter ? [ratecenter, ""] : [""];
-  for (const center of centers) {
-    const result = await searchDids(country, region, center, 0);
-    const match = result.dids.find((item) => item.did.replace(/\D/g, "").replace(/^1(\d{10})$/, "$1") === normalized);
-    if (match) return { ...match, did: normalized };
-    if (!result.ok && center === "") return null;
-  }
-  return null;
+  const result = await searchPatternDids(country, region, { mode: "number", query: normalized }, 5);
+  const match = result.dids.find((item) => item.did.replace(/\D/g, "").replace(/^1(\d{10})$/, "$1") === normalized);
+  return match ? { ...match, did: normalized } : null;
 }
 
 export async function lookupOwnedDid(did: string) {
@@ -146,21 +148,22 @@ export async function lookupOwnedDid(did: string) {
   return { ok: true as const, owned, message: owned ? "success" : "missing" };
 }
 
-export async function orderDid(did: string, routingOverride?: string, resellerAccount?: string) {
+export async function orderDid(did: string, routingOverride?: string, resellerAccount?: string, fees?: { monthly: string; setup: string; minute: string }) {
   const connection = getConnection("voipms");
   const routing = routingOverride || connection.public.routing;
   const pop = connection.public.pop;
   const dialtime = connection.public.dialtime || "60";
-  if (!routing || !pop) return { ok: false, message: "Set the VoIP.ms routing and POP in Connections before ordering." };
+  if (!routing || !pop) return { ok: false, status: "not_configured", message: "Set the VoIP.ms routing and POP in Connections before ordering." };
+  const rates = fees || { monthly: "0.00", setup: "0.00", minute: "0.00" };
   return callVoipms("orderDID", {
     did,
     routing,
-    ...(resellerAccount ? { account: resellerAccount } : {}),
+    ...(resellerAccount ? { account: resellerAccount, monthly: rates.monthly, setup: rates.setup, minute: rates.minute } : {}),
     pop,
     dialtime,
     cnam: connection.public.cnam === "1" ? "1" : "0",
     billing_type: connection.public.billing_type === "2" ? "2" : "1",
-  });
+  }, 12000);
 }
 
 export async function submitPort(params: Record<string, string>) {
@@ -207,19 +210,24 @@ export async function testVoipms() {
   }
 }
 
+let cachedPbxToken: { key: string; origin: string; token: string; expires: number } | null = null;
+
 async function accessToken(connection: ReturnType<typeof getConnection>) {
   if (!connection.enabled || !connection.public.base_url || !connection.public.client_id || !connection.secret) {
     throw new Error("3CX is not enabled or is missing credentials.");
   }
   const origin = httpsHost(connection.public.base_url);
+  const key = `${origin}|${connection.public.client_id}|${connection.secret.length}:${connection.secret.slice(-4)}`;
+  if (cachedPbxToken && cachedPbxToken.key === key && cachedPbxToken.expires > Date.now()) return { origin: cachedPbxToken.origin, token: cachedPbxToken.token };
   const tokenResponse = await fetch(`${origin}/connect/token`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ client_id: connection.public.client_id, client_secret: connection.secret, grant_type: "client_credentials" }),
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(5000),
   });
   const token = (await tokenResponse.json().catch(() => null)) as { access_token?: string } | null;
   if (!tokenResponse.ok || !token?.access_token) throw new Error("3CX did not return an access token.");
+  cachedPbxToken = { key, origin, token: token.access_token, expires: Date.now() + 10 * 60 * 1000 };
   return { origin, token: token.access_token };
 }
 
@@ -236,7 +244,7 @@ export async function pbxRequest(path: string, init: { method?: string; body?: u
       },
       body: init.body ? JSON.stringify(init.body) : undefined,
       cache: "no-store",
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(5000),
     });
     const text = await response.text();
     const body = parseBody(text);
@@ -273,7 +281,7 @@ export async function test3cx() {
     const { origin, token } = await accessToken(connection);
     const defs = await fetch(`${origin}/xapi/v1/Defs?$select=Id`, {
       headers: { authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(5000),
     });
     const version = defs.headers.get("x-3cx-version") || "";
     if (!defs.ok) {
