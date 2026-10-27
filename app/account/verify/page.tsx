@@ -32,7 +32,7 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
     params.email === "ok" ? "Email confirmed." : "",
     params.phone === "ok" ? "Mobile number confirmed." : "",
     params.email === "sent" ? "Confirmation email sent." : "",
-    params.email === "waiting" ? "The confirmation email has not gone out yet. Send it again once outgoing email is set up." : "",
+    params.email === "waiting" && !params.error ? "The confirmation email has not gone out yet. Send it again once outgoing email is set up." : "",
     params.sms === "sent" ? "A code was texted to your mobile number." : "",
     params.sms === "waiting" && !status.smsReady ? "Your number is saved. A text message with the code will be sent when text messages are turned on." : "",
     params.sms === "waiting" && status.smsReady && !params.error ? "If the text message does not arrive, send the code again." : "",

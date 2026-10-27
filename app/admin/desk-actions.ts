@@ -8,7 +8,7 @@ import { hashPassword } from "@/lib/auth";
 import { audit, getDb } from "@/lib/db";
 import { slugify } from "@/lib/faq-markdown";
 import { parseMailPayload } from "@/lib/mail-parse";
-import { createStaffTicket, findCustomersByEmail, receiveMail, rotateInboundSecret, saveGroupMembers, saveMail, saveTicketGroup, saveTopic, setTicketFields, staffReply } from "@/lib/tickets";
+import { createStaffTicket, findCustomersByEmail, mailSettings, receiveMail, rotateInboundSecret, saveGroupMembers, saveMail, saveTicketGroup, saveTopic, setTicketFields, staffReply } from "@/lib/tickets";
 
 function back(path: string, error: string): never {
   redirect(`${path}?error=${encodeURIComponent(error)}`);
@@ -239,6 +239,38 @@ export async function saveOutboundMail(formData: FormData) {
   });
   audit(user.email, "ticket.mail", result.ok ? "saved" : "failed");
   redirect("/admin/tickets/settings");
+}
+
+export async function sendTestMail(formData: FormData) {
+  const user = await requirePermission("tickets.manage");
+  const to = String(formData.get("to") || "").trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) back("/admin/tickets/settings", "Enter an email address for the test.");
+  const { sendMail } = await import("@/lib/smtp");
+  const { recordFailure } = await import("@/lib/failure-log");
+  const settings = mailSettings();
+  if (!settings?.smtp_host || !settings.smtp_from) {
+    const detail = "Outgoing email is not set up, so the test was not sent.";
+    recordFailure({ area: "email", userId: user.id, subject: to, detail });
+    back("/admin/tickets/settings", detail);
+  }
+  const result = await sendMail({
+    host: settings.smtp_host,
+    port: Number(settings.smtp_port) || 587,
+    user: settings.smtp_user,
+    pass: settings.smtp_pass,
+    secure: settings.smtp_secure === 1,
+    from: settings.smtp_from,
+    to: [to],
+    subject: "SautiCall test email",
+    text: "This is a test from SautiCall. Account confirmation emails use this same outgoing mail.",
+    messageId: `sc-test-${Date.now()}@sauticall`,
+  });
+  if (!result.ok) {
+    recordFailure({ area: "email", userId: user.id, subject: to, detail: result.message });
+    back("/admin/tickets/settings", result.message);
+  }
+  audit(user.email, "ticket.mail", "test");
+  redirect("/admin/tickets/settings?sent=1");
 }
 
 export async function rotateMailSecret() {

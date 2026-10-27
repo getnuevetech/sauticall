@@ -89,20 +89,22 @@ export async function register(_previous: FormState, formData: FormData) {
   const { requestOrigin } = await import("@/lib/payments");
   const { sendAccountEmail, sendAccountSms } = await import("@/lib/account-verify");
   const origin = await requestOrigin();
-  const emailWork = sendAccountEmail(user.id, origin).catch(() => ({ ok: false as const }));
-  const smsWork = sendAccountSms(user.id).catch(() => ({ ok: false as const }));
   const [emailResult, smsResult] = await Promise.all([
-    Promise.race([emailWork, new Promise<{ ok: false }>((resolve) => setTimeout(() => resolve({ ok: false }), 2000))]),
-    Promise.race([smsWork, new Promise<{ ok: false }>((resolve) => setTimeout(() => resolve({ ok: false }), 2000))]),
+    sendAccountEmail(user.id, origin).catch(() => ({ ok: false as const, message: "The confirmation email could not be sent. Try again shortly." })),
+    sendAccountSms(user.id).catch(() => ({ ok: false as const, message: "The text message could not be sent. Try again in a minute." })),
   ]);
-  after(() => Promise.allSettled([emailWork, smsWork]));
   const id = user.id;
   after(() => {
     void import("@/lib/voip-client").then(({ provisionCustomer }) => provisionCustomer(id)).catch(() => undefined);
   });
   audit(email, "auth.register", planName || "customer");
-  const next = planName ? `&plan=${encodeURIComponent(planName)}` : "";
-  redirect(`/account/verify?email=${emailResult.ok ? "sent" : "waiting"}&sms=${smsResult.ok ? "sent" : "waiting"}${next}`);
+  const query = new URLSearchParams({
+    email: emailResult.ok ? "sent" : "waiting",
+    sms: smsResult.ok ? "sent" : "waiting",
+  });
+  if (planName) query.set("plan", planName);
+  if (!emailResult.ok && emailResult.message) query.set("error", emailResult.message);
+  redirect(`/account/verify?${query}`);
 }
 
 export async function confirmEmailCode(_previous: FormState, formData: FormData) {
