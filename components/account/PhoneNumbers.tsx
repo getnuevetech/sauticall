@@ -96,6 +96,7 @@ export function PhoneNumbers({
   const [where, setWhere] = useState("");
   const [addressOpen, setAddressOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const [country, setCountry] = useState(defaults.country || "US");
   const canBuy = hasAddress && phoneVerified;
 
@@ -265,7 +266,7 @@ export function PhoneNumbers({
                           <td>{formatPhone(item.did)}</td>
                           <td>{location || where}</td>
                           <td>{monthlyPrice(item.monthly) || "Shown at review"}</td>
-                          <td><button type="button" className={active ? "ws-btn primary" : "ws-btn ghost num-outline"} onClick={() => setSelected(item)}>{active ? "Selected" : "Select"}</button></td>
+                          <td><button type="button" className={active ? "ws-btn primary" : "ws-btn ghost num-outline"} onClick={() => { if (selected?.did !== item.did) setAgreed(false); setSelected(item); }}>{active ? "Selected" : "Select"}</button></td>
                         </tr>
                       );
                     })}
@@ -301,9 +302,15 @@ export function PhoneNumbers({
               </div>
               {hasAddress ? <p>{addressLine}</p> : <p>Add your address to continue. <button type="button" className="num-link" onClick={() => setAddressOpen(true)}>Add address</button></p>}
               {selected ? (
-                <button className="ws-btn primary" type="button" disabled={!canBuy} onClick={() => setConfirmOpen(true)}>Review purchase</button>
+                <label className="check-option num-terms">
+                  <input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} />
+                  I agree to the Terms of Service for this number.
+                </label>
+              ) : null}
+              {selected ? (
+                <button className="ws-btn primary" type="button" disabled={!agreed} onClick={() => setConfirmOpen(true)}>Review purchase</button>
               ) : <button className="ws-btn" type="button" disabled>Review purchase</button>}
-              <p>Review purchase shows the number again. The number is bought only after you confirm.</p>
+              <p>{selected && !agreed ? "Agree to the Terms of Service to review this purchase." : "Review purchase shows the number again. The number is bought only after you confirm."}</p>
             </section>
             <section className="num-card num-transfer">
               <div className="num-transfer-title">
@@ -336,8 +343,10 @@ export function PhoneNumbers({
             <input type="hidden" name="region" value={selected.state} />
             <input type="hidden" name="ratecenter" value={selected.ratecenter} />
             <input type="hidden" name="monthly" value={selected.monthly} />
-            <label className="check-option num-terms"><input name="number_terms" type="checkbox" required /> I agree to the Terms of Service for this number.</label>
-            <BuyButton ready={canBuy} />
+            <label className="check-option num-terms"><input name="number_terms" type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} required /> I agree to the Terms of Service for this number.</label>
+            {!phoneVerified ? <p>Confirm your mobile number before this purchase can be completed.</p> : null}
+            {!hasAddress ? <p>Add an address before this purchase can be completed.</p> : null}
+            <BuyButton ready={canBuy && agreed} />
             <button className="ws-btn ghost" type="button" onClick={() => setConfirmOpen(false)}>Keep looking</button>
           </form>
         </div>
