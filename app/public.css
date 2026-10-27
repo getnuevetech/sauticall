@@ -6,14 +6,14 @@
 .pub p{color:#667085}
 .pub em{color:#2f5bff;font-style:normal}
 .pub .wrap{width:min(1120px,calc(100% - 40px))}
-.pub .site-header{background:#fff;border-bottom:1px solid #e7edf5}
+.pub .site-header{background:#fff;border-bottom:1px solid #e7edf5;backdrop-filter:none;-webkit-backdrop-filter:none}
 .pub .nav-inner{height:72px}
 .pub .brand{font-size:1.25rem;color:#172033}
 .pub .brand-accent{color:#2f5bff}
 .pub .brand-mark{background:#2f5bff;border-color:#2f5bff;border-radius:10px;transform:none}
 .pub .desktop-nav{gap:22px}
-.pub .desktop-nav a,.pub .nav-drop>a{color:#475467;font-weight:650;font-size:.94rem}
-.pub .desktop-nav a.active,.pub .desktop-nav a:hover,.pub .nav-drop>a.active{color:#2f5bff}
+.pub .desktop-nav a,.pub .nav-drop>a,.pub .nav-drop>button{color:#475467;font-weight:650;font-size:.94rem}
+.pub .desktop-nav a.active,.pub .desktop-nav a:hover,.pub .nav-drop>a.active,.pub .nav-drop>button.active,.pub .nav-drop>button:hover,.pub .nav-drop[data-open]>button{color:#2f5bff}
 .pub .nav-talk{display:none}
 .pub .nav-sign{color:#344054;font-weight:700}
 .pub .btn{border-radius:10px;padding:11px 16px;box-shadow:none}
@@ -23,8 +23,10 @@
 .pub .btn-secondary:hover{border-color:#2f5bff;background:#f5f8ff}
 .pub .nav-cta{padding:10px 14px}
 .pub .nav-drop{position:relative;display:inline-flex;align-items:center}
-.pub .nav-drop-menu{display:none;position:absolute;top:calc(100% - 4px);left:-12px;min-width:210px;background:#fff;border:1px solid #e6ebf2;border-radius:12px;padding:8px;box-shadow:0 16px 40px #17203314;z-index:20}
-.pub .nav-drop:hover .nav-drop-menu,.pub .nav-drop:focus-within .nav-drop-menu{display:grid}
+.pub .nav-drop>button{display:inline-flex;align-items:center;gap:4px;background:none;border:0;padding:8px 0;cursor:pointer}
+.pub .nav-drop-menu{display:none;position:absolute;top:100%;left:-12px;min-width:210px;background:#fff;border:1px solid #e6ebf2;border-radius:12px;padding:8px;box-shadow:0 16px 40px #17203314;z-index:20}
+.pub .nav-drop[data-open] .nav-drop-menu{display:grid}
+@media (hover:hover) and (pointer:fine){.pub .nav-drop:hover .nav-drop-menu{display:grid}}
 .pub .nav-drop-menu a{display:block;padding:8px 10px;border-radius:8px;color:#1d2433}
 .pub .nav-drop-menu a:hover{background:#f4f7fb;color:#2f5bff}
 .pub .site-footer{background:#0e2a4a;padding:56px 0 18px}

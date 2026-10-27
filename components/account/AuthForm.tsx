@@ -1,13 +1,9 @@
 "use client";
 
-import { useFormStatus } from "react-dom";
+import { useActionState } from "react";
 import { useState } from "react";
 
-function SubmitButton({ label, className }: { label: string; className: string }) {
-  const { pending } = useFormStatus();
-  const waiting = label.startsWith("Create") ? "Creating account…" : label.startsWith("Sign") ? "Signing in…" : "Please wait…";
-  return <button className={className} type="submit" disabled={pending} aria-busy={pending}>{pending ? waiting : label}</button>;
-}
+type FormState = { error: string } | null;
 
 export function AuthForm({
   action,
@@ -17,39 +13,37 @@ export function AuthForm({
   className = "contact-form",
   submitClassName = "btn btn-primary",
 }: {
-  action: (formData: FormData) => Promise<{ error: string } | void>;
+  action: (previous: FormState, formData: FormData) => Promise<FormState | void>;
   submit: string;
   fields: { name: string; label: string; type?: string; placeholder?: string }[];
   extra?: React.ReactNode;
   className?: string;
   submitClassName?: string;
 }) {
-  const [error, setError] = useState("");
+  const [state, formAction, pending] = useActionState(
+    action as (previous: FormState, formData: FormData) => Promise<FormState>,
+    null,
+  );
   const [shown, setShown] = useState<Record<string, boolean>>({});
+  const waiting = submit.startsWith("Create") ? "Creating account…" : submit.startsWith("Sign") ? "Signing in…" : "Please wait…";
   return (
-    <form
-      className={className}
-      action={async (formData) => {
-        const result = await action(formData);
-        if (result?.error) setError(result.error);
-      }}
-    >
+    <form className={className} action={formAction}>
       {fields.map((field) => (
         <label key={field.name}>
           {field.label}
           {field.type === "password" ? (
             <span className="pub-pass">
-              <input name={field.name} type={shown[field.name] ? "text" : "password"} placeholder={field.placeholder} required />
+              <input name={field.name} type={shown[field.name] ? "text" : "password"} placeholder={field.placeholder} autoComplete={submit.startsWith("Create") ? "new-password" : "current-password"} required />
               <button type="button" onClick={() => setShown((current) => ({ ...current, [field.name]: !current[field.name] }))}>{shown[field.name] ? "Hide" : "Show"}</button>
             </span>
           ) : (
-            <input name={field.name} type={field.type || "text"} placeholder={field.placeholder} required />
+            <input name={field.name} type={field.type || "text"} placeholder={field.placeholder} autoComplete={field.type === "email" ? "username" : field.type === "tel" ? "tel" : undefined} required />
           )}
         </label>
       ))}
       {extra}
-      <SubmitButton label={submit} className={submitClassName} />
-      {error ? <div className="form-feedback">{error}</div> : null}
+      <button className={submitClassName} type="submit" disabled={pending} aria-busy={pending}>{pending ? waiting : submit}</button>
+      {state?.error ? <div className="form-feedback">{state.error}</div> : null}
     </form>
   );
 }

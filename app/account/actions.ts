@@ -12,8 +12,11 @@ import {
   verifyPassword,
 } from "@/lib/auth";
 import { safeCustomerError } from "@/lib/customer-message";
+import { finishAfterResponse } from "@/lib/later";
 import { audit, flagOn, getDb } from "@/lib/db";
 import { accountNeedsMfa, revealBlock } from "@/lib/mfa";
+
+type FormState = { error: string } | null;
 
 type UserRow = {
   id: number;
@@ -26,21 +29,19 @@ type UserRow = {
   disabled?: number;
 };
 
-export async function login(formData: FormData) {
+export async function login(_previous: FormState, formData: FormData) {
   if (!flagOn("auth.password_login")) return { error: "Password sign-in is turned off by an administrator." };
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
   const user = getDb().prepare("SELECT * FROM users WHERE email = ?").get(email) as UserRow | undefined;
-  if (!user || !verifyPassword(password, user.password_hash)) return { error: "Email or password is incorrect." };
+  if (!user || !(await verifyPassword(password, user.password_hash))) return { error: "Email or password is incorrect." };
   if (user.disabled) return { error: "This account is turned off. An administrator can turn it back on." };
   const needsMfa = accountNeedsMfa(user);
   const needsCode = needsMfa && Boolean(user.mfa_secret);
   await createSession(user.id, needsCode);
   if (user.role === "customer") {
     const id = user.id;
-    after(() => {
-      void import("@/lib/voip-client").then(({ provisionCustomer }) => provisionCustomer(id)).catch(() => undefined);
-    });
+    finishAfterResponse(() => import("@/lib/voip-client").then(({ provisionCustomer }) => provisionCustomer(id)));
   }
   audit(user.email, "auth.login", needsCode ? "mfa-pending" : "password");
   if (needsCode) redirect("/account/login?step=code");
@@ -48,7 +49,7 @@ export async function login(formData: FormData) {
   redirect(user.role === "customer" ? "/account" : "/admin");
 }
 
-export async function confirmMfa(formData: FormData) {
+export async function confirmMfa(_previous: FormState, formData: FormData) {
   const user = await currentUser();
   if (!user?.mfa_secret) return { error: "Sign in again to continue." };
   const code = String(formData.get("code") || "");
@@ -58,7 +59,7 @@ export async function confirmMfa(formData: FormData) {
   redirect(user.role === "customer" ? "/account" : "/admin");
 }
 
-export async function register(formData: FormData) {
+export async function register(_previous: FormState, formData: FormData) {
   if (!flagOn("auth.signup")) return { error: "New registrations are turned off by an administrator." };
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
@@ -104,7 +105,7 @@ export async function register(formData: FormData) {
   redirect(`/account/verify?email=${emailResult.ok ? "sent" : "waiting"}&sms=${smsResult.ok ? "sent" : "waiting"}${next}`);
 }
 
-export async function confirmEmailCode(formData: FormData) {
+export async function confirmEmailCode(_previous: FormState, formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
   const { confirmEmailCode: confirm } = await import("@/lib/account-verify");
@@ -113,7 +114,7 @@ export async function confirmEmailCode(formData: FormData) {
   redirect("/account/verify?email=ok");
 }
 
-export async function confirmPhoneCode(formData: FormData) {
+export async function confirmPhoneCode(_previous: FormState, formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
   const { confirmSmsCode } = await import("@/lib/account-verify");
@@ -132,7 +133,7 @@ export async function resendEmailVerification() {
   redirect("/account/verify?email=sent");
 }
 
-export async function saveMobile(formData: FormData) {
+export async function saveMobile(_previous: FormState, formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
   const { normalizeMobile } = await import("@/lib/verify-code");
@@ -162,7 +163,7 @@ export async function logout() {
   redirect("/");
 }
 
-export async function enrollMfa(formData: FormData) {
+export async function enrollMfa(_previous: FormState, formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
   const secret = String(formData.get("secret") || "");
@@ -206,7 +207,7 @@ export async function revealAppPassword(extensionId: number, code: string): Prom
   return { password: row.access_password };
 }
 
-export async function startCheckout(formData: FormData) {
+export async function startCheckout(_previous: FormState, formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
   if (!flagOn("billing.checkout")) return { error: "Checkout is turned off by an administrator." };

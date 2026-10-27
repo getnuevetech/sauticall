@@ -12,16 +12,20 @@ export function ClickAck() {
     let timer = 0;
     const onClick = (event: MouseEvent) => {
       const node = event.target instanceof Element ? event.target.closest("a[href], button") : null;
-      if (!node || (node instanceof HTMLButtonElement && node.disabled)) return;
+      if (!node || (node instanceof HTMLButtonElement && (node.disabled || node.type === "button"))) return;
+      if (node instanceof HTMLAnchorElement) {
+        const href = node.getAttribute("href") || "";
+        if (!href || href.startsWith("#") || node.target === "_blank") return;
+      }
       document.documentElement.setAttribute("data-busy", "1");
       window.clearTimeout(timer);
-      timer = window.setTimeout(() => document.documentElement.removeAttribute("data-busy"), 8000);
+      timer = window.setTimeout(() => document.documentElement.removeAttribute("data-busy"), 4000);
     };
-    document.addEventListener("click", onClick, true);
+    document.addEventListener("click", onClick);
     return () => {
-      document.removeEventListener("click", onClick, true);
+      document.removeEventListener("click", onClick);
       window.clearTimeout(timer);
     };
   }, []);
-  return <style>{`html[data-busy]::before{content:"";position:fixed;z-index:80;top:0;left:0;height:3px;width:35%;background:#354bc8;pointer-events:none;animation:sc-busy .8s ease-out infinite}@keyframes sc-busy{50%{width:70%;left:15%}100%{width:35%;left:65%}}`}</style>;
+  return <style>{`html[data-busy]::before{content:"";position:fixed;z-index:200;top:0;left:0;height:3px;width:100%;background:#2f5bff;pointer-events:none;transform-origin:0 0;animation:sc-busy 1.1s ease-out forwards}@keyframes sc-busy{from{transform:scaleX(.12)}to{transform:scaleX(.92)}}`}</style>;
 }
