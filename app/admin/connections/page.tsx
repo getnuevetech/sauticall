@@ -1,8 +1,9 @@
 import { saveConnection, testConnection } from "../actions";
 import { PlaceSelects } from "@/components/account/PlaceSelects";
 import { requirePermission } from "@/lib/access";
-import { getConnection } from "@/lib/carriers";
 import { dialTimeChoices, withCurrent } from "@/lib/admin-choices";
+import { getConnection } from "@/lib/carriers";
+import { lineCodecs } from "@/lib/line-codecs";
 
 function VoipForm() {
   const connection = getConnection("voipms");
@@ -38,7 +39,8 @@ function VoipForm() {
           </label>
           <label className="check-option"><input type="checkbox" name="lock_international" defaultChecked={config.lock_international === "1"} /> Block international calls on new line accounts</label>
           <label>Hold music <input name="music_on_hold" defaultValue={config.music_on_hold || "default"} /></label>
-          <label>Codecs <input name="allowed_codecs" defaultValue={config.allowed_codecs || "ulaw;alaw;g729"} /></label>
+          <label>Codecs <input name="allowed_codecs" defaultValue={lineCodecs(config.allowed_codecs || "")} placeholder="ulaw;g729;gsm" /></label>
+          <p>VoIP.ms accepts ulaw, g729, gsm, or all. Other names, including alaw, are left out before a line account is created.</p>
           <label>DTMF <input name="dtmf_mode" defaultValue={config.dtmf_mode || "auto"} /></label>
           <label>NAT <input name="nat" defaultValue={config.nat || "yes"} /></label>
           <p>Customers never see this client. Use an email domain you control so VoIP.ms does not mail the customer. The address and phone below are sent when the customer signs up. If they are blank, signup still creates the client with a placeholder, and the customer's emergency address replaces the street address when they save it.</p>

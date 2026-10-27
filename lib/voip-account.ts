@@ -1,5 +1,6 @@
 import { callVoipms, getConnection } from "./carriers";
 import { getDb } from "./db";
+import { DEFAULT_LINE_CODECS, lineCodecs } from "./line-codecs";
 import { readOutboundCalls, type CdrCall } from "./minute-math";
 import { appPassword } from "./pbx";
 
@@ -35,7 +36,7 @@ function settingsFromConnection(): Settings {
     lock_international: config.lock_international === "1" ? "1" : "0",
     international_route: config.international_route === "2" ? "2" : "1",
     music_on_hold: config.music_on_hold || "default",
-    allowed_codecs: config.allowed_codecs || "ulaw;alaw;g729",
+    allowed_codecs: lineCodecs(config.allowed_codecs || DEFAULT_LINE_CODECS),
     dtmf_mode: config.dtmf_mode || "auto",
     nat: config.nat || "yes",
   };
@@ -44,10 +45,22 @@ function settingsFromConnection(): Settings {
 function readSettings(raw: string): Settings {
   try {
     const value = JSON.parse(raw) as Record<string, unknown>;
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, String(item ?? "")]));
+    return forLine(Object.fromEntries(Object.entries(value).map(([key, item]) => [key, String(item ?? "")])));
   } catch {
     return settingsFromConnection();
   }
+}
+
+function forLine(settings: Settings): Settings {
+  return { ...settings, allowed_codecs: lineCodecs(settings.allowed_codecs || "") };
+}
+
+async function sendLine(settings: Settings, run: (next: Settings) => ReturnType<typeof callVoipms>): Promise<{ result: Awaited<ReturnType<typeof callVoipms>>; settings: Settings }> {
+  const ready = forLine(settings);
+  const first = await run(ready);
+  if (first.ok || ready.allowed_codecs === "ulaw" || !/invalid_allowedcodecs/i.test(`${first.status} ${first.message}`)) return { result: first, settings: ready };
+  const plain: Settings = { ...ready, allowed_codecs: "ulaw" };
+  return { result: await run(plain), settings: plain };
 }
 
 export function getSubaccount(userId: number) {
@@ -110,11 +123,13 @@ export async function ensureSubaccount(userId: number, resellerClient = ""): Pro
   const connection = getConnection("voipms");
   if (!connection.enabled || !connection.secret) return { ok: false, message: "VoIP.ms is not connected, so a line account was not created." };
   const username = usernameFor(userId);
-  const settings = { ...settingsFromConnection(), ...(resellerClient ? { reseller_client: resellerClient } : {}) };
+  let settings: Settings = { ...settingsFromConnection(), ...(resellerClient ? { reseller_client: resellerClient } : {}) };
   const description = `SautiCall ${userId}`;
   const host = sipHost(connection.public.pop || "");
   const password = appPassword();
-  const created = await callVoipms("createSubAccount", { username, description, auth_type: "1", password, ...settings });
+  const createdCall = await sendLine(settings, (next) => callVoipms("createSubAccount", { username, description, auth_type: "1", password, ...next }));
+  settings = createdCall.settings;
+  const created = createdCall.result;
   const createdName = createdAccount(created.body);
   if (created.ok && createdName) {
     saveSubaccount({ user_id: userId, account: createdName, username, password, sip_host: host, settings_json: JSON.stringify(settings) });
@@ -123,12 +138,12 @@ export async function ensureSubaccount(userId: number, resellerClient = ""): Pro
   const listed = await callVoipms("getSubAccounts", {});
   const found = listedAccounts(listed.body).find((item) => item.username === username || item.account.endsWith(`_${username}`) || item.description === description);
   if (found) {
-    const updated = await callVoipms("setSubAccount", { account: found.account, description, auth_type: "1", password, ...settings });
-    if (!updated.ok) return { ok: false, message: `VoIP.ms did not update the line account (${updated.status}).` };
-    saveSubaccount({ user_id: userId, account: found.account, username, password, sip_host: host, settings_json: JSON.stringify(settings) });
+    const updatedCall = await sendLine(settings, (next) => callVoipms("setSubAccount", { account: found.account, description, auth_type: "1", password, ...next }));
+    if (!updatedCall.result.ok) return { ok: false, message: `VoIP.ms did not update the line account (${updatedCall.result.status}).` };
+    saveSubaccount({ user_id: userId, account: found.account, username, password, sip_host: host, settings_json: JSON.stringify(updatedCall.settings) });
     return { ok: true, account: found.account, sipHost: host };
   }
-  return { ok: false, message: `VoIP.ms did not create a line account (${created.status}).` };
+  return { ok: false, message: `VoIP.ms did not create a line account (${created.message || created.status}).` };
 }
 
 async function routeDids(userId: number, routing: string) {
