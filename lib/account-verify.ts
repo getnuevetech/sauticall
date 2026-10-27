@@ -1,8 +1,8 @@
 import { confirmationMail } from "./confirmation-mail";
-import { getDb } from "./db";
+import { flagOn, getDb } from "./db";
 import { recordFailure } from "./failure-log";
 import { sendSms, smsReady } from "./sms";
-import { challengeOpen, codeSalt, codesMatch, digest, hashCode, newCode, newToken } from "./verify-code";
+import { acceptsTestCode, challengeOpen, codeSalt, codesMatch, digest, hashCode, newCode, newToken } from "./verify-code";
 
 const EMAIL_MS = 30 * 60 * 1000;
 const SMS_MS = 10 * 60 * 1000;
@@ -93,6 +93,12 @@ function emailFailed(userId: number, email: string, challengeId: number, detail:
 }
 
 export async function sendAccountEmail(userId: number, origin: string) {
+  if (flagOn("auth.test_code")) {
+    const user = account(userId);
+    if (!user) return { ok: false as const, message: "That account was not found." };
+    if (user.email_verified_at) return { ok: true as const, already: true as const, message: "Email is already confirmed." };
+    return { ok: true as const, message: "Enter 123456 to confirm this email." };
+  }
   const issued = issueEmailChallenge(userId);
   if (!issued.ok || issued.already) return issued;
   const { mailSettings } = await import("./tickets");
@@ -118,6 +124,12 @@ export async function sendAccountEmail(userId: number, origin: string) {
 }
 
 export async function sendAccountSms(userId: number) {
+  if (flagOn("auth.test_code")) {
+    const user = account(userId);
+    if (!user?.phone) return { ok: false as const, message: "Add a mobile number first." };
+    if (user.phone_verified_at) return { ok: true as const, already: true as const, message: "Mobile number is already confirmed." };
+    return { ok: true as const, message: "Enter 123456 to confirm this mobile number." };
+  }
   const issued = issueSmsChallenge(userId);
   if (!issued.ok || issued.already) return issued;
   const sent = await sendSms({ userId, to: issued.phone, body: `Your SautiCall code is ${issued.code}. It expires in 10 minutes.` });
@@ -146,8 +158,19 @@ export function confirmEmailToken(token: string) {
 
 function confirmCode(userId: number, channel: "email" | "sms", code: string) {
   const cleaned = code.replace(/\s/g, "");
-  const row = latest(userId, channel);
   const column = channel === "email" ? "email_verified_at" : "phone_verified_at";
+  const person = account(userId);
+  const already = channel === "email" ? person?.email_verified_at : person?.phone_verified_at;
+  if (already) return { ok: true as const, message: channel === "email" ? "Email is already confirmed." : "Mobile number is already confirmed." };
+  if (acceptsTestCode(cleaned, flagOn("auth.test_code"))) {
+    if (channel === "sms" && !person?.phone) return { ok: false as const, message: "Add a mobile number first." };
+    const now = new Date().toISOString();
+    const open = latest(userId, channel);
+    if (open && !open.used_at) getDb().prepare("UPDATE verification_challenges SET used_at = ? WHERE id = ?").run(now, open.id);
+    getDb().prepare(`UPDATE users SET ${column} = ? WHERE id = ?`).run(now, userId);
+    return { ok: true as const, message: channel === "email" ? "Email confirmed." : "Mobile number confirmed." };
+  }
+  const row = latest(userId, channel);
   if (!row) return { ok: false as const, message: "Send a new code first." };
   if (row.used_at) return { ok: true as const, message: channel === "email" ? "Email is already confirmed." : "Mobile number is already confirmed." };
   if (!openChallenge(row)) return { ok: false as const, message: "That code has expired. Send a new one." };

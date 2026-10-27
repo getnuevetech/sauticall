@@ -2,6 +2,12 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
 
 const MAX_ATTEMPTS = 5;
 
+export const TEST_VERIFICATION_CODE = "123456";
+
+export function acceptsTestCode(code: string, enabled: boolean) {
+  return enabled && code.replace(/\s/g, "") === TEST_VERIFICATION_CODE;
+}
+
 export function normalizeMobile(input: string) {
   const trimmed = input.trim();
   const digits = trimmed.replace(/\D/g, "");
