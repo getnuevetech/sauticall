@@ -1,3 +1,4 @@
+import { confirmationMail } from "./confirmation-mail";
 import { flagOn, getDb } from "./db";
 import { recordFailure } from "./failure-log";
 import { sendSms, smsReady } from "./sms";
@@ -105,6 +106,7 @@ export async function sendAccountEmail(userId: number, origin: string) {
   const settings = mailSettings();
   if (!settings?.smtp_host || !settings.smtp_from) return emailFailed(userId, issued.email, issued.challengeId, "Outgoing email is not set up, so the confirmation was not sent.");
   const link = `${origin}/account/verify?token=${issued.token}`;
+  const mail = confirmationMail({ name: issued.name, code: issued.code, link });
   const result = await sendMail({
     host: settings.smtp_host,
     port: Number(settings.smtp_port) || 587,
@@ -113,8 +115,8 @@ export async function sendAccountEmail(userId: number, origin: string) {
     secure: settings.smtp_secure === 1,
     from: settings.smtp_from,
     to: [issued.email],
-    subject: "Confirm your SautiCall account",
-    text: `Hi ${issued.name},\n\nConfirm your email for SautiCall:\n${link}\n\nOr enter this code: ${issued.code}\n\nThe link and code expire in 30 minutes. If you ask for another email, use the newest code.`,
+    subject: mail.subject,
+    text: mail.text,
     messageId: `sc-verify-${userId}-${digest(issued.token).slice(0, 12)}@sauticall`,
   });
   if (!result.ok) return emailFailed(userId, issued.email, issued.challengeId, result.message);

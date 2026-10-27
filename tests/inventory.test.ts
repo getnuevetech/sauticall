@@ -3,7 +3,7 @@ import test from "node:test";
 import { clientEmail, clientPhone, clientPlace, personName, readVoipClientId } from "../lib/client-profile.ts";
 import { customerMessage, customerRequestStatus } from "../lib/customer-message.ts";
 import { didMatches, parseDigitSearch } from "../lib/did-search.ts";
-import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
+import { didInfoIsAbsent, normalizeRequestedDid, readDids } from "../lib/did-list.ts";
 import { balanceCovers, planFundAmount, readClientBalance, resellerOrderFees } from "../lib/client-funding.ts";
 import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
@@ -14,6 +14,13 @@ import { extensionWelcomeText, webClientUrl, welcomeCustomerNote } from "../lib/
 import { mfaIsRequired } from "../lib/mfa-rules.ts";
 import { DEPARTMENT_NAME_RULES, acceptedDepartmentName, departmentCreateBody, departmentNameIssue, departmentNameTakenMessage, departmentRejectedMessage, userCreateBody } from "../lib/pbx-user.ts";
 import { readRateCenters, regionAllowed } from "../lib/places.ts";
+
+test("a DID that is not on the account yet is absent, not a failed check", () => {
+  assert.equal(didInfoIsAbsent("invalid_did"), true);
+  assert.equal(didInfoIsAbsent("no_did"), true);
+  assert.equal(didInfoIsAbsent("invalid_credentials"), false);
+  assert.equal(didInfoIsAbsent("success"), false);
+});
 
 test("a number request has to be a full 10-digit inventory number", () => {
   assert.equal(normalizeRequestedDid("832"), "");
