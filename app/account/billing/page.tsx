@@ -21,7 +21,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const mine = customerValues(user.id);
   const billing = variables.find((item) => item.key === "billing_days");
   const billingDays = billing ? resolveVariable(billing, mine.get(billing.key) || "") || "30" : "30";
-  const billDate = calendarLabel(nextBillingDate(planPaidAt(user.id), billingDays));
+  const paidAt = planPaidAt(user.id);
+  const billDate = calendarLabel(nextBillingDate(paidAt, billingDays));
   const editable = variables.filter((item) => customerCanEdit(item));
   return (
     <div className="workspace-page" style={{ maxWidth: 1080 }}>
@@ -37,7 +38,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       {params.saved === "variables" ? <p className="form-feedback">Your billing choices were saved.</p> : null}
       <section className="ws-card" style={{ marginBottom: 14 }}>
         <h2>Next phone bill</h2>
-        <p>{billDate}. The date is the day you paid, plus the number of days set for this account.</p>
+        <p>{billDate}. {paidAt ? "It starts on the day you paid." : "There is no plan payment yet, so it starts today."} The number of days set for this account is added until the date is after today.</p>
         {editable.length ? (
           <form className="pub-form" action={saveOwnLineVariables}>
             {editable.map((item) => (
