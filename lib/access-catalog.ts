@@ -150,6 +150,7 @@ export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
     links: [
       { label: "Payment APIs", href: "/admin/gateways", permission: "settings.payments" },
       { label: "Phone connections", href: "/admin/connections", permission: "settings.connections" },
+      { label: "Line variables", href: "/admin/variables", permission: "settings.connections" },
       { label: "Live switches", href: "/admin/flags", permission: "settings.flags" },
     ],
   },

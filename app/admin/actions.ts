@@ -362,3 +362,16 @@ export async function completeGroup(formData: FormData) {
   if (!result.ok) redirect(`/admin/phone?error=${encodeURIComponent(result.message)}`);
   redirect("/admin/phone");
 }
+
+export async function saveLineVariables(formData: FormData) {
+  const user = await staff("settings.connections");
+  const { listLineVariables, saveLineVariables: persist } = await import("@/lib/line-variable-store");
+  const rows = listLineVariables().map((item) => ({
+    key: item.key,
+    adminValue: String(formData.get(`value_${item.key}`) || ""),
+    audience: String(formData.get(`audience_${item.key}`) || "admin"),
+  }));
+  persist(rows);
+  audit(user.email, "line.variables", "saved");
+  redirect("/admin/variables?saved=1");
+}

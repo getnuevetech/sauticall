@@ -408,6 +408,20 @@ function migrate(database: Database.Database) {
       detail TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS line_variables (
+      key TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      detail TEXT NOT NULL DEFAULT '',
+      admin_value TEXT NOT NULL DEFAULT '',
+      audience TEXT NOT NULL DEFAULT 'admin',
+      kind TEXT NOT NULL DEFAULT 'text'
+    );
+    CREATE TABLE IF NOT EXISTS customer_line_values (
+      user_id INTEGER NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (user_id, key)
+    );
   `);
   const extensionCols = new Set((database.prepare("PRAGMA table_info(pbx_extensions)").all() as { name: string }[]).map((column) => column.name));
   if (!extensionCols.has("former_number")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN former_number TEXT NOT NULL DEFAULT ''");

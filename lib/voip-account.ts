@@ -1,6 +1,8 @@
 import { callVoipms, getConnection, VOIPMS_READ_MS, VOIPMS_WRITE_MS } from "./carriers";
 import { getDb } from "./db";
 import { DEFAULT_LINE_CODECS, lineCodecs } from "./line-codecs";
+import { planPaidAt, resolvedLineValue } from "./line-variable-store";
+import { nextBillingDate } from "./line-variables";
 import { chooseResellerPackage } from "./reseller-package";
 import { readOutboundCalls, type CdrCall } from "./minute-math";
 import { appPassword } from "./pbx";
@@ -29,9 +31,9 @@ function sipHost(pop: string) {
   return value.includes(".") ? value : `${value}.voip.ms`;
 }
 
-function settingsFromConnection(): Settings {
+function settingsFromConnection(userId = 0): Settings {
   const config = getConnection("voipms").public;
-  return {
+  const settings: Settings = {
     protocol: "1",
     device_type: config.device_type || "1",
     lock_international: config.lock_international === "1" ? "1" : "0",
@@ -41,6 +43,13 @@ function settingsFromConnection(): Settings {
     dtmf_mode: config.dtmf_mode || "auto",
     nat: config.nat || "yes",
   };
+  if (!userId) return settings;
+  for (const key of ["device_type", "lock_international", "international_route", "music_on_hold", "allowed_codecs", "dtmf_mode", "nat"]) {
+    const value = resolvedLineValue(userId, key);
+    if (!value) continue;
+    settings[key] = key === "allowed_codecs" ? lineCodecs(value) : value;
+  }
+  return settings;
 }
 
 function readSettings(raw: string): Settings {
@@ -54,19 +63,23 @@ function readSettings(raw: string): Settings {
 
 function forLine(settings: Settings): Settings {
   const next: Settings = { ...settings, allowed_codecs: lineCodecs(settings.allowed_codecs || "") };
-  if (next.reseller_client && !next.reseller_package) delete next.reseller_client;
-  if (next.reseller_package && !next.reseller_client) delete next.reseller_package;
+  if (!next.reseller_client || !next.reseller_package) {
+    delete next.reseller_client;
+    delete next.reseller_package;
+    delete next.reseller_nextbilling;
+  }
   return next;
 }
 
 function resellerRejected(result: { status: string; message: string }) {
-  return /resellerpackage|resellerclient/i.test(`${result.status} ${result.message}`);
+  return /resellerpackage|resellerclient|resellernextbilling/i.test(`${result.status} ${result.message}`);
 }
 
-async function lineClientSettings(base: Settings, resellerClient: string) {
+async function lineClientSettings(base: Settings, resellerClient: string, userId: number) {
   const settings = forLine(base);
   delete settings.reseller_client;
   delete settings.reseller_package;
+  delete settings.reseller_nextbilling;
   if (!resellerClient) return { settings, warning: "" };
   const assigned = await callVoipms("getClientPackages", { client: resellerClient }, VOIPMS_READ_MS);
   let packageId = chooseResellerPackage(assigned.body, null);
@@ -77,13 +90,14 @@ async function lineClientSettings(base: Settings, resellerClient: string) {
   if (!packageId) {
     return { settings, warning: `VoIP.ms has no reseller package, so client ${resellerClient} was not attached to the line account.` };
   }
-  return { settings: { ...settings, reseller_client: resellerClient, reseller_package: packageId }, warning: "" };
+  const date = nextBillingDate(planPaidAt(userId), resolvedLineValue(userId, "billing_days") || "30");
+  return { settings: { ...settings, reseller_client: resellerClient, reseller_package: packageId, reseller_nextbilling: date }, warning: "" };
 }
 
 async function openLine(settings: Settings, run: (next: Settings) => ReturnType<typeof callVoipms>) {
   const call = await sendLine(settings, run);
   if (call.result.ok || !resellerRejected(call.result)) return { ...call, detached: "" };
-  const again = await sendLine(forLine({ ...call.settings, reseller_client: "", reseller_package: "" }), run);
+  const again = await sendLine(forLine({ ...call.settings, reseller_client: "", reseller_package: "", reseller_nextbilling: "" }), run);
   return { ...again, detached: call.result.message || call.result.status };
 }
 
@@ -129,7 +143,7 @@ export async function linkSubaccountClient(userId: number, clientId: string) {
   if (!row?.account || !clientId) return { ok: true, message: "" };
   const settings = readSettings(row.settings_json);
   if (settings.reseller_client === clientId && settings.reseller_package) return { ok: true, message: "" };
-  const attached = await lineClientSettings(settings, clientId);
+  const attached = await lineClientSettings(settings, clientId, userId);
   if (!attached.settings.reseller_package) return { ok: false, message: attached.warning };
   const result = await callVoipms("setSubAccount", {
     ...attached.settings,
@@ -156,7 +170,7 @@ export async function ensureSubaccount(userId: number, resellerClient = ""): Pro
   const connection = getConnection("voipms");
   if (!connection.enabled || !connection.secret) return { ok: false, message: "VoIP.ms is not connected, so a line account was not created." };
   const username = usernameFor(userId);
-  const attached = await lineClientSettings(settingsFromConnection(), resellerClient);
+  const attached = await lineClientSettings(settingsFromConnection(userId), resellerClient, userId);
   let settings = attached.settings;
   const description = `SautiCall ${userId}`;
   const host = sipHost(connection.public.pop || "");
@@ -200,6 +214,9 @@ export async function setOutboundLocked(userId: number, locked: boolean) {
   if (!row) return { ok: false, message: "This customer has no VoIP.ms line account yet." };
   if (Boolean(row.locked) === locked) return { ok: true, message: locked ? "Outbound is already stopped." : "Outbound is already allowed." };
   const settings = readSettings(row.settings_json);
+  if (settings.reseller_client && settings.reseller_package) {
+    settings.reseller_nextbilling = nextBillingDate(planPaidAt(userId), resolvedLineValue(userId, "billing_days") || "30");
+  }
   const mainRouting = getConnection("voipms").public.routing;
   const lineRouting = `account:${row.account}`;
   if (locked && mainRouting && mainRouting !== lineRouting) {
