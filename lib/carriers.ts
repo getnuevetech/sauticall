@@ -2,6 +2,7 @@ import { getDb } from "./db";
 import { carrierSearchType, didMatches, type DigitSearch } from "./did-search";
 import { normalizeRequestedDid, readDids, type ListedDid } from "./did-list";
 import { adminPbxError, pbxAccessMessage, pbxErrorText, pbxRoleIsAdmin, roleFromToken } from "./pbx-access";
+import { matchOrderPop, readPopServers, voipFailureText } from "./provider-error";
 import { readRateCenters } from "./places";
 
 export type PublicConfig = Record<string, string>;
@@ -73,7 +74,8 @@ export async function callVoipms(method: string, params: Record<string, string>,
     const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(timeoutMs) });
     const body = (await response.json().catch(() => null)) as { status?: string } | null;
     const status = body?.status || `http_${response.status}`;
-    return { ok: status === "success", status, message: status, body };
+    const message = status === "success" ? "success" : voipFailureText(status, body);
+    return { ok: status === "success", status, message, body };
   } catch (error) {
     const message = error instanceof Error ? error.message : "VoIP.ms could not be reached.";
     console.error(`[sauticall] voip.ms ${method}: ${message}`);
@@ -148,10 +150,23 @@ export async function lookupOwnedDid(did: string) {
   return { ok: true as const, owned, message: owned ? "success" : "missing" };
 }
 
+let popCache: { at: number; servers: ReturnType<typeof readPopServers> } | null = null;
+
+async function orderPop(raw: string) {
+  const value = raw.trim();
+  if (/^\d+$/.test(value)) return value;
+  if (!popCache || Date.now() - popCache.at > 10 * 60 * 1000) {
+    const listed = await callVoipms("getServersInfo", {});
+    popCache = { at: Date.now(), servers: listed.ok ? readPopServers(listed.body) : [] };
+  }
+  return matchOrderPop(value, popCache.servers);
+}
+
 export async function orderDid(did: string, routingOverride?: string, resellerAccount?: string, fees?: { monthly: string; setup: string; minute: string }) {
   const connection = getConnection("voipms");
   const routing = routingOverride || connection.public.routing;
-  const pop = connection.public.pop;
+  const savedPop = connection.public.pop || "";
+  const pop = savedPop ? await orderPop(savedPop) : "";
   const dialtime = connection.public.dialtime || "60";
   if (!routing || !pop) return { ok: false, status: "not_configured", message: "Set the VoIP.ms routing and POP in Connections before ordering." };
   const rates = fees || { monthly: "0.00", setup: "0.00", minute: "0.00" };
@@ -163,7 +178,7 @@ export async function orderDid(did: string, routingOverride?: string, resellerAc
     dialtime,
     cnam: connection.public.cnam === "1" ? "1" : "0",
     billing_type: connection.public.billing_type === "2" ? "2" : "1",
-  }, 12000);
+  }, 12000).then((result) => result.ok || pop === savedPop ? result : { ...result, message: `${result.message} (POP ${savedPop} sent as ${pop})` });
 }
 
 export async function submitPort(params: Record<string, string>) {
@@ -188,8 +203,10 @@ export async function testVoipms() {
   try {
     const result = await callVoipms("getBalance", {});
     if (!result.ok) {
-      const message = `VoIP.ms returned ${result.status}.`;
+      const message = `VoIP.ms returned ${result.message}.`;
       recordCheck("voipms", false, message);
+      const { recordFailure } = await import("./failure-log");
+      recordFailure({ area: "connection", subject: "voipms", detail: message });
       return { ok: false, message };
     }
     const clients = await callVoipms("getClients", {});
@@ -200,12 +217,18 @@ export async function testVoipms() {
     const smsNote = reseller && from ? smsAccountNote(await lookupOwnedDid(from)) : "";
     const message = reseller
       ? `Connected. Balance ${balance || "returned"}. Reseller clients are available on this login.${smsNote}`
-      : `The balance was read, but reseller clients returned ${clients.status}.`;
+      : `The balance was read, but reseller clients returned ${clients.message}.`;
     recordCheck("voipms", reseller, message);
+    if (!reseller) {
+      const { recordFailure } = await import("./failure-log");
+      recordFailure({ area: "connection", subject: "voipms", detail: message });
+    }
     return { ok: reseller, message };
   } catch (error) {
     const message = error instanceof Error ? error.message : "VoIP.ms could not be reached.";
     recordCheck("voipms", false, message);
+    const { recordFailure } = await import("./failure-log");
+    recordFailure({ area: "connection", subject: "voipms", detail: message });
     return { ok: false, message };
   }
 }
@@ -296,6 +319,8 @@ export async function test3cx() {
   } catch (error) {
     const message = error instanceof Error ? error.message : "3CX could not be reached.";
     recordCheck("3cx", false, message);
+    const { recordFailure } = await import("./failure-log");
+    recordFailure({ area: "connection", subject: "3cx", detail: message });
     return { ok: false, message };
   }
 }

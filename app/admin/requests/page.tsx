@@ -5,6 +5,7 @@ import { requestStatusLabel, requestStatuses } from "@/lib/admin-labels";
 import { flagOn, getDb } from "@/lib/db";
 import { numberIsBought, numberPurchaseMode } from "@/lib/number-order";
 import { reconcileBoughtNumbers } from "@/lib/number-purchase";
+import Link from "next/link";
 import { after } from "next/server";
 
 type Row = { id: number; email: string; kind: string; payload: string; status: string; provider_ref: string; staff_note: string; created_at: string };
@@ -29,6 +30,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
       <span className="eyebrow">Customers</span>
       <h2>Number and transfer requests</h2>
       <p>{intro}</p>
+      <p><Link href="/admin/failures?area=number">Open failed number orders</Link></p>
       {params.error ? <p className="form-feedback">{params.error}</p> : null}
       {rows.length === 0 ? <p>No requests yet.</p> : null}
       {rows.map((row) => {

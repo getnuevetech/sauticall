@@ -90,6 +90,8 @@ export async function syncUserMinutes(userId: number) {
   const history = await fetchOutboundCalls(sub.account, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10));
   if (!history.ok) {
     markSynced(userId, history.message);
+    const { recordFailure } = await import("./failure-log");
+    recordFailure({ area: "minutes", userId, subject: sub.account, detail: history.message });
     return history;
   }
   storeCalls(userId, history.calls);

@@ -138,6 +138,8 @@ export async function provisionCallGroup(id: number) {
     const message = created.message || "3CX did not create this group.";
     database.prepare("UPDATE call_groups SET status = 'failed', last_message = ? WHERE id = ?").run(message.slice(0, 1200), id);
     saveTask({ ...group, number }, members, "open", message);
+    const { recordFailure } = await import("./failure-log");
+    recordFailure({ area: "group", userId: group.user_id, subject: number, detail: message });
     return { ok: false, message };
   }
   database.prepare("UPDATE call_groups SET xapi_id = ?, status = 'created', last_message = ? WHERE id = ?").run(xapiId, "Created on the phone system.", id);
@@ -218,7 +220,11 @@ export async function removeCallGroup(userId: number, groupId: number) {
   if (group.xapi_id && flagOn("pbx.live_provision")) {
     const path = group.kind === "queue" ? "Queues" : "RingGroups";
     const removed = await pbxRequest(`${path}(${group.xapi_id})`, { method: "DELETE" });
-    if (!removed.ok) return { ok: false, message: removed.message };
+    if (!removed.ok) {
+      const { recordFailure } = await import("./failure-log");
+      recordFailure({ area: "group", userId: group.user_id, subject: group.number, detail: removed.message });
+      return { ok: false, message: removed.message };
+    }
   }
   const manual = group.status === "manual";
   database.prepare("DELETE FROM call_group_members WHERE group_id = ?").run(groupId);

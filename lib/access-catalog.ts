@@ -166,6 +166,7 @@ export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
     links: [
       { label: "Customer accounts", href: "/admin/customers", permission: "users.customers" },
       { label: "Number requests", href: "/admin/requests", permission: "inbox.requests" },
+      { label: "Failed requests", href: "/admin/failures", permission: ["inbox.requests", "settings.phone", "settings.lines", "settings.payments"] },
       { label: "Contact messages", href: "/admin/messages", permission: "inbox.messages" },
     ],
   },

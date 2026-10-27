@@ -70,8 +70,8 @@ export async function billDidToClient(did: string, account: string, fees: { mont
     minute: fees.minute,
     ...(alreadyCharged ? { dont_charge_setup: "true", dont_charge_monthly: "true" } : {}),
   });
-  if (result.ok || /already|connect|duplicate/i.test(result.status)) return "";
-  return result.status;
+  if (result.ok || /already|connect|duplicate/i.test(`${result.status} ${result.message}`)) return "";
+  return result.message || result.status;
 }
 
 export async function readFundedBalance(clientId: string) {
@@ -203,7 +203,7 @@ export async function fundPaidPlan(userId: number, planName: string) {
     description: `SautiCall ${plan} plan balance`,
   });
   if (!paid.ok) {
-    const message = `VoIP.ms did not add the $${amount.toFixed(2)} ${plan} balance (${paid.status}).`;
+    const message = `VoIP.ms did not add the $${amount.toFixed(2)} ${plan} balance (${paid.message}).`;
     note(userId, message);
     return { ok: false as const, message };
   }

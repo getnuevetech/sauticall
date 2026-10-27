@@ -157,18 +157,24 @@ export async function sendEmergency(lineId: number) {
   const did = didForCarrier(line.did);
   const checked = await callVoipms("e911Validate", carrierParams(address, did, false));
   if (!checked.ok) {
-    const detail = plainStatus(checked.status);
+    const detail = `${plainStatus(checked.status)} ${checked.message}`.trim();
     console.error(`[sauticall] e911 ${detail}`);
-    getDb().prepare("UPDATE phone_lines SET e911_status = 'needs_person', e911_message = ? WHERE id = ?").run(detail, line.id);
-    return { ok: false, message: customerMessage(detail, "The emergency address was saved. The team will finish sending it.") };
+    const { recordFailure } = await import("./failure-log");
+    recordFailure({ area: "emergency", userId: line.user_id, subject: line.did, detail });
+    getDb().prepare("UPDATE phone_lines SET e911_status = 'needs_person', e911_message = ? WHERE id = ?").run(detail.slice(0, 400), line.id);
+    return { ok: false, message: customerMessage(plainStatus(checked.status), "The emergency address was saved. The team will finish sending it.") };
   }
   const update = line.e911_status === "sent" || line.e911_status === "done";
   let result = await callVoipms(update ? "e911Update" : "e911Provision", carrierParams(address, did, update));
   if (!result.ok && update) result = await callVoipms("e911Provision", carrierParams(address, did, false));
-  const detail = result.ok ? "Emergency address sent to the phone company." : plainStatus(result.status);
-  if (!result.ok) console.error(`[sauticall] e911 ${detail}`);
-  getDb().prepare("UPDATE phone_lines SET e911_status = ?, e911_message = ? WHERE id = ?").run(result.ok ? "sent" : "needs_person", detail, line.id);
-  return { ok: result.ok, message: result.ok ? detail : customerMessage(detail, "The emergency address was saved. The team will finish sending it.") };
+  const detail = result.ok ? "Emergency address sent to the phone company." : `${plainStatus(result.status)} ${result.message}`.trim();
+  if (!result.ok) {
+    console.error(`[sauticall] e911 ${detail}`);
+    const { recordFailure } = await import("./failure-log");
+    recordFailure({ area: "emergency", userId: line.user_id, subject: line.did, detail });
+  }
+  getDb().prepare("UPDATE phone_lines SET e911_status = ?, e911_message = ? WHERE id = ?").run(result.ok ? "sent" : "needs_person", detail.slice(0, 400), line.id);
+  return { ok: result.ok, message: result.ok ? "Emergency address sent to the phone company." : customerMessage(plainStatus(result.status), "The emergency address was saved. The team will finish sending it.") };
 }
 
 export async function syncEmergency(userId: number) {
