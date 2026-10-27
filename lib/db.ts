@@ -27,7 +27,7 @@ export function getDb() {
   fs.mkdirSync(dir, { recursive: true });
   db = new Database(path.join(dir, "sauticall.sqlite"));
   db.pragma("journal_mode = WAL");
-  db.pragma("busy_timeout = 8000");
+  db.pragma("busy_timeout = 2000");
   migrate(db);
   seed(db);
   return db;

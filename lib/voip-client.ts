@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { planFundAmount, readClientBalance } from "./client-funding";
-import { clientEmail, clientPlace, personName, readVoipClientId } from "./client-profile";
+import { clientEmail, clientPhone, clientPlace, personName, readVoipClientId } from "./client-profile";
 import { callVoipms, getConnection, VOIPMS_WRITE_MS } from "./carriers";
 import { flagOn, getDb, readDoc } from "./db";
 import type { Plan } from "./types";
@@ -33,13 +33,23 @@ function note(userId: number, message: string) {
 }
 
 function profileFor(userId: number) {
-  const user = getDb().prepare("SELECT name, email FROM users WHERE id = ? AND role = 'customer'").get(userId) as { name: string; email: string } | undefined;
+  const user = getDb().prepare("SELECT name, email, phone, phone_verified_at FROM users WHERE id = ? AND role = 'customer'").get(userId) as { name: string; email: string; phone: string; phone_verified_at: string } | undefined;
   if (!user) return { ok: false as const, message: "That customer was not found." };
   const emergency = getEmergency(userId);
+  if (!emergency) return { ok: false as const, message: "Add an address on the profile before the client account can be updated." };
+  const phone = user.phone_verified_at ? clientPhone(user.phone) : "";
+  if (!phone) return { ok: false as const, message: "Confirm the mobile number before the client account can be updated." };
   const config = getConnection("voipms").public;
   const place = clientPlace({
-    emergency: emergency ? { country: emergency.country, state: emergency.state, city: emergency.city, address: `${emergency.street_number} ${emergency.street_name}`.trim(), zip: emergency.zip } : null,
-    fallback: { country: config.client_country, state: config.client_state, city: config.client_city, address: config.client_address, zip: config.client_zip, phone: config.client_phone },
+    customer: {
+      country: emergency.country,
+      state: emergency.state,
+      city: emergency.city,
+      address: `${emergency.street_number} ${emergency.street_name}`.trim(),
+      zip: emergency.zip,
+      phone,
+    },
+    fallback: { country: config.client_country, state: config.client_state, city: config.client_city, address: config.client_address, zip: config.client_zip },
   });
   if (!regionAllowed(place.country, place.state)) place.state = place.country === "CA" ? "ON" : "TX";
   const email = clientEmail(userId, user.email, config.client_email_domain || "");

@@ -2,9 +2,10 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { saveDepartmentName, saveDisplayName } from "@/app/account/actions";
+import { saveDepartmentName, saveDisplayName, saveEmergencyAddress } from "@/app/account/actions";
 import { personInitials } from "@/lib/account-display";
 import { Icon } from "@/components/Icon";
+import { PlaceSelects } from "./PlaceSelects";
 
 type Person = { id: number; name: string; email: string; number: string; status: string };
 type Tab = "overview" | "profile" | "business" | "team" | "notifications" | "security" | "preferences";
@@ -32,6 +33,8 @@ export function SettingsHome({
   mfaOn,
   mfaRequired,
   notice,
+  addressLine,
+  address,
   children,
 }: {
   initialTab: string;
@@ -46,6 +49,18 @@ export function SettingsHome({
   mfaOn: boolean;
   mfaRequired: boolean;
   notice: string;
+  addressLine: string;
+  address: {
+    full_name: string;
+    street_number: string;
+    street_name: string;
+    address_type: string;
+    address_number: string;
+    city: string;
+    state: string;
+    country: string;
+    zip: string;
+  };
   children: ReactNode;
 }) {
   const allowed = TABS.some((item) => item.id === initialTab);
@@ -110,6 +125,38 @@ export function SettingsHome({
             <label>Email <input value={email} readOnly /></label>
             <p>The sign-in email stays on this account. A profile photo is not stored.</p>
             <button className="ws-btn primary" type="submit">Save name</button>
+          </form>
+          <h2>Address</h2>
+          <p>This address is required before a number can be bought. Saving it updates the account used to order numbers.</p>
+          {addressLine ? <p>{addressLine}</p> : <p>No address is saved yet.</p>}
+          <form action={saveEmergencyAddress}>
+            <input type="hidden" name="next" value="profile" />
+            <input type="hidden" name="language" value="EN" />
+            <label>Contact name <input name="full_name" defaultValue={address.full_name || name} required /></label>
+            <label>Street number <input name="street_number" defaultValue={address.street_number} required /></label>
+            <label>Street name <input name="street_name" defaultValue={address.street_name} required /></label>
+            <label>Unit type
+              <select name="address_type" defaultValue={address.address_type}>
+                <option value="">House or street address only</option>
+                <option value="APT">Apartment</option>
+                <option value="STE">Suite</option>
+                <option value="FL">Floor</option>
+                <option value="UNIT">Unit</option>
+                <option value="RM">Room</option>
+                <option value="BLDG">Building</option>
+              </select>
+            </label>
+            <label>Unit number <input name="address_number" defaultValue={address.address_number} /></label>
+            <PlaceSelects
+              countryLabel="Country"
+              regionLabel="State"
+              cityLabel="City"
+              countryDefault={address.country || "US"}
+              regionDefault={address.state}
+              cityDefault={address.city}
+            />
+            <label>ZIP or postal code <input name="zip" defaultValue={address.zip} required /></label>
+            <button className="ws-btn primary" type="submit">Save address</button>
           </form>
         </section>
       ) : null}

@@ -10,6 +10,7 @@ import { extensionCapacity, paidPlan } from "@/lib/pbx";
 import { extensionSetup } from "@/lib/account-display";
 import { customerMessage } from "@/lib/customer-message";
 import { getDb } from "@/lib/db";
+import { formatAddress, getEmergency } from "@/lib/e911";
 import { redirect } from "next/navigation";
 import crypto from "crypto";
 import { base32Encode } from "@/lib/auth";
@@ -28,13 +29,16 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
   const hours = getDb().prepare("SELECT name FROM pbx_departments WHERE user_id = ?").get(user.id) as { name: string } | undefined;
   const rows = getDb().prepare("SELECT id, number, former_number, first_name, last_name, email, status FROM pbx_extensions WHERE user_id = ? ORDER BY id").all(user.id) as { id: number; number: string; former_number: string; first_name: string; last_name: string; email: string; status: string }[];
   const active = rows.filter((row) => row.status !== "removed");
+  const address = getEmergency(user.id);
   const notice = params.error
     ? customerMessage(params.error, "That change could not be saved.")
     : params.saved === "name"
       ? "Name saved."
       : params.saved === "department"
         ? "Company name saved."
-        : "";
+        : params.saved === "address"
+          ? "Address saved. It is being sent with this account."
+          : "";
   return (
     <SettingsHome
       initialTab={params.tab || (required && !user.mfa_secret ? "security" : "overview")}
@@ -55,6 +59,18 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
       mfaOn={Boolean(user.mfa_secret)}
       mfaRequired={required}
       notice={notice}
+      addressLine={address ? formatAddress(address) : ""}
+      address={{
+        full_name: address?.full_name || user.name,
+        street_number: address?.street_number || "",
+        street_name: address?.street_name || "",
+        address_type: address?.address_type || "",
+        address_number: address?.address_number || "",
+        city: address?.city || "",
+        state: address?.state || "",
+        country: address?.country || "US",
+        zip: address?.zip || "",
+      }}
     >
       {!user.mfa_secret ? (
         <div>

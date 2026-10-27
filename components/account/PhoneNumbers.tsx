@@ -50,6 +50,8 @@ function BuyButton({ ready }: { ready: boolean }) {
 }
 
 export function PhoneNumbers({
+  initialTab = "find",
+  phoneVerified,
   live,
   included,
   closed,
@@ -60,6 +62,8 @@ export function PhoneNumbers({
   requests,
   notice,
 }: {
+  initialTab?: "mine" | "find" | "e911";
+  phoneVerified: boolean;
   live: boolean;
   included: boolean;
   closed: boolean;
@@ -70,7 +74,7 @@ export function PhoneNumbers({
   requests: Requested[];
   notice: string;
 }) {
-  const [tab, setTab] = useState<"mine" | "find" | "e911">("find");
+  const [tab, setTab] = useState<"mine" | "find" | "e911">(initialTab);
   const [match, setMatch] = useState<"" | "number" | "prefix" | "suffix">("");
   const [dids, setDids] = useState<Did[]>([]);
   const [selected, setSelected] = useState<Did | null>(null);
@@ -91,7 +95,9 @@ export function PhoneNumbers({
   const [page, setPage] = useState(1);
   const [where, setWhere] = useState("");
   const [addressOpen, setAddressOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [country, setCountry] = useState(defaults.country || "US");
+  const canBuy = hasAddress && phoneVerified;
 
   const sorted = useMemo(() => {
     const copy = [...dids];
@@ -182,12 +188,22 @@ export function PhoneNumbers({
       {tab === "find" ? (
         <div className="num-layout">
           <div>
+            {!phoneVerified ? (
+              <div className="num-alert">
+                <span className="num-ico"><Icon name="phone" size={18} /></span>
+                <div>
+                  <strong>Confirm your mobile number</strong>
+                  <p>The number on your account has to be confirmed before a business number can be bought.</p>
+                </div>
+                <Link className="ws-btn ghost num-outline" href="/account/verify">Confirm number</Link>
+              </div>
+            ) : null}
             {!hasAddress ? (
               <div className="num-alert">
                 <span className="num-ico"><Icon name="shield" size={18} /></span>
                 <div>
-                  <strong>Emergency address not registered</strong>
-                  <p>Add an address before completing your number order.</p>
+                  <strong>Address required</strong>
+                  <p>Add the address for this account before buying a number. You can also add it in Settings.</p>
                 </div>
                 <button className="ws-btn ghost num-outline" type="button" onClick={() => setAddressOpen(true)}>Add address</button>
               </div>
@@ -283,19 +299,11 @@ export function PhoneNumbers({
                 <span>E911 address</span>
                 {hasAddress ? <span className="ws-pill live">Saved</span> : <span className="num-required">Required</span>}
               </div>
-              {hasAddress ? <p>{addressLine}</p> : <p>Add your physical service address to continue. <button type="button" className="num-link" onClick={() => setAddressOpen(true)}>Add emergency address</button></p>}
+              {hasAddress ? <p>{addressLine}</p> : <p>Add your address to continue. <button type="button" className="num-link" onClick={() => setAddressOpen(true)}>Add address</button></p>}
               {selected ? (
-                <form action={saveNumber}>
-                  <input type="hidden" name="did" value={selected.did} />
-                  <input type="hidden" name="country" value={country} />
-                  <input type="hidden" name="region" value={selected.state} />
-                  <input type="hidden" name="ratecenter" value={selected.ratecenter} />
-                  <input type="hidden" name="monthly" value={selected.monthly} />
-                  <label className="check-option num-terms"><input name="number_terms" type="checkbox" required disabled={!hasAddress} /> I agree to the Terms of Service for this number.</label>
-                  <BuyButton ready={hasAddress} />
-                </form>
-              ) : <button className="ws-btn" type="button" disabled>Buy this number</button>}
-              <p>The button buys this number on your phone-company account.</p>
+                <button className="ws-btn primary" type="button" disabled={!canBuy} onClick={() => setConfirmOpen(true)}>Review purchase</button>
+              ) : <button className="ws-btn" type="button" disabled>Review purchase</button>}
+              <p>Review purchase shows the number again. The number is bought only after you confirm.</p>
             </section>
             <section className="num-card num-transfer">
               <div className="num-transfer-title">
@@ -306,6 +314,32 @@ export function PhoneNumbers({
               <Link href="/account/porting">Start a transfer <Icon name="arrow" size={14} /></Link>
             </section>
           </aside>
+        </div>
+      ) : null}
+
+      {confirmOpen && selected ? (
+        <div className="num-modal-scrim" onClick={() => setConfirmOpen(false)}>
+          <form className="num-modal" action={saveNumber} onClick={(event) => event.stopPropagation()}>
+            <div className="num-modal-head">
+              <div>
+                <h2>Confirm this number</h2>
+                <p>Buying starts when you confirm. You will land on My numbers when the order is saved.</p>
+              </div>
+              <button type="button" aria-label="Close" onClick={() => setConfirmOpen(false)}>×</button>
+            </div>
+            <p className="num-selected">{formatPhone(selected.did)}</p>
+            <p>{[placeLabel(selected.ratecenter), selected.state].filter(Boolean).join(", ") || where}</p>
+            <p>{monthlyPrice(selected.monthly) ? `${monthlyPrice(selected.monthly)} per month` : "The monthly price is confirmed with the order."}</p>
+            <p>{hasAddress ? addressLine : "An address is required."}</p>
+            <input type="hidden" name="did" value={selected.did} />
+            <input type="hidden" name="country" value={country} />
+            <input type="hidden" name="region" value={selected.state} />
+            <input type="hidden" name="ratecenter" value={selected.ratecenter} />
+            <input type="hidden" name="monthly" value={selected.monthly} />
+            <label className="check-option num-terms"><input name="number_terms" type="checkbox" required /> I agree to the Terms of Service for this number.</label>
+            <BuyButton ready={canBuy} />
+            <button className="ws-btn ghost" type="button" onClick={() => setConfirmOpen(false)}>Keep looking</button>
+          </form>
         </div>
       ) : null}
 

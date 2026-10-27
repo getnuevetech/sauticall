@@ -31,9 +31,9 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
     tokenNote,
     params.email === "ok" ? "Email confirmed." : "",
     params.phone === "ok" ? "Mobile number confirmed." : "",
-    params.email === "sent" ? "Confirmation email sent." : "",
+    params.email === "sent" || params.email === "sending" ? "The confirmation email is on its way. If it does not arrive, send it again." : "",
     params.email === "waiting" && !params.error ? "The confirmation email has not gone out yet. Send it again once outgoing email is set up." : "",
-    params.sms === "sent" ? "A code was texted to your mobile number." : "",
+    params.sms === "sent" || params.sms === "sending" ? "A text message with your code is on its way. If it does not arrive, send it again." : "",
     params.sms === "waiting" && !status.smsReady ? "Your number is saved. A text message with the code will be sent when text messages are turned on." : "",
     params.sms === "waiting" && status.smsReady && !params.error ? "If the text message does not arrive, send the code again." : "",
   ].filter(Boolean).join(" ");
