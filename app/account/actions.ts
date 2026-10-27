@@ -86,16 +86,21 @@ export async function register(_previous: FormState, formData: FormData) {
   }
   await createSession(user.id, false);
   const { requestOrigin } = await import("@/lib/payments");
+  const { sendAccountEmail } = await import("@/lib/account-verify");
   const origin = await requestOrigin();
+  const emailResult = await sendAccountEmail(user.id, origin).catch(() => ({ ok: false as const, message: "The confirmation email could not be sent. Try again shortly." }));
   const id = user.id;
   finishAfterResponse(async () => {
-    const { sendAccountEmail, sendAccountSms } = await import("@/lib/account-verify");
-    await sendAccountEmail(id, origin).catch(() => undefined);
+    const { sendAccountSms } = await import("@/lib/account-verify");
     await sendAccountSms(id).catch(() => undefined);
   });
   audit(email, "auth.register", planName || "customer");
-  const query = new URLSearchParams({ email: "sending", sms: "sending" });
+  const query = new URLSearchParams({
+    email: emailResult.ok ? "sent" : "waiting",
+    sms: "sending",
+  });
   if (planName) query.set("plan", planName);
+  if (!emailResult.ok && emailResult.message) query.set("error", emailResult.message);
   redirect(`/account/verify?${query}`);
 }
 
