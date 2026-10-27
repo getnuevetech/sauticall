@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { planFundAmount, readClientBalance } from "./client-funding";
 import { clientEmail, clientPlace, personName, readVoipClientId } from "./client-profile";
-import { callVoipms, getConnection } from "./carriers";
+import { callVoipms, getConnection, VOIPMS_WRITE_MS } from "./carriers";
 import { flagOn, getDb, readDoc } from "./db";
 import type { Plan } from "./types";
 import { getEmergency } from "./e911";
@@ -56,7 +56,7 @@ async function connectDid(did: string, account: string) {
     minute: "0.00",
     dont_charge_setup: "true",
     dont_charge_monthly: "true",
-  });
+  }, VOIPMS_WRITE_MS);
   if (result.ok || /already|connect|duplicate/i.test(result.status)) return "";
   return result.status;
 }
@@ -69,7 +69,7 @@ export async function billDidToClient(did: string, account: string, fees: { mont
     setup: fees.setup,
     minute: fees.minute,
     ...(alreadyCharged ? { dont_charge_setup: "true", dont_charge_monthly: "true" } : {}),
-  });
+  }, VOIPMS_WRITE_MS);
   if (result.ok || /already|connect|duplicate/i.test(`${result.status} ${result.message}`)) return "";
   return result.message || result.status;
 }
