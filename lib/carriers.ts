@@ -1,6 +1,6 @@
 import { getDb } from "./db";
 import { carrierSearchType, didMatches, type DigitSearch } from "./did-search";
-import { normalizeRequestedDid, readDids, type ListedDid } from "./did-list";
+import { didInfoIsAbsent, normalizeRequestedDid, readDids, type ListedDid } from "./did-list";
 import { adminPbxError, pbxAccessMessage, pbxErrorText, pbxRoleIsAdmin, roleFromToken } from "./pbx-access";
 import { matchOrderPop, readPopServers, voipFailureText } from "./provider-error";
 import { readRateCenters } from "./places";
@@ -148,7 +148,7 @@ export async function lookupOwnedDid(did: string) {
   const ten = normalizeRequestedDid(did);
   if (!ten) return { ok: false as const, owned: false, message: "That number is not a 10-digit number." };
   const result = await callVoipms("getDIDsInfo", { did: ten }, VOIPMS_READ_MS);
-  if (result.status === "no_did") return { ok: true as const, owned: false, message: result.status };
+  if (didInfoIsAbsent(result.status)) return { ok: true as const, owned: false, message: result.status };
   if (!result.ok) return { ok: false as const, owned: false, message: result.message || result.status };
   const owned = readDids(result.body, 0).some((item) => item.did === ten);
   return { ok: true as const, owned, message: owned ? "success" : "missing" };
