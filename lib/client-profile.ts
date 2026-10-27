@@ -10,23 +10,34 @@ export type ClientPlace = {
 const US_PLACE = { address: "100 Main Street", city: "Houston", state: "TX", zip: "77002", phone: "7135550100" };
 const CA_PLACE = { address: "100 King Street", city: "Toronto", state: "ON", zip: "M5V2T6", phone: "4165550100" };
 
+export function clientPhone(raw: string) {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) return digits.slice(1);
+  if (digits.length >= 10 && digits.length <= 15) return digits;
+  return "";
+}
+
 export function clientPlace(input: {
+  customer?: { country?: string; state?: string; city?: string; address?: string; zip?: string; phone?: string } | null;
   emergency?: { country?: string; state?: string; city?: string; address?: string; zip?: string } | null;
   fallback?: { country?: string; state?: string; city?: string; address?: string; zip?: string; phone?: string };
 }): ClientPlace {
+  const customer = input.customer || {};
   const emergency = input.emergency || {};
   const fallback = input.fallback || {};
-  const country = emergency.country === "CA" || (!emergency.country && fallback.country === "CA") ? "CA" : "US";
+  const country = customer.country === "CA" || emergency.country === "CA" || (!customer.country && !emergency.country && fallback.country === "CA") ? "CA" : "US";
   const defaults = country === "CA" ? CA_PLACE : US_PLACE;
-  const state = (emergency.state || fallback.state || defaults.state).trim().toUpperCase();
-  const phone = (fallback.phone || "").replace(/\D/g, "").slice(0, 10);
+  const chosen = (customerValue?: string, emergencyValue?: string, fallbackValue?: string, blank = "") =>
+    (customerValue || "").trim() || (emergencyValue || "").trim() || (fallbackValue || "").trim() || blank;
+  const state = chosen(customer.state, emergency.state, fallback.state, defaults.state).toUpperCase();
+  const phone = clientPhone(customer.phone || "") || clientPhone(fallback.phone || "") || defaults.phone;
   return {
-    address: (emergency.address || fallback.address || defaults.address).trim().slice(0, 80),
-    city: (emergency.city || fallback.city || defaults.city).trim().slice(0, 80),
+    address: chosen(customer.address, emergency.address, fallback.address, defaults.address).slice(0, 80),
+    city: chosen(customer.city, emergency.city, fallback.city, defaults.city).slice(0, 80),
     state: /^[A-Z]{2}$/.test(state) ? state : defaults.state,
     country,
-    zip: (emergency.zip || fallback.zip || defaults.zip).trim().toUpperCase().slice(0, 10),
-    phone: phone.length >= 10 ? phone : defaults.phone,
+    zip: chosen(customer.zip, emergency.zip, fallback.zip, defaults.zip).toUpperCase().slice(0, 10),
+    phone,
   };
 }
 

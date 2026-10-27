@@ -1,6 +1,5 @@
 "use server";
 
-import { after } from "next/server";
 import { redirect } from "next/navigation";
 import {
   createSession,
@@ -87,23 +86,16 @@ export async function register(_previous: FormState, formData: FormData) {
   }
   await createSession(user.id, false);
   const { requestOrigin } = await import("@/lib/payments");
-  const { sendAccountEmail, sendAccountSms } = await import("@/lib/account-verify");
   const origin = await requestOrigin();
-  const [emailResult, smsResult] = await Promise.all([
-    sendAccountEmail(user.id, origin).catch(() => ({ ok: false as const, message: "The confirmation email could not be sent. Try again shortly." })),
-    sendAccountSms(user.id).catch(() => ({ ok: false as const, message: "The text message could not be sent. Try again in a minute." })),
-  ]);
   const id = user.id;
-  after(() => {
-    void import("@/lib/voip-client").then(({ provisionCustomer }) => provisionCustomer(id)).catch(() => undefined);
+  finishAfterResponse(async () => {
+    const { sendAccountEmail, sendAccountSms } = await import("@/lib/account-verify");
+    await sendAccountEmail(id, origin).catch(() => undefined);
+    await sendAccountSms(id).catch(() => undefined);
   });
   audit(email, "auth.register", planName || "customer");
-  const query = new URLSearchParams({
-    email: emailResult.ok ? "sent" : "waiting",
-    sms: smsResult.ok ? "sent" : "waiting",
-  });
+  const query = new URLSearchParams({ email: "sending", sms: "sending" });
   if (planName) query.set("plan", planName);
-  if (!emailResult.ok && emailResult.message) query.set("error", emailResult.message);
   redirect(`/account/verify?${query}`);
 }
 
@@ -122,6 +114,8 @@ export async function confirmPhoneCode(_previous: FormState, formData: FormData)
   const { confirmSmsCode } = await import("@/lib/account-verify");
   const result = confirmSmsCode(user.id, String(formData.get("code") || ""));
   if (!result.ok) redirect(`/account/verify?error=${encodeURIComponent(result.message)}`);
+  const id = user.id;
+  finishAfterResponse(() => import("@/lib/voip-client").then(({ ensureVoipClient }) => ensureVoipClient(id, true)));
   redirect("/account/verify?phone=ok");
 }
 
@@ -277,9 +271,11 @@ export async function saveNumber(formData: FormData) {
   const { paidPlan } = await import("@/lib/pbx");
   const { planAllows } = await import("@/lib/plan-features");
   if (!planAllows(paidPlan(user.id), "numbers")) redirect("/account/numbers?error=Business%20numbers%20are%20not%20included%20on%20your%20plan.");
+  const verified = getDb().prepare("SELECT phone_verified_at FROM users WHERE id = ?").get(user.id) as { phone_verified_at: string } | undefined;
+  if (!verified?.phone_verified_at) redirect("/account/numbers?error=Confirm%20your%20mobile%20number%20before%20buying%20a%20number.");
   const { getEmergency } = await import("@/lib/e911");
   const emergency = getEmergency(user.id);
-  if (!emergency) redirect("/account/numbers?error=Add%20the%20emergency%20address%20first.");
+  if (!emergency) redirect("/account/numbers?error=Add%20your%20address%20before%20buying%20a%20number.");
   if (!flagOn("numbers.live_search")) redirect("/account/numbers?error=Number%20inventory%20search%20is%20turned%20off.");
   const { normalizeRequestedDid } = await import("@/lib/did-list");
   if (formData.get("number_terms") !== "on") redirect("/account/numbers?error=Agree%20to%20the%20Terms%20of%20Service%20before%20buying%20a%20number.");
@@ -333,11 +329,8 @@ export async function saveEmergencyAddress(formData: FormData) {
     zip: String(formData.get("zip") || ""),
     language: String(formData.get("language") || ""),
   });
-  if (!parsed.ok) redirect(`/account/numbers?error=${encodeURIComponent(parsed.message)}`);
-  const { listedCity } = await import("@/lib/carriers");
-  const city = await listedCity(parsed.address.country, parsed.address.state, parsed.address.city);
-  if (!city.ok) redirect(`/account/numbers?error=${encodeURIComponent(safeCustomerError(city.message, "The city list is not available right now. Try again shortly."))}`);
-  parsed.address.city = city.city;
+  const next = String(formData.get("next") || "");
+  if (!parsed.ok) redirect(next === "profile" ? `/account/security?tab=profile&error=${encodeURIComponent(parsed.message)}` : `/account/numbers?error=${encodeURIComponent(parsed.message)}`);
   saveEmergency(user.id, parsed.address);
   const userId = user.id;
   const { finishAfterResponse } = await import("@/lib/later");
@@ -348,7 +341,7 @@ export async function saveEmergencyAddress(formData: FormData) {
     audit(user.email, "e911.save", sent.ok ? "ok" : "needs-person");
   });
   audit(user.email, "e911.save", "saved");
-  redirect("/account/numbers?address=1");
+  redirect(next === "profile" ? "/account/security?tab=profile&saved=address" : "/account/numbers?address=1");
 }
 
 export async function savePort(formData: FormData) {
@@ -374,49 +367,45 @@ export async function savePort(formData: FormData) {
   };
   const { regionAllowed } = await import("@/lib/places");
   if (!regionAllowed(payload.country, payload.state)) redirect("/account/porting?error=Choose%20a%20state%20or%20province%20from%20the%20list.");
-  const { listedCity } = await import("@/lib/carriers");
-  const chosen = await listedCity(payload.country, payload.state, payload.city);
-  if (!chosen.ok) redirect(`/account/porting?error=${encodeURIComponent(chosen.message)}`);
-  payload.city = chosen.city;
   if (!payload.numbers || !payload.first_name || !payload.last_name || !payload.address1 || !payload.city || !payload.state || !payload.zip_code || !payload.provider_name || !payload.provider_account) {
     redirect("/account/porting?error=Number%2C%20name%2C%20service%20address%2C%20current%20carrier%2C%20and%20carrier%20account%20are%20required.");
   }
-  let status = "requested";
-  let providerRef = "";
-  let note = "";
-  if (flagOn("porting.live_submit")) {
-    const { submitPort } = await import("@/lib/carriers");
-    const result = await submitPort({
-      port_type: payload.country === "CA" ? "2" : "1",
-      numbers: payload.numbers,
-      location_type: "business",
-      statement_name: payload.statement_name,
-      first_name: payload.first_name,
-      last_name: payload.last_name,
-      address1: payload.address1,
-      city: payload.city,
-      state: payload.state,
-      zip_code: payload.zip_code,
-      country: payload.country === "CA" ? "CA" : "US",
-      provider_name: payload.provider_name,
-      provider_account: payload.provider_account,
-      pin: payload.pin,
+  const live = flagOn("porting.live_submit");
+  const info = getDb()
+    .prepare("INSERT INTO account_requests (user_id, kind, payload, status, provider_ref, staff_note, created_at) VALUES (?, 'port', ?, ?, '', '', ?)")
+    .run(user.id, JSON.stringify(payload), live ? "ordering" : "requested", new Date().toISOString());
+  const requestId = Number(info.lastInsertRowid);
+  audit(user.email, "request.port", live ? "ordering" : "requested");
+  if (live) {
+    const userId = user.id;
+    finishAfterResponse(async () => {
+      const { submitPort } = await import("@/lib/carriers");
+      const result = await submitPort({
+        port_type: payload.country === "CA" ? "2" : "1",
+        numbers: payload.numbers,
+        location_type: "business",
+        statement_name: payload.statement_name,
+        first_name: payload.first_name,
+        last_name: payload.last_name,
+        address1: payload.address1,
+        city: payload.city,
+        state: payload.state,
+        zip_code: payload.zip_code,
+        country: payload.country === "CA" ? "CA" : "US",
+        provider_name: payload.provider_name,
+        provider_account: payload.provider_account,
+        pin: payload.pin,
+      });
+      if (result.ok) {
+        const port = result.body && typeof result.body === "object" ? (result.body as { port?: unknown }).port : "";
+        getDb().prepare("UPDATE account_requests SET status = 'submitted', provider_ref = ? WHERE id = ?").run(String(port || ""), requestId);
+      } else {
+        const { recordFailure } = await import("@/lib/failure-log");
+        recordFailure({ area: "transfer", userId, subject: payload.numbers, detail: result.message });
+        getDb().prepare("UPDATE account_requests SET status = 'exception', staff_note = ? WHERE id = ?").run(result.message, requestId);
+      }
     });
-    if (result.ok) {
-      status = "submitted";
-      const port = result.body && typeof result.body === "object" ? (result.body as { port?: unknown }).port : "";
-      providerRef = String(port || "");
-    } else {
-      status = "exception";
-      note = result.message;
-      const { recordFailure } = await import("@/lib/failure-log");
-      recordFailure({ area: "transfer", userId: user.id, subject: payload.numbers, detail: result.message });
-    }
   }
-  getDb()
-    .prepare("INSERT INTO account_requests (user_id, kind, payload, status, provider_ref, staff_note, created_at) VALUES (?, 'port', ?, ?, ?, ?, ?)")
-    .run(user.id, JSON.stringify(payload), status, providerRef, note, new Date().toISOString());
-  audit(user.email, "request.port", status);
   redirect("/account/porting?saved=1");
 }
 

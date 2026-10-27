@@ -13,7 +13,19 @@ function requestDid(payload: string) {
   }
 }
 
+let reconciling = false;
+
 export async function reconcileBoughtNumbers(userId?: number) {
+  if (reconciling) return;
+  reconciling = true;
+  try {
+    await reconcileOnce(userId);
+  } finally {
+    reconciling = false;
+  }
+}
+
+async function reconcileOnce(userId?: number) {
   let rows: RequestRow[] = [];
   try {
     const database = getDb();
