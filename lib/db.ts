@@ -153,6 +153,8 @@ function migrate(database: Database.Database) {
   const clientCols = new Set((database.prepare("PRAGMA table_info(voip_clients)").all() as { name: string }[]).map((column) => column.name));
   if (clientCols.size && !clientCols.has("funded_cents")) database.exec("ALTER TABLE voip_clients ADD COLUMN funded_cents INTEGER NOT NULL DEFAULT 0");
   if (clientCols.size && !clientCols.has("funded_plan")) database.exec("ALTER TABLE voip_clients ADD COLUMN funded_plan TEXT NOT NULL DEFAULT ''");
+  const subaccountCols = new Set((database.prepare("PRAGMA table_info(voip_subaccounts)").all() as { name: string }[]).map((column) => column.name));
+  if (subaccountCols.size && !subaccountCols.has("provider_id")) database.exec("ALTER TABLE voip_subaccounts ADD COLUMN provider_id TEXT NOT NULL DEFAULT ''");
   database.exec(`
     CREATE TABLE IF NOT EXISTS pbx_departments (
       user_id INTEGER PRIMARY KEY,
@@ -227,7 +229,8 @@ function migrate(database: Database.Database) {
       locked INTEGER NOT NULL DEFAULT 0,
       settings_json TEXT NOT NULL DEFAULT '{}',
       last_message TEXT NOT NULL DEFAULT '',
-      last_sync TEXT NOT NULL DEFAULT ''
+      last_sync TEXT NOT NULL DEFAULT '',
+      provider_id TEXT NOT NULL DEFAULT ''
     );
     CREATE TABLE IF NOT EXISTS phone_lines (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

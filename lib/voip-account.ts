@@ -6,6 +6,7 @@ import { nextBillingDate } from "./line-variables";
 import { chooseResellerPackage } from "./reseller-package";
 import { readOutboundCalls, type CdrCall } from "./minute-math";
 import { appPassword } from "./pbx";
+import { matchListedSubaccount, readCreatedSubaccount, readListedSubaccounts, subaccountDigits, subaccountUpdateParams } from "./subaccount-ref";
 
 export type Subaccount = {
   user_id: number;
@@ -17,6 +18,7 @@ export type Subaccount = {
   settings_json: string;
   last_message: string;
   last_sync: string;
+  provider_id: string;
 };
 
 type Settings = Record<string, string>;
@@ -113,29 +115,23 @@ export function getSubaccount(userId: number) {
   return getDb().prepare("SELECT * FROM voip_subaccounts WHERE user_id = ?").get(userId) as Subaccount | undefined;
 }
 
-function saveSubaccount(row: Omit<Subaccount, "last_message" | "last_sync" | "locked"> & { locked?: number }) {
+function saveSubaccount(row: Omit<Subaccount, "last_message" | "last_sync" | "locked" | "provider_id"> & { locked?: number; provider_id?: string }) {
   getDb().prepare(
-    `INSERT INTO voip_subaccounts (user_id, account, username, password, sip_host, locked, settings_json, last_message, last_sync)
-     VALUES (?, ?, ?, ?, ?, ?, ?, '', '')
-     ON CONFLICT(user_id) DO UPDATE SET account = excluded.account, username = excluded.username, password = excluded.password, sip_host = excluded.sip_host, settings_json = excluded.settings_json`,
-  ).run(row.user_id, row.account, row.username, row.password, row.sip_host, row.locked ? 1 : 0, row.settings_json);
+    `INSERT INTO voip_subaccounts (user_id, account, username, password, sip_host, locked, settings_json, last_message, last_sync, provider_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, '', '', ?)
+     ON CONFLICT(user_id) DO UPDATE SET account = excluded.account, username = excluded.username, password = excluded.password, sip_host = excluded.sip_host, settings_json = excluded.settings_json,
+       provider_id = CASE WHEN excluded.provider_id != '' THEN excluded.provider_id ELSE voip_subaccounts.provider_id END`,
+  ).run(row.user_id, row.account, row.username, row.password, row.sip_host, row.locked ? 1 : 0, row.settings_json, row.provider_id || "");
 }
 
-function listedAccounts(body: unknown) {
-  if (!body || typeof body !== "object") return [] as { account: string; username: string; description: string }[];
-  const record = body as Record<string, unknown>;
-  const list = record.accounts || record.subaccounts || record.sub_accounts;
-  if (!Array.isArray(list)) return [];
-  return list.map((item) => {
-    const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
-    return { account: String(row.account || ""), username: String(row.username || ""), description: String(row.description || "") };
-  }).filter((item) => item.account);
-}
-
-function createdAccount(body: unknown) {
-  if (!body || typeof body !== "object") return "";
-  const record = body as Record<string, unknown>;
-  return String(record.account || record.subaccount || "");
+async function lineAccountId(userId: number, account: string, known = "") {
+  const saved = subaccountDigits(known);
+  if (saved) return saved;
+  const listed = await callVoipms("getSubAccounts", {}, VOIPMS_READ_MS);
+  const found = readListedSubaccounts(listed.body).find((item) => item.account === account);
+  if (!found?.id) return "";
+  getDb().prepare("UPDATE voip_subaccounts SET provider_id = ? WHERE user_id = ?").run(found.id, userId);
+  return found.id;
 }
 
 export async function linkSubaccountClient(userId: number, clientId: string) {
@@ -145,13 +141,14 @@ export async function linkSubaccountClient(userId: number, clientId: string) {
   if (settings.reseller_client === clientId && settings.reseller_package) return { ok: true, message: "" };
   const attached = await lineClientSettings(settings, clientId, userId);
   if (!attached.settings.reseller_package) return { ok: false, message: attached.warning };
-  const result = await callVoipms("setSubAccount", {
+  const id = await lineAccountId(userId, row.account, row.provider_id);
+  if (!id) return { ok: false, message: "VoIP.ms did not return a numeric id for this line account, so it was not linked to the client." };
+  const result = await callVoipms("setSubAccount", subaccountUpdateParams(id, {
     ...attached.settings,
-    account: row.account,
     description: `SautiCall ${userId}`,
     auth_type: row.locked ? "2" : "1",
     password: row.locked ? "" : row.password,
-  }, VOIPMS_WRITE_MS);
+  }), VOIPMS_WRITE_MS);
   if (!result.ok) return { ok: false, message: `VoIP.ms did not link the line account to the client (${result.message || result.status}).` };
   getDb().prepare("UPDATE voip_subaccounts SET settings_json = ? WHERE user_id = ?").run(JSON.stringify(attached.settings), userId);
   return { ok: true, message: "" };
@@ -181,20 +178,27 @@ export async function ensureSubaccount(userId: number, resellerClient = ""): Pro
   const detached = createdCall.detached
     ? `VoIP.ms refused the reseller package (${createdCall.detached}), so client ${resellerClient} was not attached.`
     : attached.warning;
-  const createdName = createdAccount(created.body);
-  if (created.ok && createdName) {
-    saveSubaccount({ user_id: userId, account: createdName, username, password, sip_host: host, settings_json: JSON.stringify(settings) });
-    return { ok: true, account: createdName, sipHost: host, warning: detached || undefined };
+  const createdRef = readCreatedSubaccount(created.body);
+  if (created.ok && createdRef.account) {
+    saveSubaccount({ user_id: userId, account: createdRef.account, username, password, sip_host: host, settings_json: JSON.stringify(settings), provider_id: createdRef.id });
+    return { ok: true, account: createdRef.account, sipHost: host, warning: detached || undefined };
   }
   const listed = await callVoipms("getSubAccounts", {}, VOIPMS_READ_MS);
-  const found = listedAccounts(listed.body).find((item) => item.username === username || item.account.endsWith(`_${username}`) || item.description === description);
+  const found = matchListedSubaccount(readListedSubaccounts(listed.body), username, description);
   if (found) {
-    const updatedCall = await openLine(settings, (next) => callVoipms("setSubAccount", { account: found.account, description, auth_type: "1", password, ...next }, VOIPMS_WRITE_MS));
-    if (!updatedCall.result.ok) return { ok: false, message: `VoIP.ms did not update the line account (${updatedCall.result.message || updatedCall.result.status}).` };
-    saveSubaccount({ user_id: userId, account: found.account, username, password, sip_host: host, settings_json: JSON.stringify(updatedCall.settings) });
-    const updateWarning = updatedCall.detached
-      ? `VoIP.ms refused the reseller package (${updatedCall.detached}), so client ${resellerClient} was not attached.`
-      : detached;
+    if (!found.id) {
+      saveSubaccount({ user_id: userId, account: found.account, username, password, sip_host: host, settings_json: JSON.stringify(settings) });
+      const missingId = "VoIP.ms listed the line account without a numeric id, so its settings were not updated.";
+      return { ok: true, account: found.account, sipHost: host, warning: [detached, missingId].filter(Boolean).join(" ") };
+    }
+    const updatedCall = await openLine(settings, (next) => callVoipms("setSubAccount", subaccountUpdateParams(found.id, { description, auth_type: "1", password, ...next }), VOIPMS_WRITE_MS));
+    const savedSettings = updatedCall.result.ok ? updatedCall.settings : settings;
+    saveSubaccount({ user_id: userId, account: found.account, username, password, sip_host: host, settings_json: JSON.stringify(savedSettings), provider_id: found.id });
+    const updateWarning = !updatedCall.result.ok
+      ? `VoIP.ms listed the line account, but did not update it (${updatedCall.result.message || updatedCall.result.status}).`
+      : updatedCall.detached
+        ? `VoIP.ms refused the reseller package (${updatedCall.detached}), so client ${resellerClient} was not attached.`
+        : detached;
     return { ok: true, account: found.account, sipHost: host, warning: updateWarning || undefined };
   }
   return { ok: false, message: `VoIP.ms did not create a line account (${created.message || created.status}).` };
@@ -217,6 +221,8 @@ export async function setOutboundLocked(userId: number, locked: boolean) {
   if (settings.reseller_client && settings.reseller_package) {
     settings.reseller_nextbilling = nextBillingDate(planPaidAt(userId), resolvedLineValue(userId, "billing_days") || "30");
   }
+  const id = await lineAccountId(userId, row.account, row.provider_id);
+  if (!id) return { ok: false, message: "VoIP.ms did not return a numeric id for this line account, so outbound calling was not changed." };
   const mainRouting = getConnection("voipms").public.routing;
   const lineRouting = `account:${row.account}`;
   if (locked && mainRouting && mainRouting !== lineRouting) {
@@ -227,14 +233,13 @@ export async function setOutboundLocked(userId: number, locked: boolean) {
       return { ok: false, message };
     }
   }
-  const result = await callVoipms("setSubAccount", {
-    account: row.account,
+  const result = await callVoipms("setSubAccount", subaccountUpdateParams(id, {
     description: `SautiCall ${userId}`,
     ...settings,
     auth_type: locked ? "2" : "1",
     password: locked ? "" : row.password,
     ip: locked ? "203.0.113.1" : "",
-  }, VOIPMS_WRITE_MS);
+  }), VOIPMS_WRITE_MS);
   let routed = true;
   if (result.ok && !locked) routed = (await routeDids(userId, lineRouting)).ok;
   const pausedInbound = locked && (!mainRouting || mainRouting === lineRouting);
