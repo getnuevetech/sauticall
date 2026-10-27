@@ -1,14 +1,29 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import Link from "next/link";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Icon } from "../Icon";
 import type { SetupAdvice } from "@/lib/setup-assistant";
 
 export function MenuButton() {
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const nav = document.querySelector(".mobile-nav");
+    if (!nav) return;
+    const onClick = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("a")) {
+        nav.classList.remove("open");
+        setOpen(false);
+      }
+    };
+    nav.addEventListener("click", onClick);
+    return () => nav.removeEventListener("click", onClick);
+  }, []);
   return (
     <button
       className="menu-toggle"
+      type="button"
       aria-label={open ? "Close menu" : "Open menu"}
       aria-expanded={open}
       onClick={() => {
@@ -19,6 +34,47 @@ export function MenuButton() {
     >
       <Icon name={open ? "close" : "menu"} size={23} />
     </button>
+  );
+}
+
+export function SolutionsMenu({
+  label,
+  href,
+  active,
+  items,
+}: {
+  label: string;
+  href: string;
+  active: boolean;
+  items: { label: string; href: string }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  return (
+    <span className="nav-drop" ref={root} data-open={open ? "" : undefined}>
+      <button type="button" className={active ? "active" : undefined} aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((value) => !value)}>
+        {label} <Icon name="arrowdown" size={14} />
+      </button>
+      <span className="nav-drop-menu" role="menu">
+        <Link href={href} prefetch={false}>{label}</Link>
+        {items.map((item) => <Link key={item.href + item.label} href={item.href} prefetch={false} role="menuitem">{item.label}</Link>)}
+      </span>
+    </span>
   );
 }
 
