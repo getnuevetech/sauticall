@@ -288,6 +288,7 @@ const LABELS: Record<string, string> = {
 
 export const requestStatuses = [
   { value: "requested", label: "Waiting for us" },
+  { value: "ordering", label: "Buying" },
   { value: "submitted", label: "Sent to the phone company" },
   { value: "ordered", label: "Number ordered" },
   { value: "completed", label: "Done" },

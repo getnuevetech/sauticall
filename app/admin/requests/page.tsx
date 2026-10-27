@@ -5,6 +5,7 @@ import { requestStatusLabel, requestStatuses } from "@/lib/admin-labels";
 import { flagOn, getDb } from "@/lib/db";
 import { numberIsBought, numberPurchaseMode } from "@/lib/number-order";
 import { reconcileBoughtNumbers } from "@/lib/number-purchase";
+import { RefreshWhileBuying } from "@/components/admin/RefreshWhileBuying";
 import Link from "next/link";
 import { after } from "next/server";
 
@@ -19,6 +20,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
      FROM account_requests r JOIN users u ON u.id = r.user_id ORDER BY r.id DESC LIMIT 50`,
   ).all() as Row[];
   const ordering = flagOn("numbers.live_order");
+  const buying = rows.some((row) => row.status === "ordering");
   const purchase = numberPurchaseMode(ordering, flagOn("numbers.auto_order"));
   const intro = purchase === "automatic"
     ? "Automatic buying is on. A customer request is sent to the phone company immediately. Bought means that company has the number. Changing the status does not buy it."
@@ -31,6 +33,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
       <h2>Number and transfer requests</h2>
       <p>{intro}</p>
       <p><Link href="/admin/failures?area=number">Open failed number orders</Link></p>
+      {buying ? <RefreshWhileBuying /> : null}
       {params.error ? <p className="form-feedback">{params.error}</p> : null}
       {rows.length === 0 ? <p>No requests yet.</p> : null}
       {rows.map((row) => {
@@ -59,7 +62,8 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
               <label>Note for the team <input name="staff_note" defaultValue={row.staff_note} /></label>
               <button className="btn btn-secondary" type="submit">Save</button>
             </form>
-            {row.kind === "number" && payload.did && row.status !== "cancelled" && !numberIsBought(row.status, row.provider_ref, payload.did) ? (
+            {row.status === "ordering" ? <p>Buying this number. This page updates when it finishes.</p> : null}
+            {row.kind === "number" && payload.did && row.status !== "cancelled" && row.status !== "ordering" && !numberIsBought(row.status, row.provider_ref, payload.did) ? (
               <form action={orderSavedNumber}>
                 <input type="hidden" name="id" value={row.id} />
                 <button className="btn btn-primary" type="submit" disabled={!ordering}>{ordering ? "Buy this number" : "Buying numbers is turned off"}</button>

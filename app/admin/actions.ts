@@ -177,22 +177,38 @@ export async function orderSavedNumber(formData: FormData) {
   const { flagOn, getDb: database } = await import("@/lib/db");
   if (!flagOn("numbers.live_order")) redirect("/admin/requests?error=Live%20number%20ordering%20is%20turned%20off.");
   const id = Number(formData.get("id"));
-  const row = database().prepare("SELECT user_id, payload, kind FROM account_requests WHERE id = ?").get(id) as { user_id: number; payload: string; kind: string } | undefined;
+  const row = database().prepare("SELECT user_id, payload, kind, status FROM account_requests WHERE id = ?").get(id) as { user_id: number; payload: string; kind: string; status: string } | undefined;
   if (!row || row.kind !== "number") redirect("/admin/requests?error=That%20request%20is%20not%20a%20number.");
-  let payload: { did?: string } = {};
+  if (row.status === "ordering") redirect("/admin/requests?error=This%20number%20is%20already%20being%20bought.");
+  let payload: { did?: string; monthly?: string } = {};
   try {
-    payload = JSON.parse(row.payload) as { did?: string };
+    payload = JSON.parse(row.payload) as { did?: string; monthly?: string };
   } catch {
     payload = {};
   }
   if (!payload.did) redirect("/admin/requests?error=This%20request%20has%20no%20specific%20number%20to%20order.");
-  const { purchaseNumber } = await import("@/lib/lines");
-  const result = await purchaseNumber({ requestId: id, userId: row.user_id, did: payload.did });
-  const { carrierDidRef } = await import("@/lib/number-order");
-  const status = result.ok || result.pending ? "ordered" : "exception";
-  const ref = result.ok ? carrierDidRef(payload.did) : "";
-  database().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(status, result.detail || result.message, ref, id);
-  audit(user.email, "request.order", `${id}:${status}`);
+  const did = payload.did;
+  const monthly = payload.monthly;
+  database().prepare("UPDATE account_requests SET status = ?, staff_note = ? WHERE id = ?").run("ordering", "Buying this number on the phone-company account.", id);
+  const { finishAfterResponse } = await import("@/lib/later");
+  const buyerId = row.user_id;
+  const actor = user.email;
+  finishAfterResponse(async () => {
+    const { purchaseNumber } = await import("@/lib/lines");
+    const { carrierDidRef } = await import("@/lib/number-order");
+    const { audit: record, getDb: db } = await import("@/lib/db");
+    try {
+      const result = await purchaseNumber({ requestId: id, userId: buyerId, did, monthly });
+      const status = result.ok || result.pending ? "ordered" : "exception";
+      const ref = result.ok ? carrierDidRef(did) : "";
+      db().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(status, (result.detail || result.message).slice(0, 400), ref, id);
+      record(actor, "request.order", `${id}:${status}`);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "The purchase could not be finished.";
+      db().prepare("UPDATE account_requests SET status = 'exception', staff_note = ? WHERE id = ?").run(detail.slice(0, 400), id);
+      record(actor, "request.order", `${id}:exception`);
+    }
+  });
   redirect("/admin/requests");
 }
 
@@ -218,7 +234,7 @@ export async function setRequestStatus(formData: FormData) {
   const id = Number(formData.get("id"));
   const status = String(formData.get("status") || "requested");
   const note = String(formData.get("staff_note") || "").slice(0, 400);
-  const allowed = new Set(["requested", "submitted", "ordered", "completed", "exception", "cancelled"]);
+  const allowed = new Set(["requested", "ordering", "submitted", "ordered", "completed", "exception", "cancelled"]);
   if (!allowed.has(status)) redirect("/admin/requests?error=Unknown%20status.");
   const row = getDb().prepare("SELECT kind, payload, provider_ref FROM account_requests WHERE id = ?").get(id) as { kind: string; payload: string; provider_ref: string } | undefined;
   if (!row) redirect("/admin/requests?error=That%20request%20was%20not%20found.");
