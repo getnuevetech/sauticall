@@ -140,7 +140,7 @@ export async function saveConnection(formData: FormData) {
       lock_international: formData.get("lock_international") === "on" ? "1" : "0",
       international_route: String(formData.get("international_route") || "1") === "2" ? "2" : "1",
       music_on_hold: String(formData.get("music_on_hold") || "default").trim() || "default",
-      allowed_codecs: String(formData.get("allowed_codecs") || "ulaw;alaw;g729").trim() || "ulaw;alaw;g729",
+      allowed_codecs: (await import("@/lib/line-codecs")).lineCodecs(String(formData.get("allowed_codecs") || "")),
       dtmf_mode: String(formData.get("dtmf_mode") || "auto").trim() || "auto",
       nat: String(formData.get("nat") || "yes").trim() || "yes",
       client_email_domain: String(formData.get("client_email_domain") || "").trim().toLowerCase().replace(/^@/, ""),
