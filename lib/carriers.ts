@@ -57,6 +57,9 @@ function voipmsEndpoint(value: string) {
   return url;
 }
 
+export const VOIPMS_READ_MS = 12000;
+export const VOIPMS_WRITE_MS = 20000;
+
 export async function callVoipms(method: string, params: Record<string, string>, timeoutMs = 5000) {
   try {
     const connection = getConnection("voipms");
@@ -77,7 +80,8 @@ export async function callVoipms(method: string, params: Record<string, string>,
     const message = status === "success" ? "success" : voipFailureText(status, body);
     return { ok: status === "success", status, message, body };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "VoIP.ms could not be reached.";
+    const aborted = error instanceof Error && /aborted due to timeout/i.test(error.message);
+    const message = aborted ? `VoIP.ms did not answer within ${Math.round(timeoutMs / 1000)} seconds.` : error instanceof Error ? error.message : "VoIP.ms could not be reached.";
     console.error(`[sauticall] voip.ms ${method}: ${message}`);
     return { ok: false, status: "unreachable", message, body: null };
   }
@@ -143,7 +147,7 @@ export async function findInventoryDid(country: string, region: string, _ratecen
 export async function lookupOwnedDid(did: string) {
   const ten = normalizeRequestedDid(did);
   if (!ten) return { ok: false as const, owned: false, message: "That number is not a 10-digit number." };
-  const result = await callVoipms("getDIDsInfo", { did: ten });
+  const result = await callVoipms("getDIDsInfo", { did: ten }, VOIPMS_READ_MS);
   if (result.status === "no_did") return { ok: true as const, owned: false, message: result.status };
   if (!result.ok) return { ok: false as const, owned: false, message: result.message || result.status };
   const owned = readDids(result.body, 0).some((item) => item.did === ten);
@@ -156,7 +160,7 @@ async function orderPop(raw: string) {
   const value = raw.trim();
   if (/^\d+$/.test(value)) return value;
   if (!popCache || Date.now() - popCache.at > 10 * 60 * 1000) {
-    const listed = await callVoipms("getServersInfo", {});
+    const listed = await callVoipms("getServersInfo", {}, VOIPMS_READ_MS);
     popCache = { at: Date.now(), servers: listed.ok ? readPopServers(listed.body) : [] };
   }
   return matchOrderPop(value, popCache.servers);
@@ -178,7 +182,7 @@ export async function orderDid(did: string, routingOverride?: string, resellerAc
     dialtime,
     cnam: connection.public.cnam === "1" ? "1" : "0",
     billing_type: connection.public.billing_type === "2" ? "2" : "1",
-  }, 12000).then((result) => result.ok || pop === savedPop ? result : { ...result, message: `${result.message} (POP ${savedPop} sent as ${pop})` });
+  }, VOIPMS_WRITE_MS).then((result) => result.ok || pop === savedPop ? result : { ...result, message: `${result.message} (POP ${savedPop} sent as ${pop})` });
 }
 
 export async function submitPort(params: Record<string, string>) {
