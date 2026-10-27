@@ -4,7 +4,7 @@ import { clientEmail, clientPlace, personName, readVoipClientId } from "../lib/c
 import { customerMessage, customerRequestStatus } from "../lib/customer-message.ts";
 import { didMatches, parseDigitSearch } from "../lib/did-search.ts";
 import { normalizeRequestedDid, readDids } from "../lib/did-list.ts";
-import { planFundAmount, readClientBalance } from "../lib/client-funding.ts";
+import { balanceCovers, planFundAmount, readClientBalance, resellerOrderFees } from "../lib/client-funding.ts";
 import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
@@ -40,6 +40,7 @@ test("number buying is manual until automatic buying is switched on", () => {
   assert.equal(customerNumberStatus("ordered", "", "3612267988"), "Needs attention");
   assert.equal(customerNumberStatus("completed", "", "3612267988"), "Needs attention");
   assert.equal(customerNumberStatus("ordered", carrierDidRef("3612267988"), "3612267988"), "Bought");
+  assert.equal(customerNumberStatus("ordering", "", "3612267988"), "Buying");
   assert.equal(numberIsBought("ordered", "voipms:3612267988", "1-361-226-7988"), true);
   assert.equal(numberIsBought("ordered", "voipms:2393827119", "3612267988"), false);
 });
@@ -280,7 +281,14 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
   assert.equal(planFundAmount(-3), 0);
   assert.equal(planFundAmount("nope"), 0);
   assert.equal(readClientBalance({ balance: "12.50" }), 12.5);
+  assert.equal(readClientBalance({ status: "success", balance: { current_balance: "8.0588", spent_total: "1.9012" } }), 8.0588);
+  assert.equal(readClientBalance({ balance: { spent_total: "1" } }), null);
   assert.equal(readClientBalance({}), null);
+  assert.deepEqual(resellerOrderFees({ chargeClient: true, monthly: "0.85" }), { monthly: "0.85", setup: "0.00", minute: "0.00" });
+  assert.deepEqual(resellerOrderFees({ chargeClient: false, monthly: "0.85" }), { monthly: "0.00", setup: "0.00", minute: "0.00" });
+  assert.equal(balanceCovers(5, { monthly: "0.85", setup: "0.00" }), true);
+  assert.equal(balanceCovers(0, { monthly: "0.85", setup: "0.00" }), false);
+  assert.equal(balanceCovers(null, { monthly: "0.85", setup: "0.00" }), true);
   const rule = outboundRuleBody({ name: "SautiCall 3612267988", trunkId: 4, callerId: "+13612267988", from: "514", to: "523", priority: 3 });
   assert.deepEqual(rule.DNRanges, [{ From: "514", To: "523" }]);
   assert.equal(rule.Routes[0].TrunkId, 4);

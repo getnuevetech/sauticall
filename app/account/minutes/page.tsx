@@ -20,9 +20,11 @@ export default async function MinutesPage({ searchParams }: { searchParams: Prom
   const people = getDb().prepare("SELECT id, number, former_number, first_name, last_name, status FROM pbx_extensions WHERE user_id = ? AND status != 'removed' ORDER BY number").all(user.id) as { id: number; number: string; former_number: string; first_name: string; last_name: string; status: string }[];
   const notice = params.error
     ? customerMessage(params.error, "Call minutes could not be updated. Please try again, or contact support.")
-    : params.saved
-      ? "Minutes updated."
-      : "";
+    : params.saved === "sync"
+      ? "Minutes are updating."
+      : params.saved
+        ? "Minutes updated."
+        : "";
   return (
     <CallsVoicemail
       initialTab={params.tab || "minutes"}

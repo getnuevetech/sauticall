@@ -1,11 +1,13 @@
 import { getConnection, lookupOwnedDid, orderDid, pbxRequest } from "./carriers";
+import { balanceCovers, resellerOrderFees } from "./client-funding";
 import { flagOn, getDb } from "./db";
+import { finishAfterResponse } from "./later";
 import { enforceUser } from "./minutes";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "./outbound-rule";
-import { extensionRange, readExtensionPlan } from "./pbx";
+import { extensionRange, paidPlan, readExtensionPlan } from "./pbx";
 import { idFromPbx } from "./pbx-id";
 import { acceptedDepartmentName } from "./pbx-user";
-import { ensureVoipClient, syncCustomerDids } from "./voip-client";
+import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
 
 type Line = { id: number; user_id: number; request_id: number; did: string; status: string; trunk_id: number; last_message: string };
@@ -169,25 +171,59 @@ export function markTrunkDone(lineId: number, note: string) {
   return { ok: true, message: text };
 }
 
-export async function purchaseNumber(input: { requestId: number; userId: number; did: string }): Promise<{ ok: boolean; pending?: boolean; message: string }> {
+function storedMonthly(requestId: number, fallback: string) {
+  const row = getDb().prepare("SELECT payload FROM account_requests WHERE id = ?").get(requestId) as { payload: string } | undefined;
+  try {
+    const monthly = String((JSON.parse(row?.payload || "{}") as { monthly?: string }).monthly || "");
+    return monthly || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function purchaseNumber(input: { requestId: number; userId: number; did: string; monthly?: string }): Promise<{ ok: boolean; pending?: boolean; message: string }> {
   let sent = false;
   try {
     const client = await ensureVoipClient(input.userId);
     if (!client.ok) return { ok: false, message: "The phone company account for this customer is not ready yet. An administrator can finish it on the customer page." };
+    const chargeClient = flagOn("billing.fund_client");
+    const fees = resellerOrderFees({ chargeClient, monthly: input.monthly || storedMonthly(input.requestId, "") });
+    if (chargeClient) {
+      const plan = paidPlan(input.userId);
+      if (!plan) return { ok: false, message: "A paid plan has to add phone-company balance before a number can be bought." };
+      const { fundPaidPlan } = await import("./voip-client");
+      const funded = await fundPaidPlan(input.userId, plan.name);
+      if (!funded.ok) return { ok: false, message: funded.message };
+      const balance = await readFundedBalance(client.clientId);
+      const marked = getVoipClient(input.userId);
+      if ((marked?.funded_cents || 0) <= 0 && (balance == null || balance <= 0)) {
+        return { ok: false, message: "The phone-company balance for this plan is not on the account yet." };
+      }
+      if (!balanceCovers(balance, fees)) return { ok: false, message: "This account does not have enough phone-company balance to buy that number yet." };
+    }
     const sub = await ensureSubaccount(input.userId, client.clientId);
     if (!sub.ok) {
       getDb().prepare("UPDATE voip_clients SET last_message = ?, updated_at = ? WHERE user_id = ?").run(sub.message.slice(0, 400), new Date().toISOString(), input.userId);
       return { ok: false, message: "The phone company line for this customer is not ready yet. An administrator can finish it on the customer page." };
     }
     const current = await lookupOwnedDid(input.did);
-    if (!current.ok) return { ok: false, message: `VoIP.ms could not be checked before buying (${current.message}).` };
+    if (!current.ok) return { ok: false, message: "The phone company could not be checked before buying. Try again shortly." };
+    let chargedOnOrder = false;
     if (!current.owned) {
-      const ordered = await orderDid(input.did, `account:${sub.account}`, sub.account);
-      if (!ordered.ok) return { ok: false, message: `VoIP.ms did not buy this number (${ordered.message}).` };
+      let ordered = await orderDid(input.did, `account:${sub.account}`, sub.account, fees);
+      chargedOnOrder = ordered.ok;
+      if (!ordered.ok && /account|monthly|setup|minute|parameter/i.test(`${ordered.status} ${ordered.message}`)) {
+        ordered = await orderDid(input.did, `account:${sub.account}`);
+        chargedOnOrder = false;
+      }
+      if (!ordered.ok) {
+        getDb().prepare("UPDATE voip_clients SET last_message = ?, updated_at = ? WHERE user_id = ?").run(`Number order returned ${ordered.status}.`.slice(0, 400), new Date().toISOString(), input.userId);
+        console.error(`[sauticall] order ${input.did} ${ordered.status}`);
+        return { ok: false, message: "The phone company did not buy this number. The balance and line account need another look." };
+      }
       sent = true;
       const owned = await lookupOwnedDid(input.did);
-      if (!owned.ok) return { ok: false, pending: true, message: `The order was sent, but VoIP.ms did not confirm this number (${owned.message}).` };
-      if (!owned.owned) return { ok: false, message: "VoIP.ms did not add this number to the account." };
+      if (!owned.ok || !owned.owned) return { ok: false, pending: true, message: "The order was sent, but the phone company has not listed this number yet." };
     } else {
       sent = true;
     }
@@ -199,13 +235,19 @@ export async function purchaseNumber(input: { requestId: number; userId: number;
       ).run(input.userId, input.requestId, input.did, new Date().toISOString());
       lineId = Number(info.lastInsertRowid);
     }
-    await syncCustomerDids(input.userId);
-    const trunk = await attachTrunk(lineId);
-    const limited = await enforceUser(input.userId);
-    const { sendEmergency } = await import("./e911");
-    const emergency = await sendEmergency(lineId);
-    const message = `${trunk.message} ${limited.message} ${emergency.message}`.trim();
-    return { ok: true, message };
+    const linked = await billDidToClient(input.did, sub.account, fees, chargedOnOrder);
+    if (linked) {
+      getDb().prepare("UPDATE voip_clients SET last_message = ?, updated_at = ? WHERE user_id = ?").run(`Number ${input.did} was ordered. Linking it to the client returned ${linked}.`.slice(0, 400), new Date().toISOString(), input.userId);
+    }
+    const userId = input.userId;
+    finishAfterResponse(async () => {
+      await attachTrunk(lineId);
+      await enforceUser(userId);
+      const { sendEmergency } = await import("./e911");
+      await sendEmergency(lineId);
+    });
+    if (linked) return { ok: false, pending: true, message: "The number was ordered. Linking it to the phone-company account still needs another look." };
+    return { ok: true, message: "This number was bought on the phone-company account." };
   } catch (error) {
     const detail = error instanceof Error ? error.message : "The purchase could not be finished.";
     console.error("[sauticall] purchase", detail);

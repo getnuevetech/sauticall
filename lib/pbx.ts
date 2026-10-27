@@ -213,6 +213,7 @@ export async function extensionNumberUsed(number: string) {
   let denied = "";
   for (const collection of NUMBER_COLLECTIONS) {
     const result = await pbxRequest(`${collection}?$filter=${encodeURIComponent(`Number eq '${safe}'`)}&$select=Number&$top=1`);
+    if (result.status === 0) return { ok: false as const, used: false, message: result.message };
     if (result.status === 400 || result.status === 404 || result.status === 501) continue;
     if (!result.ok) {
       if (collection === "Users") denied = result.message;

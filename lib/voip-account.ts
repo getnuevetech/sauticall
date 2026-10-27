@@ -112,20 +112,22 @@ export async function ensureSubaccount(userId: number, resellerClient = ""): Pro
   const settings = { ...settingsFromConnection(), ...(resellerClient ? { reseller_client: resellerClient } : {}) };
   const description = `SautiCall ${userId}`;
   const host = sipHost(connection.public.pop || "");
+  const password = appPassword();
+  const created = await callVoipms("createSubAccount", { username, description, auth_type: "1", password, ...settings });
+  const createdName = createdAccount(created.body);
+  if (created.ok && createdName) {
+    saveSubaccount({ user_id: userId, account: createdName, username, password, sip_host: host, settings_json: JSON.stringify(settings) });
+    return { ok: true, account: createdName, sipHost: host };
+  }
   const listed = await callVoipms("getSubAccounts", {});
   const found = listedAccounts(listed.body).find((item) => item.username === username || item.account.endsWith(`_${username}`) || item.description === description);
-  const password = appPassword();
   if (found) {
     const updated = await callVoipms("setSubAccount", { account: found.account, description, auth_type: "1", password, ...settings });
     if (!updated.ok) return { ok: false, message: `VoIP.ms did not update the line account (${updated.status}).` };
     saveSubaccount({ user_id: userId, account: found.account, username, password, sip_host: host, settings_json: JSON.stringify(settings) });
     return { ok: true, account: found.account, sipHost: host };
   }
-  const created = await callVoipms("createSubAccount", { username, description, auth_type: "1", password, ...settings });
-  const account = createdAccount(created.body);
-  if (!created.ok || !account) return { ok: false, message: `VoIP.ms did not create a line account (${created.status}).` };
-  saveSubaccount({ user_id: userId, account, username, password, sip_host: host, settings_json: JSON.stringify(settings) });
-  return { ok: true, account, sipHost: host };
+  return { ok: false, message: `VoIP.ms did not create a line account (${created.status}).` };
 }
 
 async function routeDids(userId: number, routing: string) {

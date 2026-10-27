@@ -9,6 +9,7 @@ import { formatAddress, getEmergency, type EmergencyAddress } from "@/lib/e911";
 import { customerMessage } from "@/lib/customer-message";
 import { reconcileBoughtNumbers } from "@/lib/number-purchase";
 import { loadSite } from "@/lib/site";
+import { after } from "next/server";
 
 const E911: Record<string, string> = {
   missing: "Emergency address missing",
@@ -26,7 +27,7 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
   const open = flagOn("numbers.search");
   const included = planAllows(paidPlan(user.id), "numbers");
   const address = getEmergency(user.id);
-  await reconcileBoughtNumbers(user.id);
+  after(() => reconcileBoughtNumbers(user.id));
   const rows = getDb().prepare("SELECT id, payload, status, provider_ref, created_at FROM account_requests WHERE user_id = ? AND kind = 'number' ORDER BY id DESC").all(user.id) as { id: number; payload: string; status: string; provider_ref: string; created_at: string }[];
   const lines = getDb().prepare("SELECT did, status, e911_status FROM phone_lines WHERE user_id = ? ORDER BY id DESC").all(user.id) as { did: string; status: string; e911_status: string }[];
   const notice = params.error
@@ -37,6 +38,8 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
         ? "The order was sent. This number stays unmarked until the phone company lists it."
         : params.saved === "held"
           ? text("numbersHeld")
+          : params.saved === "ordering"
+            ? "We're buying that number on your phone-company account. This page updates when it finishes."
           : params.saved === "1"
             ? text("numbersSaved")
             : params.address

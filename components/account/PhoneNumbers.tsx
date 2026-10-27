@@ -1,7 +1,9 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useFormStatus } from "react-dom";
 import { saveEmergencyAddress, saveNumber } from "@/app/account/actions";
 import { formatPhone, monthlyPrice } from "@/lib/account-display";
 import { Icon } from "@/components/Icon";
@@ -42,6 +44,11 @@ function placeLabel(value: string) {
   return value.toLowerCase().replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
 
+function BuyButton({ ready }: { ready: boolean }) {
+  const { pending } = useFormStatus();
+  return <button className="ws-btn primary" type="submit" disabled={!ready || pending} aria-busy={pending}>{pending ? "Buying…" : "Buy this number"}</button>;
+}
+
 export function PhoneNumbers({
   live,
   included,
@@ -68,6 +75,17 @@ export function PhoneNumbers({
   const [dids, setDids] = useState<Did[]>([]);
   const [selected, setSelected] = useState<Did | null>(null);
   const [message, setMessage] = useState("");
+  const router = useRouter();
+  const refreshes = useRef(0);
+  const buying = requests.some((row) => row.status === "Buying");
+  useEffect(() => {
+    if (!buying || refreshes.current >= 6) return;
+    const timer = window.setTimeout(() => {
+      refreshes.current += 1;
+      router.refresh();
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [buying, requests, router]);
   const [pending, setPending] = useState(false);
   const [sort, setSort] = useState<"low" | "high">("low");
   const [page, setPage] = useState(1);
@@ -272,10 +290,12 @@ export function PhoneNumbers({
                   <input type="hidden" name="country" value={country} />
                   <input type="hidden" name="region" value={selected.state} />
                   <input type="hidden" name="ratecenter" value={selected.ratecenter} />
-                  <button className="ws-btn primary" type="submit" disabled={!hasAddress}>Review purchase</button>
+                  <input type="hidden" name="monthly" value={selected.monthly} />
+                  <label className="check-option num-terms"><input name="number_terms" type="checkbox" required disabled={!hasAddress} /> I agree to the Terms of Service for this number.</label>
+                  <BuyButton ready={hasAddress} />
                 </form>
-              ) : <button className="ws-btn" type="button" disabled>Review purchase</button>}
-              <p>Selecting a number does not purchase it.</p>
+              ) : <button className="ws-btn" type="button" disabled>Buy this number</button>}
+              <p>The button buys this number on your phone-company account.</p>
             </section>
             <section className="num-card num-transfer">
               <div className="num-transfer-title">

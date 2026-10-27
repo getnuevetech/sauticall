@@ -88,16 +88,13 @@ export async function register(formData: FormData) {
   const { requestOrigin } = await import("@/lib/payments");
   const { sendAccountEmail, sendAccountSms } = await import("@/lib/account-verify");
   const origin = await requestOrigin();
+  const emailWork = sendAccountEmail(user.id, origin).catch(() => ({ ok: false as const }));
+  const smsWork = sendAccountSms(user.id).catch(() => ({ ok: false as const }));
   const [emailResult, smsResult] = await Promise.all([
-    Promise.race([
-      sendAccountEmail(user.id, origin).catch(() => ({ ok: false as const })),
-      new Promise<{ ok: false }>((resolve) => setTimeout(() => resolve({ ok: false }), 6000)),
-    ]),
-    Promise.race([
-      sendAccountSms(user.id).catch(() => ({ ok: false as const })),
-      new Promise<{ ok: false }>((resolve) => setTimeout(() => resolve({ ok: false }), 6000)),
-    ]),
+    Promise.race([emailWork, new Promise<{ ok: false }>((resolve) => setTimeout(() => resolve({ ok: false }), 2000))]),
+    Promise.race([smsWork, new Promise<{ ok: false }>((resolve) => setTimeout(() => resolve({ ok: false }), 2000))]),
   ]);
+  after(() => Promise.allSettled([emailWork, smsWork]));
   const id = user.id;
   after(() => {
     void import("@/lib/voip-client").then(({ provisionCustomer }) => provisionCustomer(id)).catch(() => undefined);
@@ -264,10 +261,10 @@ export async function refreshMinutes() {
   const user = await currentUser();
   if (!user) redirect("/account/login");
   const { syncUserMinutes } = await import("@/lib/minutes");
-  const result = await syncUserMinutes(user.id);
-  audit(user.email, "minutes.sync", result.ok ? "ok" : "failed");
-  if (!result.ok) redirect(`/account/minutes?error=${encodeURIComponent(safeCustomerError(result.message, "Call minutes could not be updated. Please try again, or contact support."))}`);
-  redirect("/account/minutes?saved=1");
+  const { finishAfterResponse } = await import("@/lib/later");
+  finishAfterResponse(() => syncUserMinutes(user.id));
+  audit(user.email, "minutes.sync", "started");
+  redirect("/account/minutes?saved=sync");
 }
 
 export async function saveNumber(formData: FormData) {
@@ -290,12 +287,9 @@ export async function saveNumber(formData: FormData) {
   const ratecenter = String(formData.get("ratecenter") || "").trim();
   const { regionAllowed } = await import("@/lib/places");
   if (!/^[A-Z]{2}$/.test(region) || !regionAllowed(country, region)) redirect("/account/numbers?error=Choose%20a%20state%20or%20province%20from%20the%20list.");
-  const { findInventoryDid, listedCity } = await import("@/lib/carriers");
-  const city = await listedCity(country, region, ratecenter);
-  if (!city.ok) redirect(`/account/numbers?error=${encodeURIComponent(safeCustomerError(city.message, "The city list is not available right now. Try again shortly."))}`);
-  const match = await findInventoryDid(country, region, city.city, did);
-  if (!match) redirect("/account/numbers?error=That%20number%20is%20not%20in%20the%20current%20inventory.%20Search%20again%20and%20choose%20a%20listed%20number.");
-  const payload = { did: match.did, country, region: (match.state || region).toUpperCase(), ratecenter: (match.ratecenter || city.city).toUpperCase(), emergency, termsAcceptedAt: new Date().toISOString() };
+  if (!ratecenter) redirect("/account/numbers?error=Choose%20a%20city%20from%20the%20list.");
+  const monthly = String(formData.get("monthly") || "").replace(/[^0-9.]/g, "").slice(0, 12);
+  const payload = { did, country, region, ratecenter: ratecenter.toUpperCase(), monthly, emergency, termsAcceptedAt: new Date().toISOString() };
   const info = getDb()
     .prepare("INSERT INTO account_requests (user_id, kind, payload, status, created_at) VALUES (?, 'number', ?, 'requested', ?)")
     .run(user.id, JSON.stringify(payload), new Date().toISOString());
@@ -305,16 +299,19 @@ export async function saveNumber(formData: FormData) {
   const mode = numberPurchaseMode(flagOn("numbers.live_order"), flagOn("numbers.auto_order"));
   if (mode === "off" && flagOn("numbers.auto_order")) redirect("/account/numbers?saved=held");
   if (mode !== "automatic") redirect("/account/numbers?saved=1");
-  const { purchaseNumber } = await import("@/lib/lines");
-  const result = await purchaseNumber({ requestId, userId: user.id, did: payload.did });
-  const { carrierDidRef } = await import("@/lib/number-order");
-  const status = result.ok || result.pending ? "ordered" : "exception";
-  const ref = result.ok ? carrierDidRef(payload.did) : "";
-  getDb().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(status, result.message, ref, requestId);
-  audit(user.email, "request.order", `${requestId}:${status}`);
-  if (result.pending) redirect("/account/numbers?saved=pending");
-  if (!result.ok) redirect(`/account/numbers?error=${encodeURIComponent(safeCustomerError(result.message, "We could not buy that number. Please try again, or contact support."))}`);
-  redirect("/account/numbers?saved=ordered");
+  getDb().prepare("UPDATE account_requests SET status = ?, staff_note = ? WHERE id = ?").run("ordering", "Buying this number on the phone-company account.", requestId);
+  const { finishAfterResponse } = await import("@/lib/later");
+  const buyerId = user.id;
+  finishAfterResponse(async () => {
+    const { purchaseNumber } = await import("@/lib/lines");
+    const { carrierDidRef } = await import("@/lib/number-order");
+    const result = await purchaseNumber({ requestId, userId: buyerId, did, monthly });
+    const status = result.ok || result.pending ? "ordered" : "exception";
+    const ref = result.ok ? carrierDidRef(did) : "";
+    getDb().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(status, result.message, ref, requestId);
+    audit(user.email, "request.order", `${requestId}:${status}`);
+  });
+  redirect("/account/numbers?saved=ordering");
 }
 
 export async function saveEmergencyAddress(formData: FormData) {
@@ -339,11 +336,15 @@ export async function saveEmergencyAddress(formData: FormData) {
   if (!city.ok) redirect(`/account/numbers?error=${encodeURIComponent(safeCustomerError(city.message, "The city list is not available right now. Try again shortly."))}`);
   parsed.address.city = city.city;
   saveEmergency(user.id, parsed.address);
-  const { ensureVoipClient } = await import("@/lib/voip-client");
-  await ensureVoipClient(user.id, true);
-  const result = await syncEmergency(user.id);
-  audit(user.email, "e911.save", result.ok ? "ok" : "needs-person");
-  if (!result.ok) redirect(`/account/numbers?error=${encodeURIComponent(safeCustomerError(result.message, "The emergency address was saved. The team will finish sending it."))}`);
+  const userId = user.id;
+  const { finishAfterResponse } = await import("@/lib/later");
+  finishAfterResponse(async () => {
+    const { ensureVoipClient } = await import("@/lib/voip-client");
+    await ensureVoipClient(userId, true);
+    const sent = await syncEmergency(userId);
+    audit(user.email, "e911.save", sent.ok ? "ok" : "needs-person");
+  });
+  audit(user.email, "e911.save", "saved");
   redirect("/account/numbers?address=1");
 }
 
@@ -418,7 +419,7 @@ export async function savePort(formData: FormData) {
 export async function addPerson(formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
-  const { allocateExtension, appPassword, extensionCapacity, listPhoneSystemNumbers, paidPlan, provisionExtension } = await import("@/lib/pbx");
+  const { allocateExtension, appPassword, extensionCapacity, paidPlan, provisionExtension } = await import("@/lib/pbx");
   const plan = paidPlan(user.id);
   if (!plan) redirect("/account/phone?error=Pay%20for%20a%20plan%20before%20adding%20people.");
   const first = String(formData.get("first_name") || "").trim().slice(0, 40);
@@ -435,11 +436,6 @@ export async function addPerson(formData: FormData) {
     ...(getDb().prepare("SELECT number FROM pbx_extensions WHERE status != 'removed'").all() as { number: string }[]),
     ...(getDb().prepare("SELECT number FROM call_groups").all() as { number: string }[]),
   ].map((row) => row.number);
-  if (flagOn("pbx.live_provision")) {
-    const listed = await listPhoneSystemNumbers();
-    if (listed.ok) used.push(...listed.numbers);
-    else audit(user.email, "pbx.extension.list", listed.message.slice(0, 400));
-  }
   const { persistNewExtensionRanges, planExtensionRanges } = await import("@/lib/extension-plan");
   const reserved = planExtensionRanges();
   persistNewExtensionRanges(reserved.ranges);
@@ -454,8 +450,9 @@ export async function addPerson(formData: FormData) {
     .run(user.id, number, first, last, email, appPassword(), new Date().toISOString());
   audit(user.email, "pbx.person", number);
   if (flagOn("pbx.live_provision")) {
-    const result = await provisionExtension(Number(info.lastInsertRowid));
-    if (!result.ok) redirect(`/account/phone?error=${encodeURIComponent(safeCustomerError(result.message, "We could not add this person yet. Please try again, or contact support."))}`);
+    const extensionId = Number(info.lastInsertRowid);
+    const { finishAfterResponse } = await import("@/lib/later");
+    finishAfterResponse(() => provisionExtension(extensionId));
   }
   redirect("/account/phone?saved=1");
 }
@@ -517,8 +514,9 @@ export async function savePhoneHours(formData: FormData) {
      ON CONFLICT(user_id) DO UPDATE SET open_time = excluded.open_time, close_time = excluded.close_time`,
   ).run(user.id, "", open, close);
   const { updateRouting } = await import("@/lib/pbx");
-  const result = await updateRouting(user.id);
+  const { finishAfterResponse } = await import("@/lib/later");
+  const userId = user.id;
+  finishAfterResponse(() => updateRouting(userId));
   audit(user.email, "pbx.hours", `${open}-${close}`);
-  if (!result.ok) redirect(`/account/phone?error=${encodeURIComponent(safeCustomerError(result.message, "Hours were saved. Call routing still needs attention."))}`);
-  redirect("/account/phone?saved=1");
+  redirect("/account/phone?saved=hours");
 }
