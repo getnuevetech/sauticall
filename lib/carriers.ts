@@ -146,12 +146,14 @@ export async function findInventoryDid(country: string, region: string, _ratecen
 
 export async function lookupOwnedDid(did: string) {
   const ten = normalizeRequestedDid(did);
-  if (!ten) return { ok: false as const, owned: false, message: "That number is not a 10-digit number." };
-  const result = await callVoipms("getDIDsInfo", { did: ten }, VOIPMS_READ_MS);
-  if (didInfoIsAbsent(result.status)) return { ok: true as const, owned: false, message: result.status };
-  if (!result.ok) return { ok: false as const, owned: false, message: result.message || result.status };
+  if (!ten) return { ok: false as const, owned: false, status: "invalid_did", message: "That number is not a 10-digit number." };
+  const ask = () => callVoipms("getDIDsInfo", { did: ten }, VOIPMS_WRITE_MS);
+  let result = await ask();
+  if (result.status === "unreachable") result = await ask();
+  if (didInfoIsAbsent(result.status)) return { ok: true as const, owned: false, status: result.status, message: result.status };
+  if (!result.ok) return { ok: false as const, owned: false, status: result.status, message: result.message || result.status };
   const owned = readDids(result.body, 0).some((item) => item.did === ten);
-  return { ok: true as const, owned, message: owned ? "success" : "missing" };
+  return { ok: true as const, owned, status: result.status, message: owned ? "success" : "missing" };
 }
 
 let popCache: { at: number; servers: ReturnType<typeof readPopServers> } | null = null;

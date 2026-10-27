@@ -1,4 +1,5 @@
 import { getConnection, lookupOwnedDid, orderDid, pbxRequest } from "./carriers";
+import { lookupMayOrder } from "./did-list";
 import { recordFailure } from "./failure-log";
 import { balanceCovers, resellerOrderFees } from "./client-funding";
 import { flagOn, getDb } from "./db";
@@ -214,13 +215,14 @@ export async function purchaseNumber(input: { requestId: number; userId: number;
     if (!sub.ok) return stop("The phone company line for this customer is not ready yet. An administrator can finish it on the customer page.", sub.message);
     if (sub.warning) recordFailure({ area: "client", userId: input.userId, subject: sub.account, detail: sub.warning });
     const current = await lookupOwnedDid(input.did);
-    if (!current.ok) return stop("The phone company could not be checked before buying. Try again shortly.", `getDIDsInfo ${input.did}: ${current.message}`);
+    if (!current.ok && !lookupMayOrder(current)) return stop("The phone company could not be checked before buying. Try again shortly.", `getDIDsInfo ${input.did}: ${current.message}`);
     let chargedOnOrder = false;
-    if (!current.owned) {
+    if (lookupMayOrder(current)) {
       const mainRouting = getConnection("voipms").public.routing;
       const lineRouting = `account:${sub.account}`;
       let ordered = await orderDid(input.did, lineRouting, sub.account, fees);
       const tries = [`orderDID ${lineRouting} account ${sub.account}: ${ordered.message}`];
+      if (!current.ok) tries.unshift(`getDIDsInfo ${input.did}: ${current.message}`);
       chargedOnOrder = ordered.ok;
       if (!ordered.ok && /account|monthly|setup|minute|parameter|rate|balance|routing|fund|credit/i.test(`${ordered.status} ${ordered.message}`) && mainRouting && mainRouting !== lineRouting) {
         ordered = await orderDid(input.did, mainRouting);

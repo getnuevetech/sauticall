@@ -3,7 +3,7 @@ import test from "node:test";
 import { clientEmail, clientPhone, clientPlace, personName, readVoipClientId } from "../lib/client-profile.ts";
 import { customerMessage, customerRequestStatus } from "../lib/customer-message.ts";
 import { didMatches, parseDigitSearch } from "../lib/did-search.ts";
-import { didInfoIsAbsent, normalizeRequestedDid, readDids } from "../lib/did-list.ts";
+import { didInfoIsAbsent, lookupMayOrder, normalizeRequestedDid, readDids } from "../lib/did-list.ts";
 import { balanceCovers, planFundAmount, readClientBalance, resellerOrderFees } from "../lib/client-funding.ts";
 import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
@@ -20,6 +20,13 @@ test("a DID that is not on the account yet is absent, not a failed check", () =>
   assert.equal(didInfoIsAbsent("no_did"), true);
   assert.equal(didInfoIsAbsent("invalid_credentials"), false);
   assert.equal(didInfoIsAbsent("success"), false);
+});
+
+test("a timed-out ownership check still allows the number to be ordered", () => {
+  assert.equal(lookupMayOrder({ ok: false, owned: false, status: "unreachable" }), true);
+  assert.equal(lookupMayOrder({ ok: true, owned: false, status: "invalid_did" }), true);
+  assert.equal(lookupMayOrder({ ok: true, owned: true, status: "success" }), false);
+  assert.equal(lookupMayOrder({ ok: false, owned: false, status: "invalid_credentials" }), false);
 });
 
 test("a number request has to be a full 10-digit inventory number", () => {

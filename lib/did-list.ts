@@ -10,6 +10,11 @@ export function didInfoIsAbsent(status: string) {
   return status === "no_did" || status === "invalid_did";
 }
 
+export function lookupMayOrder(check: { ok: boolean; owned: boolean; status: string }) {
+  if (check.ok) return !check.owned;
+  return check.status === "unreachable";
+}
+
 export function readDids(body: unknown, limit = 20): ListedDid[] {
   if (!body || typeof body !== "object") return [];
   const listed = (body as { dids?: unknown }).dids;
