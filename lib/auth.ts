@@ -9,14 +9,15 @@ export function hashPassword(password: string, salt = crypto.randomBytes(16).toS
   return `${salt}:${hash}`;
 }
 
-export function verifyPassword(password: string, stored: string) {
+export async function verifyPassword(password: string, stored: string) {
   const [salt, hash] = stored.split(":");
   if (!salt || !hash) return false;
-  const verify = crypto.scryptSync(password, salt, 32).toString("hex");
-  const a = Buffer.from(hash, "hex");
-  const b = Buffer.from(verify, "hex");
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
+  const derived = await new Promise<Buffer>((resolve, reject) => {
+    crypto.scrypt(password, salt, 32, (error, key) => (error ? reject(error) : resolve(key)));
+  });
+  const storedKey = Buffer.from(hash, "hex");
+  if (storedKey.length !== derived.length) return false;
+  return crypto.timingSafeEqual(storedKey, derived);
 }
 
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";

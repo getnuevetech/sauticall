@@ -821,7 +821,7 @@ export function AuthSplit({
         <section className="pub-auth-side">
           <h1>{title}</h1>
           <p>{lead}</p>
-          <div className="auth-art">{art ? <img src={art} alt="" /> : scene === "calls" ? <CallsMock /> : <DeskMock />}</div>
+          <div className="auth-art">{art ? <img src={art} alt="" decoding="async" /> : scene === "calls" ? <CallsMock /> : <DeskMock />}</div>
           {points ? <div className="pub-checks">{points.map((point) => {
             const icon = /account/i.test(point) ? "users" : /guided|setup/i.test(point) ? "settings" : "checkcircle";
             return <div key={point}><span><Icon name={icon} size={18} /></span>{point}</div>;

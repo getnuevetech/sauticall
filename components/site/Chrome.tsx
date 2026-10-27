@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { logout } from "@/app/account/actions";
 import { Icon } from "../Icon";
-import { MenuButton } from "./Interactive";
+import { MenuButton, SolutionsMenu } from "./Interactive";
 import type { NavLink, Theme } from "@/lib/types";
 
 function Brand({ theme, href = "/" }: { theme: Theme; href?: string }) {
   return (
-    <Link className="brand" href={href} aria-label="SautiCall home">
+    <Link className="brand" href={href} prefetch={false} aria-label="SautiCall home">
       {theme.logoUrl ? (
         // Admin-managed logo replaces the drawn mark when a file is set.
         // eslint-disable-next-line @next/next/no-img-element
@@ -70,32 +70,27 @@ export function SiteHeader({
         <Brand theme={theme} />
         <nav className="desktop-nav" aria-label="Primary navigation">
           {header.map((item) => item.href === "/solutions" ? (
-            <span className="nav-drop" key={item.href + item.label}>
-              <Link className={pathname === item.href ? "active" : ""} href={item.href}>{item.label} <Icon name="arrowdown" size={14} /></Link>
-              <span className="nav-drop-menu">
-                {drops.map((item) => <Link key={item.href + item.label} href={item.href}>{item.label}</Link>)}
-              </span>
-            </span>
+            <SolutionsMenu key={item.href + item.label} label={item.label} href={item.href} active={pathname === item.href} items={drops} />
           ) : (
-            <Link key={item.href + item.label} className={pathname === item.href ? "active" : ""} href={item.href}>{item.label}</Link>
+            <Link key={item.href + item.label} prefetch={false} className={pathname === item.href ? "active" : ""} href={item.href}>{item.label}</Link>
           ))}
         </nav>
         <div className="nav-actions">
-          {signedIn ? <Link className="nav-sign nav-account" href={accountHref}>{accountLabel}</Link> : showSignIn ? <Link className="nav-sign" href="/account/login">{signInLabel}</Link> : null}
-          <Link className="nav-sign nav-talk" href={talkHref}>{talkLabel}</Link>
+          {signedIn ? <Link className="nav-sign nav-account" prefetch={false} href={accountHref}>{accountLabel}</Link> : showSignIn ? <Link className="nav-sign" prefetch={false} href="/account/login">{signInLabel}</Link> : null}
+          <Link className="nav-sign nav-talk" prefetch={false} href={talkHref}>{talkLabel}</Link>
           {signedIn ? (
             <SignOut className="btn btn-primary nav-cta" />
           ) : (
-            <Link className="btn btn-primary nav-cta" href={startHref}>{startLabel} <Icon name="arrow" size={17} /></Link>
+            <Link className="btn btn-primary nav-cta" prefetch={false} href={startHref}>{startLabel} <Icon name="arrow" size={17} /></Link>
           )}
           <MenuButton />
         </div>
       </div>
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {signedIn ? <Link href={accountHref}>{accountLabel}</Link> : <Link href={startHref}>{startLabel}</Link>}
-        {signedIn ? <SignOut className="nav-menu-action" /> : showSignIn ? <Link href="/account/login">{signInLabel}</Link> : null}
-        <Link href={talkHref}>{talkLabel}</Link>
-        {mobile.map((item) => <Link key={`m-${item.href}-${item.label}`} href={item.href}>{item.label}</Link>)}
+        {signedIn ? <Link prefetch={false} href={accountHref}>{accountLabel}</Link> : <Link prefetch={false} href={startHref}>{startLabel}</Link>}
+        {signedIn ? <SignOut className="nav-menu-action" /> : showSignIn ? <Link prefetch={false} href="/account/login">{signInLabel}</Link> : null}
+        <Link prefetch={false} href={talkHref}>{talkLabel}</Link>
+        {mobile.map((item) => <Link prefetch={false} key={`m-${item.href}-${item.label}`} href={item.href}>{item.label}</Link>)}
       </nav>
     </header>
   );
@@ -126,7 +121,7 @@ export function SiteFooter({
           {footer.groups.map((group) => (
             <div key={group.title}>
               <h4>{group.title}</h4>
-              {group.links.map((link) => <Link key={link.label + link.href} href={link.href}>{link.label}</Link>)}
+              {group.links.map((link) => <Link prefetch={false} key={link.label + link.href} href={link.href}>{link.label}</Link>)}
             </div>
           ))}
         </div>
@@ -145,7 +140,7 @@ export function EndCta({ eyebrow, title, body, cta, href }: { eyebrow: string; t
           <h2>{title}</h2>
           <p>{body}</p>
         </div>
-        <Link className="btn btn-primary" href={href}>{cta} <Icon name="arrow" size={18} /></Link>
+        <Link className="btn btn-primary" prefetch={false} href={href}>{cta} <Icon name="arrow" size={18} /></Link>
       </div>
     </section>
   );
