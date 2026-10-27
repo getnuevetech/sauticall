@@ -1,6 +1,7 @@
 import { callVoipms, getConnection } from "./carriers";
 import { getDb } from "./db";
 import { DEFAULT_LINE_CODECS, lineCodecs } from "./line-codecs";
+import { chooseResellerPackage } from "./reseller-package";
 import { readOutboundCalls, type CdrCall } from "./minute-math";
 import { appPassword } from "./pbx";
 
@@ -52,7 +53,38 @@ function readSettings(raw: string): Settings {
 }
 
 function forLine(settings: Settings): Settings {
-  return { ...settings, allowed_codecs: lineCodecs(settings.allowed_codecs || "") };
+  const next: Settings = { ...settings, allowed_codecs: lineCodecs(settings.allowed_codecs || "") };
+  if (next.reseller_client && !next.reseller_package) delete next.reseller_client;
+  if (next.reseller_package && !next.reseller_client) delete next.reseller_package;
+  return next;
+}
+
+function resellerRejected(result: { status: string; message: string }) {
+  return /resellerpackage|resellerclient/i.test(`${result.status} ${result.message}`);
+}
+
+async function lineClientSettings(base: Settings, resellerClient: string) {
+  const settings = forLine(base);
+  delete settings.reseller_client;
+  delete settings.reseller_package;
+  if (!resellerClient) return { settings, warning: "" };
+  const assigned = await callVoipms("getClientPackages", { client: resellerClient });
+  let packageId = chooseResellerPackage(assigned.body, null);
+  if (!packageId) {
+    const catalog = await callVoipms("getPackages", {});
+    packageId = chooseResellerPackage(null, catalog.body);
+  }
+  if (!packageId) {
+    return { settings, warning: `VoIP.ms has no reseller package, so client ${resellerClient} was not attached to the line account.` };
+  }
+  return { settings: { ...settings, reseller_client: resellerClient, reseller_package: packageId }, warning: "" };
+}
+
+async function openLine(settings: Settings, run: (next: Settings) => ReturnType<typeof callVoipms>) {
+  const call = await sendLine(settings, run);
+  if (call.result.ok || !resellerRejected(call.result)) return { ...call, detached: "" };
+  const again = await sendLine(forLine({ ...call.settings, reseller_client: "", reseller_package: "" }), run);
+  return { ...again, detached: call.result.message || call.result.status };
 }
 
 async function sendLine(settings: Settings, run: (next: Settings) => ReturnType<typeof callVoipms>): Promise<{ result: Awaited<ReturnType<typeof callVoipms>>; settings: Settings }> {
@@ -96,17 +128,18 @@ export async function linkSubaccountClient(userId: number, clientId: string) {
   const row = getSubaccount(userId);
   if (!row?.account || !clientId) return { ok: true, message: "" };
   const settings = readSettings(row.settings_json);
-  if (settings.reseller_client === clientId) return { ok: true, message: "" };
+  if (settings.reseller_client === clientId && settings.reseller_package) return { ok: true, message: "" };
+  const attached = await lineClientSettings(settings, clientId);
+  if (!attached.settings.reseller_package) return { ok: false, message: attached.warning };
   const result = await callVoipms("setSubAccount", {
-    ...settings,
+    ...attached.settings,
     account: row.account,
     description: `SautiCall ${userId}`,
-    reseller_client: clientId,
     auth_type: row.locked ? "2" : "1",
     password: row.locked ? "" : row.password,
   });
-  if (!result.ok) return { ok: false, message: `VoIP.ms did not link the line account to the client (${result.status}).` };
-  getDb().prepare("UPDATE voip_subaccounts SET settings_json = ? WHERE user_id = ?").run(JSON.stringify({ ...settings, reseller_client: clientId }), userId);
+  if (!result.ok) return { ok: false, message: `VoIP.ms did not link the line account to the client (${result.message || result.status}).` };
+  getDb().prepare("UPDATE voip_subaccounts SET settings_json = ? WHERE user_id = ?").run(JSON.stringify(attached.settings), userId);
   return { ok: true, message: "" };
 }
 
@@ -123,25 +156,32 @@ export async function ensureSubaccount(userId: number, resellerClient = ""): Pro
   const connection = getConnection("voipms");
   if (!connection.enabled || !connection.secret) return { ok: false, message: "VoIP.ms is not connected, so a line account was not created." };
   const username = usernameFor(userId);
-  let settings: Settings = { ...settingsFromConnection(), ...(resellerClient ? { reseller_client: resellerClient } : {}) };
+  const attached = await lineClientSettings(settingsFromConnection(), resellerClient);
+  let settings = attached.settings;
   const description = `SautiCall ${userId}`;
   const host = sipHost(connection.public.pop || "");
   const password = appPassword();
-  const createdCall = await sendLine(settings, (next) => callVoipms("createSubAccount", { username, description, auth_type: "1", password, ...next }));
+  const createdCall = await openLine(settings, (next) => callVoipms("createSubAccount", { username, description, auth_type: "1", password, ...next }));
   settings = createdCall.settings;
   const created = createdCall.result;
+  const detached = createdCall.detached
+    ? `VoIP.ms refused the reseller package (${createdCall.detached}), so client ${resellerClient} was not attached.`
+    : attached.warning;
   const createdName = createdAccount(created.body);
   if (created.ok && createdName) {
     saveSubaccount({ user_id: userId, account: createdName, username, password, sip_host: host, settings_json: JSON.stringify(settings) });
-    return { ok: true, account: createdName, sipHost: host };
+    return { ok: true, account: createdName, sipHost: host, warning: detached || undefined };
   }
   const listed = await callVoipms("getSubAccounts", {});
   const found = listedAccounts(listed.body).find((item) => item.username === username || item.account.endsWith(`_${username}`) || item.description === description);
   if (found) {
-    const updatedCall = await sendLine(settings, (next) => callVoipms("setSubAccount", { account: found.account, description, auth_type: "1", password, ...next }));
-    if (!updatedCall.result.ok) return { ok: false, message: `VoIP.ms did not update the line account (${updatedCall.result.status}).` };
+    const updatedCall = await openLine(settings, (next) => callVoipms("setSubAccount", { account: found.account, description, auth_type: "1", password, ...next }));
+    if (!updatedCall.result.ok) return { ok: false, message: `VoIP.ms did not update the line account (${updatedCall.result.message || updatedCall.result.status}).` };
     saveSubaccount({ user_id: userId, account: found.account, username, password, sip_host: host, settings_json: JSON.stringify(updatedCall.settings) });
-    return { ok: true, account: found.account, sipHost: host };
+    const updateWarning = updatedCall.detached
+      ? `VoIP.ms refused the reseller package (${updatedCall.detached}), so client ${resellerClient} was not attached.`
+      : detached;
+    return { ok: true, account: found.account, sipHost: host, warning: updateWarning || undefined };
   }
   return { ok: false, message: `VoIP.ms did not create a line account (${created.message || created.status}).` };
 }
