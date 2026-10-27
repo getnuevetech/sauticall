@@ -6,6 +6,10 @@ export function normalizeRequestedDid(raw: string) {
   return /^[2-9]\d{9}$/.test(did) ? did : "";
 }
 
+export function didInfoIsAbsent(status: string) {
+  return status === "no_did" || status === "invalid_did";
+}
+
 export function readDids(body: unknown, limit = 20): ListedDid[] {
   if (!body || typeof body !== "object") return [];
   const listed = (body as { dids?: unknown }).dids;
