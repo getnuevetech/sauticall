@@ -21,11 +21,7 @@ import type { Plan } from "./types";
 
 export { extensionCapacity, chooseExtension, extensionRange, readExtensionPlan };
 
-export function appPassword() {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#";
-  const bytes = crypto.randomBytes(16);
-  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
-}
+export { appPassword } from "./app-password";
 
 type Department = { user_id: number; name: string; xapi_id: number; number_from: string; number_to: string; open_time: string; close_time: string; last_message: string };
 
