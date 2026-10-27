@@ -1,4 +1,4 @@
-export type NavLink = { label: string; href: string; location: "header" | "mobile" | "footer" | "account"; group?: string };
+export type NavLink = { label: string; href: string; location: "header" | "mobile" | "footer" | "account" | "menu"; group?: string };
 
 export type Service = {
   icon: string;

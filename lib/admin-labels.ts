@@ -80,6 +80,7 @@ function plain(key: string) {
 }
 
 const LABELS: Record<string, string> = {
+  shown: "Live page wording",
   metaTitle: "Title in the browser tab",
   metaDescription: "Short description for search",
   eyebrow: "Small label above the heading",
@@ -299,22 +300,23 @@ export function requestStatusLabel(value: string) {
 }
 
 export const documentScreens: Record<string, { title: string; intro: string }> = {
-  "page.home": { title: "Home page", intro: "Edit the words on the first page. The Create account button always opens signup." },
-  "page.solutions": { title: "Solutions page", intro: "Edit the services page." },
-  "page.ai": { title: "AI receptionist page", intro: "Edit the page about the AI receptionist." },
-  "page.how": { title: "How it works", intro: "Edit the page that explains setup." },
-  "page.pricing": { title: "Pricing page", intro: "Edit the words around the plans. Plan prices are under Plans." },
-  "page.about": { title: "About page", intro: "Edit the story of SautiCall." },
-  "page.contact": { title: "Contact page", intro: "Edit the contact page and its form." },
-  "page.custom": { title: "Custom plan page", intro: "Edit the form businesses use when they need something specific." },
-  "page.account": { title: "Account pages", intro: "Edit the words inside a signed-in account." },
-  nav: { title: "Menu", intro: "Choose the links people see at the top, on a phone, and inside an account." },
+  "page.home": { title: "Home page", intro: "Live page wording is what visitors see. The header button uses the main button fields above that section. Plan prices are under Plans." },
+  "page.solutions": { title: "Solutions page", intro: "Live page wording is what visitors see on Solutions." },
+  "page.ai": { title: "AI receptionist page", intro: "Live page wording is what visitors see on the AI receptionist page." },
+  "page.how": { title: "How it works", intro: "Live page wording is what visitors see. The setup assistant wording is on the home page." },
+  "page.pricing": { title: "Pricing page", intro: "Live page wording is what visitors see around the plans. Plan prices and features are under Plans." },
+  "page.about": { title: "About page", intro: "Edit the story of SautiCall. These fields are the words on the about page." },
+  "page.contact": { title: "Contact page", intro: "Edit the contact page and its form. These fields are the words visitors see." },
+  "page.custom": { title: "Custom plan page", intro: "Edit the form businesses use when they need something specific. These fields are the words visitors see." },
+  "page.account": { title: "Account pages", intro: "Live page wording covers sign-in and create account. The other fields are the words inside a signed-in account." },
+  "page.help": { title: "Help center", intro: "Live page wording is the public help page. Extra questions can be added under More questions, and longer articles under FAQ articles." },
+  nav: { title: "Menu", intro: "Header and mobile links are the top menu. Links whose place is menu open under Solutions. Account links are the signed-in menu." },
   footer: { title: "Footer", intro: "Edit the links and notes at the bottom of every page." },
-  services: { title: "Services", intro: "Edit the service cards." },
+  services: { title: "Services", intro: "These cards are saved with the site. The home and solutions pages use Live page wording on those screens." },
   plans: { title: "Plans", intro: "Check the features each plan includes. A subscribed customer gets those features in their account." },
   minute_bundles: { title: "Call minute bundles", intro: "These are extra outbound minutes a customer can buy. Bought minutes last until they are used. Turn a bundle off to hide it." },
-  faqs: { title: "Questions", intro: "Edit the questions and answers." },
-  personas: { title: "Who it is for", intro: "Edit the four short stories on the home page." },
+  faqs: { title: "More questions", intro: "These questions are added to the help center and shown on the contact page." },
+  personas: { title: "Who it is for", intro: "These short stories are saved with the site. The home page uses Live page wording on the home screen." },
   theme: { title: "Colors and font", intro: "Leave these as they are to keep the approved look. Change a color only when you mean to." },
   flags: { title: "What customers can do", intro: "Turn features on or off. The name of each switch is chosen from a list." },
 };

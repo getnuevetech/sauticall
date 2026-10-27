@@ -26,7 +26,14 @@ export function loadSite() {
     contact: readDoc<Record<string, unknown>>("page.contact"),
     custom: readDoc<Record<string, unknown>>("page.custom"),
     account: readDoc<Record<string, unknown>>("page.account"),
+    help: readDoc<Record<string, unknown>>("page.help"),
   };
+}
+
+export function pageMetadata(page: Record<string, unknown>) {
+  const title = typeof page.metaTitle === "string" ? page.metaTitle : undefined;
+  const description = typeof page.metaDescription === "string" ? page.metaDescription : undefined;
+  return { title, description };
 }
 
 export function enabled(flags: Flag[], key: string) {

@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Frame } from "@/components/site/Frame";
+import { copyLine } from "@/lib/public-copy";
 import { renderFaq } from "@/lib/faq-markdown";
+import { loadSite } from "@/lib/site";
 import { formatWhen } from "@/lib/format-when";
 import { getDb } from "@/lib/db";
 
@@ -20,12 +22,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function FaqArticlePage({ params }: { params: Promise<{ slug: string }> }) {
   const post = load((await params).slug);
   if (!post) notFound();
+  const help = loadSite().help;
   return (
     <Frame pathname="/faq">
       <main>
         <section className="inner-hero">
           <div className="wrap">
-            <span className="eyebrow">FAQ</span>
+            <span className="eyebrow">{copyLine(help, "page.help", "articleEyebrow")}</span>
             <h1>{post.title}</h1>
             <p>{post.author_name} · {formatWhen(post.updated_at)}</p>
           </div>
@@ -33,7 +36,7 @@ export default async function FaqArticlePage({ params }: { params: Promise<{ slu
         <section className="section">
           <div className="wrap faq-article">
             <div dangerouslySetInnerHTML={{ __html: renderFaq(post.body) }} />
-            <p style={{ marginTop: 28 }}><Link className="text-link" href="/faq">All articles</Link></p>
+            <p style={{ marginTop: 28 }}><Link className="text-link" href="/faq">{copyLine(help, "page.help", "articleBack")}</Link></p>
           </div>
         </section>
       </main>

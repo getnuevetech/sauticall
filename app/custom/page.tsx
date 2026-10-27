@@ -1,6 +1,11 @@
+import type { Metadata } from "next";
 import { Frame } from "@/components/site/Frame";
 import { CustomPlanPage } from "@/components/site/Marketing";
-import { enabled, loadSite } from "@/lib/site";
+import { enabled, loadSite, pageMetadata } from "@/lib/site";
+
+export function generateMetadata(): Metadata {
+  return pageMetadata(loadSite().custom);
+}
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ setup?: string }> }) {
   const site = loadSite();

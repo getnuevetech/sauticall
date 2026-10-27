@@ -8,6 +8,7 @@ import { currentUser } from "@/lib/auth";
 import { flagOn, getDb, readDoc } from "@/lib/db";
 import { featureLabels, normalizePlans } from "@/lib/plan-features";
 import { selectionAdvice, selectionPrompt } from "@/lib/offerings";
+import { copyLine, copyTexts } from "@/lib/public-copy";
 import { loadSite } from "@/lib/site";
 import type { Plan } from "@/lib/types";
 
@@ -29,6 +30,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
   if (user) redirect("/admin");
   const copy = loadSite().account;
   const text = (key: string) => (typeof copy[key] === "string" ? String(copy[key]) : "");
+  const say = (key: string) => copyLine(copy, "page.account", key);
   const open = flagOn("auth.signup");
   const catalog = normalizePlans(readDoc<Plan[]>("plans"));
   const named = catalog.find((plan) => plan.name === requestedPlan && !plan.custom);
@@ -39,38 +41,42 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
   return (
     <Frame pathname="/account/register">
       <AuthSplit
-        kicker="Create account"
+        kicker={say("registerKicker")}
         art="/marketing/signup-art.png"
-        title={<>Your next business <span className="accent">call starts here.</span></>}
-        lead="Bring your numbers, team and call handling together with SautiCall."
+        title={<>{say("registerHeadline")} <span className="accent">{say("registerHeadlineAccent")}</span></>}
+        lead={say("registerLead")}
         step="account"
-        points={["One account for your business", "Guided setup for your team", "Review your plan before payment"]}
+        points={copyTexts(copy, "page.account", "registerPoints")}
+        backLabel={say("authBack")}
+        helpLabel={say("authHelp")}
+        stepAccount={say("authStepAccount")}
+        stepPlan={say("authStepPlan")}
       >
-        <h1>Let&apos;s get you started</h1>
-        <p>Create your SautiCall account. Next, review your plan and payment details.</p>
+        <h1>{say("registerHeading")}</h1>
+        <p>{say("registerBody")}</p>
         {chosen ? <p>Selected plan: {chosen.name} · ${chosen.price}/month · {chosen.seats || 1} {chosen.seats === 1 ? "person" : "people"} · {chosen.includedMinutes} outbound minutes. {featureLabels(chosen.features).slice(0, 4).join(", ")}</p> : null}
         {setup ? <p>You asked for: {setup}</p> : null}
         {open ? (
           <AuthForm
             className="pub-form"
             action={register}
-            submit="Create account →"
+            submit={say("registerSubmit")}
             fields={[
-              { name: "name", label: "Full name", placeholder: "Your full name" },
-              { name: "email", label: "Email address", type: "email", placeholder: "you@business.com" },
-              { name: "phone", label: "Mobile number", type: "tel", placeholder: "+1 202 555 0100" },
-              { name: "password", label: "Password", type: "password", placeholder: "Create a password" },
+              { name: "name", label: say("registerName"), placeholder: say("registerNameHint") },
+              { name: "email", label: say("registerEmail"), type: "email", placeholder: say("registerEmailHint") },
+              { name: "phone", label: say("registerPhone"), type: "tel", placeholder: say("registerPhoneHint") },
+              { name: "password", label: say("registerPassword"), type: "password", placeholder: say("registerPasswordHint") },
             ]}
             extra={<>
               <input type="hidden" name="plan" value={chosen?.name || ""} />
               <input type="hidden" name="setup" value={setup} />
-              <label className="check-option"><input name="terms" type="checkbox" required /> I agree to the Terms of Service.</label>
-              <p>Password must be at least 8 characters.</p>
+              <label className="check-option"><input name="terms" type="checkbox" required /> {say("registerTerms")}</label>
+              <p>{say("registerPasswordRule")}</p>
             </>}
           />
         ) : <p>{text("registerClosed")}</p>}
-        {open ? <p>Already have an account? <Link href="/account/login">Sign in</Link></p> : null}
-        <p>Questions before you start? <Link href="/contact">Contact us</Link></p>
+        {open ? <p>{say("registerExisting")} <Link href="/account/login">{say("registerExistingLink")}</Link></p> : null}
+        <p>{say("registerQuestions")} <Link href="/contact">{say("registerQuestionsLink")}</Link></p>
       </AuthSplit>
     </Frame>
   );
