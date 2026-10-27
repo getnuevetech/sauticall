@@ -115,6 +115,14 @@ function migrate(database: Database.Database) {
       target TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS failure_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      area TEXT NOT NULL,
+      user_id INTEGER NOT NULL DEFAULT 0,
+      subject TEXT NOT NULL,
+      detail TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `);
   const cols = database.prepare("PRAGMA table_info(messages)").all() as { name: string }[];
   const names = new Set(cols.map((column) => column.name));

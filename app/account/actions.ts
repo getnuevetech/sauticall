@@ -308,7 +308,7 @@ export async function saveNumber(formData: FormData) {
     const result = await purchaseNumber({ requestId, userId: buyerId, did, monthly });
     const status = result.ok || result.pending ? "ordered" : "exception";
     const ref = result.ok ? carrierDidRef(did) : "";
-    getDb().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(status, result.message, ref, requestId);
+    getDb().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(status, result.detail || result.message, ref, requestId);
     audit(user.email, "request.order", `${requestId}:${status}`);
   });
   redirect("/account/numbers?saved=ordering");
@@ -406,7 +406,8 @@ export async function savePort(formData: FormData) {
     } else {
       status = "exception";
       note = result.message;
-      console.error(`[sauticall] ${result.message}`);
+      const { recordFailure } = await import("@/lib/failure-log");
+      recordFailure({ area: "transfer", userId: user.id, subject: payload.numbers, detail: result.message });
     }
   }
   getDb()

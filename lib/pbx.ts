@@ -642,6 +642,8 @@ export async function provisionExtension(id: number) {
     const message = error instanceof Error ? error.message : "The phone system did not create this person.";
     const detail = error instanceof PhoneSystemError ? error.admin : message;
     database.prepare("UPDATE pbx_extensions SET status = 'failed', last_message = ? WHERE id = ?").run(detail.slice(0, 1200), id);
+    const { recordFailure } = await import("./failure-log");
+    recordFailure({ area: "extension", userId: row.user_id, subject: row.number, detail });
     return { ok: false, message, detail };
   }
 }
@@ -656,7 +658,11 @@ export async function removeExtension(id: number) {
   }
   if (row.xapi_id) {
     const removed = await pbxRequest(`Users(${row.xapi_id})`, { method: "DELETE" });
-    if (!removed.ok && removed.status !== 404) return { ok: false, message: removed.message };
+    if (!removed.ok && removed.status !== 404) {
+      const { recordFailure } = await import("./failure-log");
+      recordFailure({ area: "extension", userId: row.user_id, subject: row.number, detail: removed.message });
+      return { ok: false, message: removed.message };
+    }
   }
   const groups = database.prepare(
     `SELECT g.id, g.kind, g.xapi_id FROM call_groups g
@@ -706,7 +712,12 @@ export async function updateExtensionProfile(id: number, userId: number, input: 
       method: "PATCH",
       body: { Id: row.xapi_id, FirstName: first, LastName: last, EmailAddress: email },
     });
-    if (!patched.ok) return { ok: false, message: patched.message || "The name could not be saved." };
+    if (!patched.ok) {
+      const detail = patched.message || "The name could not be saved.";
+      const { recordFailure } = await import("./failure-log");
+      recordFailure({ area: "extension", userId: row.user_id, subject: row.number, detail });
+      return { ok: false, message: detail };
+    }
   }
   getDb().prepare("UPDATE pbx_extensions SET first_name = ?, last_name = ?, email = ? WHERE id = ?").run(first, last, email, id);
   return { ok: true, message: "Saved." };

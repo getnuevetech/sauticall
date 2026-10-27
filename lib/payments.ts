@@ -118,6 +118,8 @@ export async function testGateway(id: number) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "The payment company could not be reached.";
     getDb().prepare("UPDATE gateways SET last_ok = 0, last_message = ?, checked_at = ? WHERE id = ?").run(message.slice(0, 400), new Date().toISOString(), id);
+    const { recordFailure } = await import("./failure-log");
+    recordFailure({ area: "payment", subject: `gateway ${id}`, detail: message });
     return { ok: false, message };
   }
 }
@@ -172,9 +174,10 @@ export async function beginCheckout(attemptId: number, origin: string): Promise<
         cache: "no-store",
         signal: AbortSignal.timeout(8000),
       });
-      const order = (await response.json().catch(() => null)) as { id?: string; links?: { rel?: string; href?: string }[]; message?: string } | null;
+      const order = (await response.json().catch(() => null)) as { id?: string; links?: { rel?: string; href?: string }[]; message?: string; details?: { description?: string; issue?: string }[] } | null;
       const url = order?.links?.find((link) => link.rel === "payer-action" || link.rel === "approve")?.href;
-      if (!response.ok || !order?.id || !url) throw new Error(order?.message || "PayPal did not start checkout.");
+      const paypalDetail = order?.details?.map((item) => item.description || item.issue || "").filter(Boolean).join("; ");
+      if (!response.ok || !order?.id || !url) throw new Error(paypalDetail || order?.message || "PayPal did not start checkout.");
       saveCheckout(attempt.id, order.id, url);
       return { ok: true, url };
     }
@@ -201,6 +204,8 @@ export async function beginCheckout(attemptId: number, origin: string): Promise<
   } catch (error) {
     const message = error instanceof Error ? error.message : "Checkout could not start.";
     getDb().prepare("UPDATE payment_attempts SET status = 'failed' WHERE id = ? AND status = 'pending'").run(attempt.id);
+    const { recordFailure } = await import("./failure-log");
+    recordFailure({ area: "payment", userId: attempt.user_id, subject: `${gateway?.provider_key || "payment"} ${attempt.id}`, detail: message });
     return { ok: false, message };
   }
 }

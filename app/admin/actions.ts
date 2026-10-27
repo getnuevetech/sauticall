@@ -191,7 +191,7 @@ export async function orderSavedNumber(formData: FormData) {
   const { carrierDidRef } = await import("@/lib/number-order");
   const status = result.ok || result.pending ? "ordered" : "exception";
   const ref = result.ok ? carrierDidRef(payload.did) : "";
-  database().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(status, result.message, ref, id);
+  database().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(status, result.detail || result.message, ref, id);
   audit(user.email, "request.order", `${id}:${status}`);
   redirect("/admin/requests");
 }
@@ -205,6 +205,10 @@ export async function refreshPortStatus(formData: FormData) {
   const { portStatus } = await import("@/lib/carriers");
   const result = await portStatus(row.provider_ref);
   database().prepare("UPDATE account_requests SET staff_note = ? WHERE id = ?").run(result.ok ? `Carrier status: ${result.status}` : result.message, id);
+  if (!result.ok) {
+    const { recordFailure } = await import("@/lib/failure-log");
+    recordFailure({ area: "transfer", subject: row.provider_ref, detail: result.message });
+  }
   audit(user.email, "request.port.refresh", String(id));
   redirect("/admin/requests");
 }

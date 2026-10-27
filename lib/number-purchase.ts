@@ -45,7 +45,8 @@ export async function reconcileBoughtNumbers(userId?: number) {
       }
       if (row.status === "exception") continue;
       const label = did || "this number";
-      const note = `VoIP.ms does not have ${label}, so it is not bought.`;
+      const kept = /orderDID|getDIDsInfo|connectDID/.test(row.staff_note);
+      const note = kept ? row.staff_note : `VoIP.ms does not have ${label}, so it is not bought.`;
       database.prepare("UPDATE account_requests SET status = 'exception', provider_ref = '', staff_note = ? WHERE id = ?").run(note, row.id);
       const wanted = normalizeRequestedDid(did);
       if (!wanted) continue;

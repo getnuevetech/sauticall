@@ -1,4 +1,5 @@
 import { getConnection, lookupOwnedDid, orderDid, pbxRequest } from "./carriers";
+import { recordFailure } from "./failure-log";
 import { balanceCovers, resellerOrderFees } from "./client-funding";
 import { flagOn, getDb } from "./db";
 import { finishAfterResponse } from "./later";
@@ -130,6 +131,7 @@ export async function attachTrunk(lineId: number) {
     if (!fallback.ok || !trunkId) {
       const note = `VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"} is ready. 3CX did not add the trunk. Add it on the server for ${department?.name || departmentName(line.user_id)}, route inbound ${line.did} to extension ${extension}, and add an outbound rule limited to extensions ${span.from}–${span.to}. ${hideSecret(fallback.message || created.message, sub.password)}`;
       openTask(line.id, line.user_id, line.did, note);
+      recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
       return { ok: false, message: "3CX did not add the trunk. A task was saved for the team." };
     }
   }
@@ -147,6 +149,7 @@ export async function attachTrunk(lineId: number) {
     const note = `The trunk was created on 3CX. Inbound calls to extension ${extension} and outbound calls for extensions ${span.from}–${span.to} still need to be finished on the server. VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"}. ${hideSecret(rule.message, sub.password)}`;
     getDb().prepare("UPDATE phone_lines SET trunk_id = ?, status = 'trunk_waiting', last_message = ? WHERE id = ?").run(trunkId, note.slice(0, 400), line.id);
     openTask(line.id, line.user_id, line.did, note);
+    recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
     return { ok: false, message: "The trunk exists, but inbound and outbound still need a person." };
   }
   const outbound = await addOutboundRule({ name: `SautiCall ${line.did}`, trunkId, callerId: `+${number}`, from: span.from, to: span.to });
@@ -154,6 +157,7 @@ export async function attachTrunk(lineId: number) {
     const note = `The trunk is on 3CX and inbound calls go to extension ${extension}. ${outbound.message} Add that outbound rule on the server. VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"}.`;
     getDb().prepare("UPDATE phone_lines SET trunk_id = ?, status = 'trunk_waiting', last_message = ? WHERE id = ?").run(trunkId, note.slice(0, 400), line.id);
     openTask(line.id, line.user_id, line.did, note);
+    recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
     return { ok: false, message: "Inbound is connected. Outbound still needs the team." };
   }
   const done = `This number is a trunk on the phone system. ${outbound.message}`;
@@ -181,49 +185,52 @@ function storedMonthly(requestId: number, fallback: string) {
   }
 }
 
-export async function purchaseNumber(input: { requestId: number; userId: number; did: string; monthly?: string }): Promise<{ ok: boolean; pending?: boolean; message: string }> {
+export async function purchaseNumber(input: { requestId: number; userId: number; did: string; monthly?: string }): Promise<{ ok: boolean; pending?: boolean; message: string; detail: string }> {
   let sent = false;
+  const stop = (message: string, detail: string, pending = false) => {
+    recordFailure({ area: "number", userId: input.userId, subject: input.did, detail });
+    getDb().prepare("UPDATE voip_clients SET last_message = ?, updated_at = ? WHERE user_id = ?").run(detail.slice(0, 400), new Date().toISOString(), input.userId);
+    return { ok: false as const, pending, message, detail };
+  };
   try {
     const client = await ensureVoipClient(input.userId);
-    if (!client.ok) return { ok: false, message: "The phone company account for this customer is not ready yet. An administrator can finish it on the customer page." };
+    if (!client.ok) return stop("The phone company account for this customer is not ready yet. An administrator can finish it on the customer page.", client.message);
     const chargeClient = flagOn("billing.fund_client");
     const fees = resellerOrderFees({ chargeClient, monthly: input.monthly || storedMonthly(input.requestId, "") });
     if (chargeClient) {
       const plan = paidPlan(input.userId);
-      if (!plan) return { ok: false, message: "A paid plan has to add phone-company balance before a number can be bought." };
+      if (!plan) return stop("A paid plan has to add phone-company balance before a number can be bought.", "No paid plan is on this customer, so VoIP.ms was not asked to order the number.");
       const { fundPaidPlan } = await import("./voip-client");
       const funded = await fundPaidPlan(input.userId, plan.name);
-      if (!funded.ok) return { ok: false, message: funded.message };
+      if (!funded.ok) return stop(funded.message, funded.message);
       const balance = await readFundedBalance(client.clientId);
       const marked = getVoipClient(input.userId);
       if ((marked?.funded_cents || 0) <= 0 && (balance == null || balance <= 0)) {
-        return { ok: false, message: "The phone-company balance for this plan is not on the account yet." };
+        return stop("The phone-company balance for this plan is not on the account yet.", `Client ${client.clientId} balance was ${balance == null ? "unreadable" : balance.toFixed(2)} after funding ${plan.name}.`);
       }
-      if (!balanceCovers(balance, fees)) return { ok: false, message: "This account does not have enough phone-company balance to buy that number yet." };
+      if (!balanceCovers(balance, fees)) return stop("This account does not have enough phone-company balance to buy that number yet.", `Client ${client.clientId} balance ${balance?.toFixed(2)} does not cover monthly ${fees.monthly} and setup ${fees.setup}.`);
     }
     const sub = await ensureSubaccount(input.userId, client.clientId);
-    if (!sub.ok) {
-      getDb().prepare("UPDATE voip_clients SET last_message = ?, updated_at = ? WHERE user_id = ?").run(sub.message.slice(0, 400), new Date().toISOString(), input.userId);
-      return { ok: false, message: "The phone company line for this customer is not ready yet. An administrator can finish it on the customer page." };
-    }
+    if (!sub.ok) return stop("The phone company line for this customer is not ready yet. An administrator can finish it on the customer page.", sub.message);
+    if (sub.warning) recordFailure({ area: "client", userId: input.userId, subject: sub.account, detail: sub.warning });
     const current = await lookupOwnedDid(input.did);
-    if (!current.ok) return { ok: false, message: "The phone company could not be checked before buying. Try again shortly." };
+    if (!current.ok) return stop("The phone company could not be checked before buying. Try again shortly.", `getDIDsInfo ${input.did}: ${current.message}`);
     let chargedOnOrder = false;
     if (!current.owned) {
-      let ordered = await orderDid(input.did, `account:${sub.account}`, sub.account, fees);
+      const mainRouting = getConnection("voipms").public.routing;
+      const lineRouting = `account:${sub.account}`;
+      let ordered = await orderDid(input.did, lineRouting, sub.account, fees);
+      const tries = [`orderDID ${lineRouting} account ${sub.account}: ${ordered.message}`];
       chargedOnOrder = ordered.ok;
-      if (!ordered.ok && /account|monthly|setup|minute|parameter/i.test(`${ordered.status} ${ordered.message}`)) {
-        ordered = await orderDid(input.did, `account:${sub.account}`);
+      if (!ordered.ok && /account|monthly|setup|minute|parameter|rate|balance|routing|fund|credit/i.test(`${ordered.status} ${ordered.message}`) && mainRouting && mainRouting !== lineRouting) {
+        ordered = await orderDid(input.did, mainRouting);
         chargedOnOrder = false;
+        tries.push(`orderDID ${mainRouting}: ${ordered.message}`);
       }
-      if (!ordered.ok) {
-        getDb().prepare("UPDATE voip_clients SET last_message = ?, updated_at = ? WHERE user_id = ?").run(`Number order returned ${ordered.status}.`.slice(0, 400), new Date().toISOString(), input.userId);
-        console.error(`[sauticall] order ${input.did} ${ordered.status}`);
-        return { ok: false, message: "The phone company did not buy this number. The balance and line account need another look." };
-      }
+      if (!ordered.ok) return stop("The phone company did not buy this number. The balance and line account need another look.", tries.join(" | "));
       sent = true;
       const owned = await lookupOwnedDid(input.did);
-      if (!owned.ok || !owned.owned) return { ok: false, pending: true, message: "The order was sent, but the phone company has not listed this number yet." };
+      if (!owned.ok || !owned.owned) return stop("The order was sent, but the phone company has not listed this number yet.", owned.ok ? `orderDID succeeded but getDIDsInfo does not list ${input.did} yet. ${tries.join(" | ")}` : `orderDID succeeded. getDIDsInfo ${input.did}: ${owned.message}`, true);
     } else {
       sent = true;
     }
@@ -237,7 +244,7 @@ export async function purchaseNumber(input: { requestId: number; userId: number;
     }
     const linked = await billDidToClient(input.did, sub.account, fees, chargedOnOrder);
     if (linked) {
-      getDb().prepare("UPDATE voip_clients SET last_message = ?, updated_at = ? WHERE user_id = ?").run(`Number ${input.did} was ordered. Linking it to the client returned ${linked}.`.slice(0, 400), new Date().toISOString(), input.userId);
+      recordFailure({ area: "number", userId: input.userId, subject: input.did, detail: `connectDID ${input.did} to ${sub.account} returned ${linked}.` });
     }
     const userId = input.userId;
     finishAfterResponse(async () => {
@@ -246,12 +253,12 @@ export async function purchaseNumber(input: { requestId: number; userId: number;
       const { sendEmergency } = await import("./e911");
       await sendEmergency(lineId);
     });
-    if (linked) return { ok: false, pending: true, message: "The number was ordered. Linking it to the phone-company account still needs another look." };
-    return { ok: true, message: "This number was bought on the phone-company account." };
+    if (linked) return { ok: false, pending: true, message: "The number was ordered. Linking it to the phone-company account still needs another look.", detail: `Number ${input.did} was ordered. connectDID to ${sub.account} returned ${linked}.` };
+    const bought = "This number was bought on the phone-company account.";
+    return { ok: true, message: bought, detail: bought };
   } catch (error) {
     const detail = error instanceof Error ? error.message : "The purchase could not be finished.";
-    console.error("[sauticall] purchase", detail);
-    if (sent) return { ok: false, pending: true, message: "The order was sent, but connecting this number could not be finished." };
-    return { ok: false, message: "The phone company could not be reached. Try again shortly." };
+    if (sent) return stop("The order was sent, but connecting this number could not be finished.", detail, true);
+    return stop("The phone company could not be reached. Try again shortly.", detail);
   }
 }
