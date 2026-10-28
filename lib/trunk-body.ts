@@ -1,24 +1,3 @@
-const TRUNK_COLLECTIONS: Record<string, string> = {
-  DidNumbers: "#Collection(String)",
-  EmergencyGeoLocations: "#Collection(Pbx.EmergencyGeoTrunkLocation)",
-  Groups: "#Collection(Pbx.UserGroup)",
-  InCIDFormatting: "#Collection(Pbx.CIDFormatting)",
-  OutCIDFormatting: "#Collection(Pbx.CIDFormatting)",
-  PublicInfoGroups: "#Collection(String)",
-  ReceiveExtensions: "#Collection(Pbx.Peer)",
-  RoutingRules: "#Collection(Pbx.InboundRule)",
-  Tags: "#Collection(Pbx.UserTag)",
-  TrunkRegTimes: "#Collection(Pbx.Variable)",
-};
-
-const GATEWAY_COLLECTIONS: Record<string, string> = {
-  Codecs: "#Collection(String)",
-  InboundParams: "#Collection(Pbx.GatewayParameterBinding)",
-  OutboundParams: "#Collection(Pbx.GatewayParameterBinding)",
-  SourceIdentification: "#Collection(Pbx.GatewayParameterBinding)",
-  VariableChoices: "#Collection(Pbx.Choice)",
-};
-
 export function trunkCreateBody(input: {
   seed: Record<string, unknown> | null;
   name: string;
@@ -27,44 +6,34 @@ export function trunkCreateBody(input: {
   password: string;
   host: string;
   groupId?: number;
-  fillEmptyCollections?: boolean;
+  template?: string;
 }) {
-  const body = cleanValue(input.seed || {}) as Record<string, unknown>;
-  body["@odata.type"] = text(body["@odata.type"]) || "#Pbx.Trunk";
+  const body = copyValue(input.seed || {}) as Record<string, unknown>;
   body.Name = input.name;
   body.ExternalNumber = input.number;
   body.AuthID = input.authId;
   if ("AuthUser" in body) body.AuthUser = input.authId;
-  body.AuthPassword = {
-    "@odata.type": "#Pbx.ConcealedPassword",
-    ...passwordFields(body.AuthPassword),
-    Value: input.password,
-  };
+  if ("SeparateAuthId" in body || body.UseSeparateAuthId === true) body.SeparateAuthId = input.authId;
+  body.AuthPassword = passwordValue(body.AuthPassword, input.password);
   const gateway = body.Gateway && typeof body.Gateway === "object" && !Array.isArray(body.Gateway)
     ? { ...(body.Gateway as Record<string, unknown>) }
     : {};
-  gateway["@odata.type"] = text(gateway["@odata.type"]) || "#Pbx.Gateway";
   if (input.host) gateway.Host = input.host;
   if (!gateway.Port) gateway.Port = 5060;
   if (!gateway.Name) gateway.Name = "VoIP.ms";
-  for (const [key, type] of Object.entries(GATEWAY_COLLECTIONS)) {
-    const items = collectionItems(gateway[key]);
-    if (items.length || input.fillEmptyCollections !== false) gateway[key] = typedCollection(gateway[key], type, items);
-    else delete gateway[key];
-  }
+  if (!gateway.TemplateFilename && input.template) gateway.TemplateFilename = input.template;
   body.Gateway = gateway;
-  body.DidNumbers = typedCollection(body.DidNumbers, TRUNK_COLLECTIONS.DidNumbers, [input.number]);
+  body.DidNumbers = addItem(body.DidNumbers, input.number, (item) => item === input.number);
   if (input.groupId) {
-    body.Groups = typedCollection(body.Groups, TRUNK_COLLECTIONS.Groups, [{ GroupId: input.groupId, Rights: { "@odata.type": "#Pbx.Rights", RoleName: "system" } }]);
-  } else if (input.fillEmptyCollections !== false) body.Groups = typedCollection(body.Groups, TRUNK_COLLECTIONS.Groups, collectionItems(body.Groups));
-  else delete body.Groups;
-  for (const [key, type] of Object.entries(TRUNK_COLLECTIONS)) {
-    if (key === "DidNumbers" || key === "Groups") continue;
-    const items = collectionItems(body[key]);
-    if (items.length || input.fillEmptyCollections !== false) body[key] = typedCollection(body[key], type, items);
-    else delete body[key];
+    body.Groups = addItem(body.Groups, { GroupId: input.groupId, Rights: { RoleName: "system" } }, (item) => {
+      return Boolean(item && typeof item === "object" && (item as { GroupId?: unknown }).GroupId === input.groupId);
+    });
   }
   return body;
+}
+
+export function trunkAsArrays(body: Record<string, unknown>) {
+  return arrays(body) as Record<string, unknown>;
 }
 
 export function wrapCollections(body: Record<string, unknown>, keys: string[]) {
@@ -77,70 +46,69 @@ export function mentionsDelta(message: string) {
   return /delta/i.test(message);
 }
 
-function typedCollection(current: unknown, fallbackType: string, items: unknown[]) {
-  const record = current && typeof current === "object" && !Array.isArray(current) ? current as Record<string, unknown> : {};
-  return { "@odata.type": text(record["@odata.type"]) || fallbackType, delta: items };
-}
-
-function collectionItems(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    if (Array.isArray(record.delta)) return record.delta;
-    if (Array.isArray(record.value)) return record.value;
-  }
-  return [];
-}
-
-function passwordFields(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const next: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    if (key.startsWith("@") || key === "delta") continue;
-    if (typeof child === "string" || typeof child === "number" || typeof child === "boolean") next[key] = child;
-  }
+function passwordValue(current: unknown, password: string) {
+  if (!current || typeof current !== "object" || Array.isArray(current)) return { Value: password };
+  const next: Record<string, unknown> = { ...(current as Record<string, unknown>), Value: password };
+  delete next.delta;
   return next;
 }
 
-function cleanValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(cleanValue);
+function addItem(current: unknown, item: unknown, same: (existing: unknown) => boolean) {
+  if (Array.isArray(current)) {
+    if (!current.some(same)) current.push(item);
+    return current;
+  }
+  if (current && typeof current === "object") {
+    const record = current as Record<string, unknown>;
+    const items = Array.isArray(record.delta) ? [...record.delta] : [];
+    if (!items.some(same)) items.push(item);
+    return { ...record, delta: items };
+  }
+  return [item];
+}
+
+function copyValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(copyValue);
   if (!value || typeof value !== "object") return value;
   const record = value as Record<string, unknown>;
-  const declared = text(record["@odata.type"]);
-  const context = text(record["@odata.context"]);
-  if ("delta" in record || /Collection\(/i.test(`${declared} ${context}`)) {
-    const items = collectionItems(record).map(cleanValue);
-    const next: Record<string, unknown> = { delta: items };
-    const type = declared || collectionTypeFromContext(context);
+  if (isCollection(record)) {
+    const next: Record<string, unknown> = { delta: collectionItems(record).map(copyValue) };
+    const type = text(record["@odata.type"]);
     if (type) next["@odata.type"] = type;
     return next;
   }
   const next: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(record)) {
-    if (key === "@odata.type" || key.endsWith("@odata.type")) {
-      next[key] = child;
-      continue;
-    }
-    if (key.startsWith("@") || key.includes("@odata.")) continue;
-    const cleaned = cleanValue(child);
-    if (cleaned && typeof cleaned === "object" && !Array.isArray(cleaned) && Object.keys(cleaned as object).length === 0) continue;
-    next[key] = cleaned;
-  }
-  for (const key of Object.keys(next)) {
-    if (!key.endsWith("@odata.type")) continue;
-    const name = key.slice(0, -"@odata.type".length);
-    const type = text(next[key]);
-    if (!name || !type || !Array.isArray(next[name])) continue;
-    next[name] = { "@odata.type": type.startsWith("#") ? type : `#${type}`, delta: next[name] };
-    delete next[key];
+    if (key !== "@odata.type" && !key.endsWith("@odata.type") && (key.startsWith("@") || key.includes("@odata."))) continue;
+    const copied = copyValue(child);
+    if (copied && typeof copied === "object" && !Array.isArray(copied) && Object.keys(copied as object).length === 0) continue;
+    next[key] = copied;
   }
   return next;
 }
 
-function collectionTypeFromContext(context: string) {
-  const match = context.match(/#Collection\([^)]+\)/i) || context.match(/Collection\([^)]+\)/i);
-  if (!match) return "";
-  return match[0].startsWith("#") ? match[0] : `#${match[0]}`;
+function arrays(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(arrays);
+  if (!value || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  if ("delta" in record) return (Array.isArray(record.delta) ? record.delta : []).map(arrays);
+  const next: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(record)) {
+    if (key.startsWith("@")) continue;
+    next[key] = arrays(child);
+  }
+  return next;
+}
+
+function isCollection(record: Record<string, unknown>) {
+  if ("delta" in record) return true;
+  return /Collection\(/i.test(`${text(record["@odata.type"])} ${text(record["@odata.context"])}`);
+}
+
+function collectionItems(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object" && Array.isArray((value as { delta?: unknown }).delta)) return (value as { delta: unknown[] }).delta;
+  return [];
 }
 
 function text(value: unknown) {
