@@ -1,20 +1,55 @@
-const ARRAY_KEYS = new Set([
-  "DidNumbers",
-  "EmergencyGeoLocations",
-  "InCIDFormatting",
-  "OutCIDFormatting",
-  "PublicInfoGroups",
-  "ReceiveExtensions",
-  "RoutingRules",
-  "Tags",
-  "TrunkRegTimes",
-  "Groups",
-  "Codecs",
-  "InboundParams",
-  "OutboundParams",
-  "SourceIdentification",
-  "VariableChoices",
-]);
+const TRUNK_FIELDS = [
+  "Direction",
+  "DisableCallTransfer",
+  "DisableVideo",
+  "DiversionHeader",
+  "E164CountryCode",
+  "E164ProcessIncomingNumber",
+  "EnableInboundCalls",
+  "EnableOutboundCalls",
+  "IPRestriction",
+  "OutboundCallerID",
+  "PublicIPinSIP",
+  "PublishInfo",
+  "ReceiveInfo",
+  "RemoteMyPhoneUriHost",
+  "RemotePBXPreffix",
+  "SecondaryRegistrar",
+  "SeparateAuthId",
+  "SimultaneousCalls",
+  "TransportRestriction",
+  "TunnelEnabled",
+  "TunnelRemoteAddr",
+  "TunnelRemotePort",
+  "UseSeparateAuthId",
+];
+
+const GATEWAY_FIELDS = [
+  "DeliverAudio",
+  "DestNumberInRemotePartyIDCalled",
+  "DestNumberInRequestLineURI",
+  "DestNumberInTo",
+  "IPInRegistrationContact",
+  "Internal",
+  "Lines",
+  "MatchingStrategy",
+  "Name",
+  "OutboundCallerID",
+  "Port",
+  "ProxyHost",
+  "ProxyPort",
+  "RequireRegistrationFor",
+  "SRTPMode",
+  "SpecifiedIPForRegistrationContact",
+  "SupportReinvite",
+  "SupportReplaces",
+  "TemplateFilename",
+  "TimeBetweenReg",
+  "Type",
+  "UseIPInContact",
+];
+
+const LIST_FIELDS = ["Codecs", "InboundParams", "OutboundParams", "SourceIdentification", "VariableChoices"];
 
 export function trunkCreateBody(input: {
   seed: Record<string, unknown> | null;
@@ -24,29 +59,47 @@ export function trunkCreateBody(input: {
   password: string;
   host: string;
   groupId?: number;
+  includeGatewayLists?: boolean;
 }) {
-  const body = keepDelta(input.seed || {}) as Record<string, unknown>;
-  body.Name = input.name;
-  body.ExternalNumber = input.number;
-  body.AuthID = input.authId;
-  if ("AuthUser" in body) body.AuthUser = input.authId;
-  const password = body.AuthPassword;
-  body.AuthPassword = password && typeof password === "object" && !Array.isArray(password)
-    ? { ...(password as Record<string, unknown>), Value: input.password }
-    : { Value: input.password };
-  const gateway = body.Gateway && typeof body.Gateway === "object" && !Array.isArray(body.Gateway)
-    ? { ...(body.Gateway as Record<string, unknown>) }
+  const seed = input.seed || {};
+  const gatewaySeed = seed.Gateway && typeof seed.Gateway === "object" && !Array.isArray(seed.Gateway)
+    ? seed.Gateway as Record<string, unknown>
     : {};
+  const gateway = scalars(gatewaySeed, GATEWAY_FIELDS);
   if (input.host) gateway.Host = input.host;
   if (!gateway.Port) gateway.Port = 5060;
-  body.Gateway = gateway;
-  body.DidNumbers = asDelta(replaceItems(body.DidNumbers, [input.number]));
-  if (input.groupId) body.Groups = asDelta(replaceItems(body.Groups, [{ GroupId: input.groupId, Rights: { RoleName: "system" } }]));
+  if (!gateway.Name) gateway.Name = "VoIP.ms";
+  if (input.includeGatewayLists !== false) {
+    const codecs = listItems(gatewaySeed.Codecs).filter((item): item is string => typeof item === "string");
+    if (codecs.length) gateway.Codecs = codecs;
+    for (const key of LIST_FIELDS) {
+      if (key === "Codecs") continue;
+      const items = listItems(gatewaySeed[key]).map(cleanBinding).filter((item): item is Record<string, unknown> => Boolean(item));
+      if (items.length) gateway[key] = items;
+    }
+  }
+  const body: Record<string, unknown> = {
+    ...scalars(seed, TRUNK_FIELDS),
+    Name: input.name,
+    ExternalNumber: input.number,
+    AuthID: input.authId,
+    AuthPassword: { Value: input.password },
+    Gateway: gateway,
+    DidNumbers: [input.number],
+  };
+  if ("AuthUser" in seed) body.AuthUser = input.authId;
+  if (input.groupId) body.Groups = [{ GroupId: input.groupId, Rights: { RoleName: "system" } }];
   return body;
 }
 
-export function trunkDeltaBody(body: Record<string, unknown>) {
-  return { delta: body };
+export function trunkCollectionBody(body: Record<string, unknown>) {
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(body)) {
+    if (Array.isArray(value)) next[key] = { delta: value };
+    else if (value && typeof value === "object") next[key] = trunkCollectionBody(value as Record<string, unknown>);
+    else next[key] = value;
+  }
+  return next;
 }
 
 export function wrapCollections(body: Record<string, unknown>, keys: string[]) {
@@ -59,36 +112,33 @@ export function mentionsDelta(message: string) {
   return /delta/i.test(message);
 }
 
-export function keepDelta(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(keepDelta);
-  if (!value || typeof value !== "object") return value;
-  const record = value as Record<string, unknown>;
-  if (isDeltaRecord(record)) {
-    const items = Array.isArray(record.delta) ? record.delta.map(keepDelta) : Array.isArray(record.value) ? record.value.map(keepDelta) : [];
-    return { delta: items };
-  }
+function scalars(record: Record<string, unknown>, keys: string[]) {
   const next: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(record)) {
-    if (key.startsWith("@")) continue;
-    next[key] = ARRAY_KEYS.has(key) ? asDelta(child) : keepDelta(child);
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") next[key] = value;
   }
   return next;
 }
 
-function replaceItems(current: unknown, items: unknown[]) {
-  if (current && typeof current === "object" && !Array.isArray(current) && "delta" in current) return { delta: items };
-  return items;
+function listItems(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (Array.isArray(record.delta)) return record.delta;
+    if (Array.isArray(record.value)) return record.value;
+  }
+  return [];
 }
 
-function asDelta(value: unknown) {
-  const kept = keepDelta(value);
-  if (Array.isArray(kept)) return { delta: kept };
-  if (kept && typeof kept === "object" && "delta" in kept) return kept;
-  return { delta: [] };
-}
-
-function isDeltaRecord(record: Record<string, unknown>) {
-  if ("delta" in record) return true;
-  const marker = `${record["@odata.type"] || ""} ${record["@odata.context"] || ""}`;
-  return /Collection\(/i.test(marker);
+function cleanBinding(item: unknown) {
+  if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+  const record = item as Record<string, unknown>;
+  const next: Record<string, unknown> = {};
+  if (typeof record.ParamId === "number") next.ParamId = record.ParamId;
+  if (typeof record.ValueId === "number") next.ValueId = record.ValueId;
+  if (typeof record.Custom === "string") next.Custom = record.Custom;
+  if (typeof record.Key === "string") next.Key = record.Key;
+  if (typeof record.Value === "string" || typeof record.Value === "number") next.Value = record.Value;
+  return Object.keys(next).length ? next : null;
 }
