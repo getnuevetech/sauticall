@@ -68,7 +68,9 @@
 .home-sections button,.home-preview-bar button{border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:8px;color:#344054;font-weight:650}
 .home-sections button.active{background:#eef4ff;color:#155eef}
 .home-fields{display:grid;gap:12px}
-.home-fields label{display:grid;gap:6px;font-size:.84rem;font-weight:700;color:#344054}
+.home-fields label,.home-row label{display:grid;gap:6px;font-size:.84rem;font-weight:700;color:#344054}
+.home-rows{display:grid;gap:10px}
+.home-row{display:grid;gap:8px;border:1px solid #e4e7ec;border-radius:12px;padding:12px}
 .home-preview-bar{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .home-preview-bar strong{margin-right:auto;font-size:.84rem}
 .home-preview-bar button.active{background:#eef4ff;color:#155eef}

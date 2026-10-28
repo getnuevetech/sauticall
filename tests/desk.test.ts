@@ -5,6 +5,7 @@ import { defaultFlags } from "../lib/seed-data.ts";
 import { flagGroups } from "../lib/admin-controls.ts";
 import { WEBSITE_LINKS } from "../lib/admin-website.ts";
 import { homeSections } from "../lib/home-sections.ts";
+import { liveCopy } from "../lib/public-copy.ts";
 import { defaultPages } from "../lib/seed-data.ts";
 import { renderFaq, slugify } from "../lib/faq-markdown.ts";
 import { nextFreeNumber } from "../lib/group-numbers.ts";
@@ -39,6 +40,14 @@ test("seeded access levels only use known permissions", () => {
   for (const key of Object.keys(home)) assert.ok(covered.has(key), key);
   assert.ok(homeSections(home).some((section) => section.id === "header" && section.keys.includes("headerTalk")));
   assert.ok(homeSections(home).every((section) => section.id !== "more"));
+  const live = liveCopy["page.home"] as Record<string, unknown>;
+  const liveSections = homeSections(live);
+  const liveCovered = new Set(liveSections.flatMap((section) => section.keys));
+  for (const key of Object.keys(live.shown as Record<string, unknown>)) assert.ok(liveCovered.has(key), key);
+  assert.ok(liveCovered.has("headerSignIn"));
+  assert.equal(liveSections.some((section) => section.id === "more"), false);
+  assert.ok(liveSections.some((section) => section.fields.some((field) => field.path.join(".") === "shown.title")));
+  assert.equal(liveSections.some((section) => section.keys.includes("titleLead")), false);
 });
 
 test("group numbers skip extensions and other groups", () => {

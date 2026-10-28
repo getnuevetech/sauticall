@@ -4,11 +4,23 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { saveDocument } from "@/app/admin/actions";
 import { fieldLabel } from "@/lib/admin-labels";
-import { destinationChoices, homeSections } from "@/lib/home-sections";
+import { destinationChoices, homePreview, homeSections, homeValue, shownCopy, type HomeField } from "@/lib/home-sections";
 
 function textOf(value: unknown) {
   if (Array.isArray(value)) return value.map((item) => String(item ?? "")).join("\n");
   return typeof value === "string" ? value : "";
+}
+
+function setPath(page: Record<string, unknown>, path: string[], value: unknown) {
+  const next = structuredClone(page);
+  let current: Record<string, unknown> = next;
+  for (const key of path.slice(0, -1)) {
+    const child = current[key];
+    if (!child || typeof child !== "object" || Array.isArray(child)) current[key] = {};
+    current = current[key] as Record<string, unknown>;
+  }
+  current[path[path.length - 1]] = value;
+  return next;
 }
 
 export function HomeEditor({ initial }: { initial: Record<string, unknown> }) {
@@ -21,6 +33,7 @@ export function HomeEditor({ initial }: { initial: Record<string, unknown> }) {
   const sections = homeSections(page);
   const section = sections.find((item) => item.id === sectionId) || sections[0];
   const dirty = JSON.stringify(page) !== JSON.stringify(saved);
+  const preview = homePreview(page);
 
   useEffect(() => {
     if (!dirty) return;
@@ -32,8 +45,8 @@ export function HomeEditor({ initial }: { initial: Record<string, unknown> }) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
-  function update(key: string, value: unknown) {
-    setPage((current) => ({ ...current, [key]: value }));
+  function update(path: string[], value: unknown) {
+    setPage((current) => setPath(current, path, value));
   }
 
   async function save() {
@@ -60,32 +73,9 @@ export function HomeEditor({ initial }: { initial: Record<string, unknown> }) {
         </nav>
         <section className="ap-card home-fields">
           <h2>{section?.label}</h2>
-          {section?.keys.map((key) => {
-            const value = page[key];
-            const label = fieldLabel(key, "page.home");
-            if (Array.isArray(value)) {
-              return (
-                <label key={key}>{label}
-                  <textarea value={textOf(value)} rows={Math.min(8, Math.max(3, value.length + 1))} onChange={(event) => update(key, event.target.value.split("\n"))} />
-                </label>
-              );
-            }
-            if (key.endsWith("Href")) {
-              return (
-                <label key={key}>{label}
-                  <select value={typeof value === "string" ? value : ""} onChange={(event) => update(key, event.target.value)}>
-                    {destinationChoices(typeof value === "string" ? value : "").map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                  </select>
-                </label>
-              );
-            }
-            const long = key.endsWith("Body") || key === "disclaimer" || key === "metaDescription" || key === "lead" || textOf(value).length > 90;
-            return (
-              <label key={key}>{label}
-                {long ? <textarea value={textOf(value)} rows={4} onChange={(event) => update(key, event.target.value)} /> : <input value={textOf(value)} onChange={(event) => update(key, event.target.value)} />}
-              </label>
-            );
-          })}
+          {section?.fields.map((field) => (
+            <FieldEditor key={field.path.join(".")} page={page} field={field} onChange={update} />
+          ))}
         </section>
         <aside className={`home-preview${narrow ? " narrow" : ""}`}>
           <div className="home-preview-bar">
@@ -94,10 +84,10 @@ export function HomeEditor({ initial }: { initial: Record<string, unknown> }) {
             <button type="button" className={narrow ? "active" : ""} onClick={() => setNarrow(true)}>Mobile</button>
           </div>
           <div className="home-preview-card">
-            <p className="home-preview-kicker">{textOf(page.eyebrow)}</p>
-            <h2>{textOf(page.titleLead)} <span>{textOf(page.titleAccent)}</span></h2>
-            <p>{textOf(page.lead)}</p>
-            <span className="home-preview-btn">{textOf(page.primaryCta) || "Button"}</span>
+            <p className="home-preview-kicker">{preview.kicker}</p>
+            <h2>{preview.title} <span>{preview.accent}</span></h2>
+            <p>{preview.lead}</p>
+            <span className="home-preview-btn">{preview.button || "Button"}</span>
           </div>
           <a className="home-saved" href="/" target="_blank" rel="noreferrer">Open saved page</a>
         </aside>
@@ -114,5 +104,69 @@ export function HomeEditor({ initial }: { initial: Record<string, unknown> }) {
       ) : null}
       {error ? <p className="form-feedback">{error}</p> : null}
     </div>
+  );
+}
+
+function FieldEditor({ page, field, onChange }: { page: Record<string, unknown>; field: HomeField; onChange: (path: string[], value: unknown) => void }) {
+  const value = homeValue(page, field.path);
+  const label = fieldLabel(field.key, "page.home");
+  if (field.kind === "lines" || (Array.isArray(value) && value.every((item) => typeof item === "string"))) {
+    const lines = Array.isArray(value) ? value.map((item) => String(item ?? "")) : [];
+    return (
+      <label>{label}
+        <textarea value={lines.join("\n")} rows={Math.min(8, Math.max(3, lines.length + 1))} onChange={(event) => onChange(field.path, event.target.value.split("\n"))} />
+      </label>
+    );
+  }
+  if (field.kind === "rows" || (Array.isArray(value) && value.every((item) => item && typeof item === "object"))) {
+    const rows = Array.isArray(value) ? value as Record<string, unknown>[] : [];
+    const columns = field.columns || [];
+    return (
+      <div className="home-rows">
+        <span>{label}</span>
+        {rows.map((row, index) => (
+          <div className="home-row" key={`${field.key}-${index}`}>
+            {columns.map((column) => {
+              const cell = typeof row[column.key] === "string" ? row[column.key] as string : "";
+              const cellLabel = fieldLabel(column.key, "page.home");
+              return (
+                <label key={column.key}>{cellLabel}
+                  {column.href ? (
+                    <select value={cell} onChange={(event) => onChange(field.path, rows.map((item, itemIndex) => itemIndex === index ? { ...item, [column.key]: event.target.value } : item))}>
+                      {destinationChoices(cell).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                    </select>
+                  ) : column.key === "body" || column.key === "a" || cell.length > 90 ? (
+                    <textarea rows={3} value={cell} onChange={(event) => onChange(field.path, rows.map((item, itemIndex) => itemIndex === index ? { ...item, [column.key]: event.target.value } : item))} />
+                  ) : (
+                    <input value={cell} onChange={(event) => onChange(field.path, rows.map((item, itemIndex) => itemIndex === index ? { ...item, [column.key]: event.target.value } : item))} />
+                  )}
+                </label>
+              );
+            })}
+            <button type="button" className="btn btn-secondary" onClick={() => onChange(field.path, rows.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>
+          </div>
+        ))}
+        <button type="button" className="btn btn-secondary" onClick={() => onChange(field.path, [...rows, Object.fromEntries(columns.map((column) => [column.key, ""]))])}>Add</button>
+      </div>
+    );
+  }
+  if (value && typeof value === "object") {
+    return <p className="ap-note">{label} stays as it was saved.</p>;
+  }
+  const text = textOf(shownCopy(page) && field.path[0] === "shown" && typeof value !== "string" ? page[field.key] : value);
+  if (field.key.endsWith("Href")) {
+    return (
+      <label>{label}
+        <select value={text} onChange={(event) => onChange(field.path, event.target.value)}>
+          {destinationChoices(text).map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
+      </label>
+    );
+  }
+  const long = field.key.endsWith("Body") || field.key === "disclaimer" || field.key === "metaDescription" || field.key === "lead" || field.key === "fineNote" || field.key === "heroAlt" || field.key === "aiAlt" || text.length > 90;
+  return (
+    <label>{label}
+      {long ? <textarea value={text} rows={4} onChange={(event) => onChange(field.path, event.target.value)} /> : <input value={text} onChange={(event) => onChange(field.path, event.target.value)} />}
+    </label>
   );
 }
