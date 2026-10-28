@@ -141,17 +141,55 @@ export function trunkReplayBody(input: {
   return body;
 }
 
-export function trunkShape(value: unknown) {
+export function trunkDeltaLists(body: Record<string, unknown>) {
+  return wrapValue(structuredClone(body)) as Record<string, unknown>;
+}
+
+export function trunkFilledDeltas(body: Record<string, unknown>) {
+  return dropEmptyDeltas(trunkDeltaLists(body)) as Record<string, unknown>;
+}
+
+export function trunkShape(value: unknown): string {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "";
-  return Object.entries(value as Record<string, unknown>).filter(([key]) => key !== "AuthPassword").map(([key, child]) => {
-    if (Array.isArray(child)) return `${key}:array(${child.length})`;
-    if (child && typeof child === "object") {
-      const record = child as Record<string, unknown>;
-      if (Array.isArray(record.delta)) return `${key}:delta(${record.delta.length})`;
-      return `${key}:object`;
+  return Object.entries(value as Record<string, unknown>).filter(([key]) => key !== "AuthPassword").map(([key, child]) => fieldShape(key, child)).join(",");
+}
+
+function wrapValue(value: unknown): unknown {
+  if (Array.isArray(value)) return { delta: value.map(wrapValue) };
+  if (!value || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.delta)) return { ...record, delta: record.delta.map(wrapValue) };
+  const next: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(record)) next[key] = wrapValue(child);
+  return next;
+}
+
+function dropEmptyDeltas(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(dropEmptyDeltas).filter((item) => item !== undefined);
+  if (!value || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.delta) && record.delta.length === 0) return undefined;
+  const next: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(record)) {
+    if (key === "delta" && Array.isArray(child)) {
+      next[key] = child.map(dropEmptyDeltas).filter((item) => item !== undefined);
+      continue;
     }
-    return `${key}:${typeof child}`;
-  }).join(",");
+    const copied = dropEmptyDeltas(child);
+    if (copied !== undefined) next[key] = copied;
+  }
+  return next;
+}
+
+function fieldShape(key: string, child: unknown): string {
+  if (Array.isArray(child)) return `${key}:array(${child.length})`;
+  if (child && typeof child === "object") {
+    const record = child as Record<string, unknown>;
+    if (Array.isArray(record.delta)) return `${key}:delta(${record.delta.length})`;
+    if (key === "Gateway" || key === "Messaging") return `${key}{${trunkShape(record)}}`;
+    return `${key}:object`;
+  }
+  return `${key}:${typeof child}`;
 }
 
 function wrap(record: Record<string, unknown>) {

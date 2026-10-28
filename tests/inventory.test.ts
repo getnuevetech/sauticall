@@ -7,7 +7,7 @@ import { didInfoIsAbsent, lookupMayOrder, normalizeRequestedDid, readDids } from
 import { balanceCovers, planFundAmount, readClientBalance, resellerOrderFees } from "../lib/client-funding.ts";
 import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
-import { trunkCreateBody, trunkDeltaBody, trunkGroupBody, trunkReplayBody, trunkShape } from "../lib/trunk-body.ts";
+import { trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFilledDeltas, trunkGroupBody, trunkReplayBody, trunkShape } from "../lib/trunk-body.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
@@ -408,7 +408,25 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
   assert.deepEqual(replayGateway.OutboundParams.delta, []);
   assert.equal(JSON.stringify(replay).split("secret").length - 1, 1);
   assert.match(trunkShape(replay), /RoutingRules:delta\(1\)/);
+  assert.match(trunkShape(replay), /Gateway\{/);
   assert.equal(trunkShape(replay).includes("secret"), false);
+  const listed = trunkDeltaLists({
+    DidNumbers: ["13612267988"],
+    PublicInfoGroups: [],
+    AuthPassword: { Value: "secret" },
+    Gateway: { InboundParams: [{ ParamId: 1, Custom: "$CalledNum" }], Codecs: ["PCMU"], OutboundParams: [] },
+  });
+  assert.deepEqual(listed.DidNumbers, { delta: ["13612267988"] });
+  assert.deepEqual(listed.PublicInfoGroups, { delta: [] });
+  assert.deepEqual(listed.AuthPassword, { Value: "secret" });
+  const listedGateway = listed.Gateway as { InboundParams: { delta: { Custom: string }[] }; Codecs: { delta: string[] }; OutboundParams: { delta: unknown[] } };
+  assert.equal(listedGateway.InboundParams.delta[0].Custom, "$CalledNum");
+  assert.deepEqual(listedGateway.Codecs.delta, ["PCMU"]);
+  assert.deepEqual(listedGateway.OutboundParams.delta, []);
+  const filled = trunkFilledDeltas({ DidNumbers: ["13612267988"], Tags: [], Gateway: { Codecs: ["PCMU"], OutboundParams: [] } });
+  assert.equal("Tags" in filled, false);
+  assert.equal("OutboundParams" in (filled.Gateway as object), false);
+  assert.deepEqual((filled.Gateway as { Codecs: { delta: string[] } }).Codecs.delta, ["PCMU"]);
   assert.equal(outboundScopeVerdict({ DNRanges: { delta: [{ From: "510", To: "510" }] } }, "510", "510"), "scoped");
 });
 
