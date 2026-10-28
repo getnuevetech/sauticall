@@ -10,7 +10,7 @@ import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "..
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
-import { extensionWelcomeText, webClientUrl, welcomeCustomerNote } from "../lib/extension-welcome.ts";
+import { extensionAddedNoticeIsOn, extensionWelcomeText, webClientUrl, welcomeCustomerNote } from "../lib/extension-welcome.ts";
 import { mfaIsRequired } from "../lib/mfa-rules.ts";
 import { DEPARTMENT_NAME_RULES, acceptedDepartmentName, departmentCreateBody, departmentNameIssue, departmentNameTakenMessage, departmentRejectedMessage, userCreateBody } from "../lib/pbx-user.ts";
 import { readRateCenters, regionAllowed } from "../lib/places.ts";
@@ -237,6 +237,9 @@ test("an extension welcome explains 3CX sign-in and keeps the app password off t
   assert.equal(text.includes("u2dPtRSyZ"), false);
   assert.equal(welcomeCustomerNote(true), "A setup email was sent to this address.");
   assert.match(welcomeCustomerNote(false), /could not be sent/);
+  assert.equal(extensionAddedNoticeIsOn({ NotifyExtensionAdded: true }), true);
+  assert.equal(extensionAddedNoticeIsOn({ value: [{ NotifyExtensionAdded: false }] }), false);
+  assert.equal(extensionAddedNoticeIsOn(null), true);
   assert.equal(mfaIsRequired(false, 0), false);
   assert.equal(mfaIsRequired(false, 1), true);
   assert.equal(mfaIsRequired(true, 0), true);

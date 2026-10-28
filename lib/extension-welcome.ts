@@ -1,3 +1,18 @@
+export function extensionAddedNoticeIsOn(body: unknown) {
+  const record = noticeRecord(body);
+  if (!record || !("NotifyExtensionAdded" in record)) return true;
+  return record.NotifyExtensionAdded !== false;
+}
+
+function noticeRecord(body: unknown): Record<string, unknown> | null {
+  if (!body || typeof body !== "object") return null;
+  if ("NotifyExtensionAdded" in body) return body as Record<string, unknown>;
+  const value = (body as { value?: unknown }).value;
+  if (!Array.isArray(value)) return null;
+  const found = value.find((item) => item && typeof item === "object" && "NotifyExtensionAdded" in item);
+  return found && typeof found === "object" ? found as Record<string, unknown> : null;
+}
+
 export function webClientUrl(base: string) {
   const trimmed = base.trim().replace(/\/+$/, "");
   if (!trimmed) return "";
@@ -8,6 +23,8 @@ export function extensionWelcomeText(input: { firstName: string; number: string;
   const where = input.webClient ? ` at ${input.webClient}` : "";
   return [
     `Hello ${input.firstName},`,
+    "",
+    "This setup email is from SautiCall.",
     "",
     `Your extension is ${input.number}.`,
     "",
