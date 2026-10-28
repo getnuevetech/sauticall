@@ -7,6 +7,7 @@ import { didInfoIsAbsent, lookupMayOrder, normalizeRequestedDid, readDids } from
 import { balanceCovers, planFundAmount, readClientBalance, resellerOrderFees } from "../lib/client-funding.ts";
 import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
+import { trunkArrayBody, trunkCreateBody } from "../lib/trunk-body.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
@@ -321,6 +322,28 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
   assert.equal(customerLineStatus("ordered"), "Bought. Connecting this number for calls.");
   assert.equal(customerLineStatus("trunk_waiting"), "Bought. Connecting this number for calls still needs the team.");
   assert.equal(customerLineStatus("trunk_live"), "Connected for calls");
+  const trunk = trunkCreateBody({
+    seed: {
+      AuthPassword: { Value: "" },
+      DidNumbers: { delta: [] },
+      Gateway: { TemplateFilename: "GenericSIPTrunk.pv.xml", Port: 5060 },
+    },
+    name: "SautiCall 3612267988",
+    number: "13612267988",
+    authId: "line-account",
+    password: "secret",
+    host: "houston1.voip.ms",
+    groupId: 12,
+  });
+  assert.equal((trunk.AuthPassword as { Value: string }).Value, "secret");
+  assert.deepEqual(trunk.DidNumbers, { delta: ["13612267988"] });
+  assert.deepEqual((trunk.Groups as { delta: { GroupId: number }[] }).delta[0].GroupId, 12);
+  assert.equal((trunk.Gateway as { Host: string; TemplateFilename: string }).Host, "houston1.voip.ms");
+  assert.equal((trunk.Gateway as { TemplateFilename: string }).TemplateFilename, "GenericSIPTrunk.pv.xml");
+  const older = trunkArrayBody(trunk);
+  assert.deepEqual(older.DidNumbers, ["13612267988"]);
+  assert.equal(older.AuthPassword, "secret");
+  assert.equal(outboundScopeVerdict({ DNRanges: { delta: [{ From: "510", To: "510" }] } }, "510", "510"), "scoped");
 });
 
 test("a created 3CX user id can come from the Location header", () => {
