@@ -63,12 +63,29 @@
 .ap-modal-scrim{position:fixed;inset:0;background:#10182866;display:flex;align-items:center;justify-content:center;padding:24px;z-index:20}
 .ap-modal{width:min(480px,100%);background:#fff;border-radius:16px;padding:20px}
 .ap-modal-actions{display:flex;justify-content:flex-end;gap:8px}
+.home-editor-grid{display:grid;grid-template-columns:180px minmax(0,1fr) 320px;gap:14px;align-items:start}
+.home-sections{display:grid;gap:4px}
+.home-sections button,.home-preview-bar button{border:0;background:transparent;text-align:left;padding:8px 10px;border-radius:8px;color:#344054;font-weight:650}
+.home-sections button.active{background:#eef4ff;color:#155eef}
+.home-fields{display:grid;gap:12px}
+.home-fields label,.home-row label{display:grid;gap:6px;font-size:.84rem;font-weight:700;color:#344054}
+.home-rows{display:grid;gap:10px}
+.home-row{display:grid;gap:8px;border:1px solid #e4e7ec;border-radius:12px;padding:12px}
+.home-preview-bar{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.home-preview-bar strong{margin-right:auto;font-size:.84rem}
+.home-preview-bar button.active{background:#eef4ff;color:#155eef}
+.home-preview.narrow .home-preview-card{max-width:220px}
+.home-preview-card{background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:18px}
+.home-preview-kicker{font-size:.75rem;font-weight:700;color:#667085}
+.home-preview-card h2 span{color:#155eef}
+.home-preview-btn{display:inline-flex;margin-top:8px;background:#155eef;color:#fff;border-radius:10px;padding:8px 12px;font-weight:700}
+.home-saved{display:inline-block;margin-top:10px;color:#155eef;font-weight:700}
 .admin-portal table{width:100%}
 @media(max-width:960px){
   .ap-side{position:fixed;z-index:12;transform:translateX(-105%)}
   .admin-portal.nav-open .ap-side{transform:none}
   .admin-portal.nav-open .ap-scrim{display:block;position:fixed;inset:0;border:0;background:#10182855;z-index:11}
   .ap-menu{display:inline-flex;border:1px solid #d0d5dd;background:#fff;border-radius:8px;padding:8px 10px}
-  .ap-settings,.ap-link-grid{grid-template-columns:1fr}
+  .ap-settings,.ap-link-grid,.home-editor-grid{grid-template-columns:1fr}
   .ap-search{display:none}
 }
