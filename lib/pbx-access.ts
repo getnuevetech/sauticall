@@ -74,11 +74,20 @@ export function pbxErrorText(body: unknown, fallback: string) {
     if (typeof message === "string") add(message);
     else if (message && typeof message === "object") add((message as { value?: unknown }).value);
   }
+  const details = Array.isArray(nested.details) ? nested.details : Array.isArray(record.details) ? record.details : [];
+  for (const item of details) {
+    if (!item || typeof item !== "object") continue;
+    const detail = item as { target?: unknown; message?: unknown };
+    const target = typeof detail.target === "string" ? detail.target : "";
+    const message = typeof detail.message === "string" ? detail.message : "";
+    if (target && message) add(`${target}: ${message}`);
+    else add(message);
+  }
   const model = record.ModelState || nested.ModelState;
   if (model && typeof model === "object") {
-    for (const value of Object.values(model as Record<string, unknown>)) {
-      if (Array.isArray(value)) value.forEach(add);
-      else add(value);
+    for (const [key, value] of Object.entries(model as Record<string, unknown>)) {
+      const parts = Array.isArray(value) ? value : [value];
+      for (const part of parts) add(typeof part === "string" && part.trim() ? `${key}: ${part}` : part);
     }
   }
   const message = [...new Set(messages)].join(" ").slice(0, 800);

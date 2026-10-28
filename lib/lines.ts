@@ -8,7 +8,7 @@ import { enforceUser } from "./minutes";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "./outbound-rule";
 import { extensionRange, paidPlan, readExtensionPlan } from "./pbx";
 import { idFromPbx } from "./pbx-id";
-import { mentionsDelta, trunkCreateBody, wrapCollections } from "./trunk-body";
+import { mentionsDelta, trunkAsArrays, trunkCreateBody, wrapCollections } from "./trunk-body";
 import { acceptedDepartmentName } from "./pbx-user";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
@@ -32,8 +32,8 @@ function extensionFor(userId: number) {
 }
 
 function hideSecret(message: string, secret: string) {
-  if (!secret) return message.slice(0, 400);
-  return message.split(secret).join("[hidden]").slice(0, 400);
+  if (!secret) return message.slice(0, 700);
+  return message.split(secret).join("[hidden]").slice(0, 700);
 }
 
 function openTask(lineId: number, userId: number, did: string, note: string) {
@@ -42,8 +42,8 @@ function openTask(lineId: number, userId: number, did: string, note: string) {
     `INSERT INTO trunk_tasks (line_id, user_id, did, department_name, extension_number, sip_user, sip_host, status, note, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)
      ON CONFLICT(line_id) DO UPDATE SET status = 'open', note = excluded.note, sip_user = excluded.sip_user, sip_host = excluded.sip_host, department_name = excluded.department_name, extension_number = excluded.extension_number`,
-  ).run(lineId, userId, did, departmentName(userId), extensionFor(userId), sub?.account || "", sub?.sip_host || "", note.slice(0, 500), new Date().toISOString());
-  getDb().prepare("UPDATE phone_lines SET status = 'trunk_waiting', last_message = ? WHERE id = ?").run(note.slice(0, 400), lineId);
+  ).run(lineId, userId, did, departmentName(userId), extensionFor(userId), sub?.account || "", sub?.sip_host || "", note.slice(0, 900), new Date().toISOString());
+  getDb().prepare("UPDATE phone_lines SET status = 'trunk_waiting', last_message = ? WHERE id = ?").run(note.slice(0, 700), lineId);
 }
 
 function extensionSpan(userId: number) {
@@ -80,9 +80,7 @@ function trunkSeed(body: unknown) {
   if (!body || typeof body !== "object") return null;
   const record = body as Record<string, unknown>;
   const value = record.value && typeof record.value === "object" && !Array.isArray(record.value) ? record.value as Record<string, unknown> : record;
-  const copy = { ...value };
-  for (const key of Object.keys(copy)) if (key.startsWith("@")) delete copy[key];
-  return copy;
+  return { ...value };
 }
 
 export async function attachTrunk(lineId: number) {
@@ -106,31 +104,33 @@ export async function attachTrunk(lineId: number) {
   const number = publicNumber(line.did);
   const department = getDb().prepare("SELECT xapi_id, name FROM pbx_departments WHERE user_id = ?").get(line.user_id) as { xapi_id: number; name: string } | undefined;
   const extension = extensionFor(line.user_id);
-  const seeded = await pbxRequest(`Trunks/Pbx.InitTrunk(template='${template}')`);
+  const seeded = await pbxRequest(`Trunks/Pbx.InitTrunk(template=${encodeURIComponent(`'${template}'`)})`);
   const seed = seeded.ok ? trunkSeed(seeded.body) : null;
-  const shared = {
+  const templateBody = trunkCreateBody({
     seed,
     name: `SautiCall ${line.did}`,
     number,
     authId: sub.account,
     password: sub.password,
     host: sub.sip_host || "",
-  };
-  const groupId = department?.xapi_id || undefined;
+    groupId: department?.xapi_id || undefined,
+    template,
+  });
   const attempts = [
-    ["typed", trunkCreateBody({ ...shared, groupId })],
-    ["seed", trunkCreateBody({ ...shared, groupId, fillEmptyCollections: false })],
+    ["arrays", trunkAsArrays(templateBody)],
+    ["template", templateBody],
   ] as const;
   let created = await pbxRequest("Trunks", { method: "POST", body: attempts[0][1] });
   let trunkId = idFromPbx(created.body, created.location);
   const failures = [`${attempts[0][0]}: ${created.message}`];
   for (const [label, attempt] of attempts.slice(1)) {
     if (created.ok && trunkId) break;
-    if (!mentionsDelta(failures.join(" "))) break;
+    if (created.status !== 400) break;
     created = await pbxRequest("Trunks", { method: "POST", body: attempt });
     trunkId = idFromPbx(created.body, created.location);
     failures.push(`${label}: ${created.message}`);
   }
+  if (!seeded.ok) failures.push(`template request: ${seeded.message || "3CX did not return a trunk template."}`);
   if (!created.ok || !trunkId) {
     const note = `VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"} is ready. 3CX did not add the trunk. Add it on the server for ${department?.name || departmentName(line.user_id)}, route inbound ${line.did} to extension ${extension}, and add an outbound rule limited to extensions ${span.from}–${span.to}. ${hideSecret(failures.filter(Boolean).join(" | "), sub.password)}`;
     openTask(line.id, line.user_id, line.did, note);
