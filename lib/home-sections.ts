@@ -296,14 +296,12 @@ export function homeValue(page: Record<string, unknown>, path: string[]) {
 }
 
 export function pagePreview(docKey: string, page: Record<string, unknown>) {
-  const shown = shownCopy(page);
-  const rootFirst = docKey === "page.pricing" || docKey === "page.about" || docKey === "page.contact" || docKey === "page.custom";
+  const fields = pageSections(docKey, page).flatMap((section) => section.fields);
   const read = (...keys: string[]) => {
     for (const key of keys) {
-      const fromRoot = typeof page[key] === "string" ? page[key] : "";
-      const fromShown = shown && typeof shown[key] === "string" ? shown[key] : "";
-      const value = rootFirst ? fromRoot || fromShown : fromShown || fromRoot;
-      if (value) return value;
+      const field = fields.find((item) => item.key === key);
+      const value = field ? homeValue(page, field.path) : "";
+      if (typeof value === "string" && value) return value;
     }
     return "";
   };

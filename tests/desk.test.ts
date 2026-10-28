@@ -4,7 +4,7 @@ import { ADMIN_NAV, DEFAULT_ROLES, PERMISSIONS, permissionForDocument } from "..
 import { defaultFlags } from "../lib/seed-data.ts";
 import { flagGroups } from "../lib/admin-controls.ts";
 import { WEBSITE_LINKS } from "../lib/admin-website.ts";
-import { homeSections, pageSections } from "../lib/home-sections.ts";
+import { homeSections, pagePreview, pageSections } from "../lib/home-sections.ts";
 import { liveCopy } from "../lib/public-copy.ts";
 import { defaultPages } from "../lib/seed-data.ts";
 import { renderFaq, slugify } from "../lib/faq-markdown.ts";
@@ -67,6 +67,10 @@ test("seeded access levels only use known permissions", () => {
   assert.ok(pricedSections.some((section) => section.fields.some((field) => field.path.join(".") === "eyebrow")));
   assert.ok(pricedSections.some((section) => section.fields.some((field) => field.path.join(".") === "shown.ribbon")));
   assert.equal(pricedSections.some((section) => section.keys.includes("languageBadge")), false);
+  const solutionsPreview = pagePreview("page.solutions", { ...(defaultPages.solutions as Record<string, unknown>), ...(liveCopy["page.solutions"] as Record<string, unknown>) });
+  assert.equal(solutionsPreview.title, "The right tools for every business call.");
+  assert.equal(solutionsPreview.accent, "");
+  assert.equal(pagePreview("page.pricing", priced).accent, "for your business calls.");
 });
 
 test("group numbers skip extensions and other groups", () => {
