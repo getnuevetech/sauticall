@@ -149,6 +149,79 @@ export function trunkFilledDeltas(body: Record<string, unknown>) {
   return dropEmptyDeltas(trunkDeltaLists(body)) as Record<string, unknown>;
 }
 
+const DROP_KEYS = new Set(["ConfigurationIssue", "IsOnline"]);
+const MESSAGING_KEYS = new Set(["@odata.type", "Enabled", "NumberLength", "NumberLengthEnabled", "Provider", "Webhook"]);
+const BLANK_KEYS = new Set([
+  "Certificate",
+  "CertificateExpirationDate",
+  "CertificateName",
+  "Direction",
+  "E164CountryCode",
+  "IPInRegistrationContact",
+  "IPRestriction",
+  "MatchingStrategy",
+  "OutboundCallerID",
+  "Provider",
+  "ProxyHost",
+  "PublicIPinSIP",
+  "RemoteMyPhoneUriHost",
+  "RemotePBXPreffix",
+  "RequireRegistrationFor",
+  "SRTPMode",
+  "ScriptName",
+  "SecondaryRegistrar",
+  "SeparateAuthId",
+  "SpecifiedIPForRegistrationContact",
+  "TransportRestriction",
+  "TunnelRemoteAddr",
+  "Type",
+  "Webhook",
+]);
+
+export function trunkPostBody(body: Record<string, unknown>) {
+  return sanitizeTrunk(structuredClone(body), "") as Record<string, unknown>;
+}
+
+export function omittedTrunkFields(body: Record<string, unknown>) {
+  const names: string[] = [];
+  collectOmitted(body, "", names);
+  return names.slice(0, 12);
+}
+
+function sanitizeTrunk(value: unknown, key: string): unknown {
+  if (typeof value === "string") {
+    if (value.trim() === "" && BLANK_KEYS.has(key)) return undefined;
+    if (key === "ExternalNumber" || key === "OutboundCallerID" || key === "E164CountryCode") {
+      const next = value.replace(/\D/g, "");
+      return next || undefined;
+    }
+    return value;
+  }
+  if (Array.isArray(value)) return value.map((item) => sanitizeTrunk(item, "")).filter((item) => item !== undefined);
+  if (!value || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  const next: Record<string, unknown> = {};
+  for (const [childKey, child] of Object.entries(record)) {
+    if (DROP_KEYS.has(childKey)) continue;
+    if (key === "Messaging" && !MESSAGING_KEYS.has(childKey)) continue;
+    const copied = sanitizeTrunk(child, childKey);
+    if (copied !== undefined) next[childKey] = copied;
+  }
+  return next;
+}
+
+function collectOmitted(value: unknown, key: string, names: string[]) {
+  if (!value || typeof value !== "object") return;
+  const record = value as Record<string, unknown>;
+  for (const [childKey, child] of Object.entries(record)) {
+    if (childKey === "AuthPassword") continue;
+    if (DROP_KEYS.has(childKey) || (key === "Messaging" && !MESSAGING_KEYS.has(childKey)) || (typeof child === "string" && child.trim() === "" && BLANK_KEYS.has(childKey))) {
+      names.push(childKey);
+    }
+    collectOmitted(child, childKey, names);
+  }
+}
+
 export function trunkShape(value: unknown): string {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "";
   return Object.entries(value as Record<string, unknown>).filter(([key]) => key !== "AuthPassword").map(([key, child]) => fieldShape(key, child)).join(",");
