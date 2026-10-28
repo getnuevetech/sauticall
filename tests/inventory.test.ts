@@ -7,7 +7,7 @@ import { didInfoIsAbsent, lookupMayOrder, normalizeRequestedDid, readDids } from
 import { balanceCovers, planFundAmount, readClientBalance, resellerOrderFees } from "../lib/client-funding.ts";
 import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
-import { trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFilledDeltas, trunkGroupBody, trunkReplayBody, trunkShape } from "../lib/trunk-body.ts";
+import { trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFilledDeltas, trunkGroupBody, trunkPostBody, trunkReplayBody, trunkShape } from "../lib/trunk-body.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
@@ -427,6 +427,23 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
   assert.equal("Tags" in filled, false);
   assert.equal("OutboundParams" in (filled.Gateway as object), false);
   assert.deepEqual((filled.Gateway as { Codecs: { delta: string[] } }).Codecs.delta, ["PCMU"]);
+  const cleaned = trunkPostBody({
+    IsOnline: false,
+    Direction: "",
+    ExternalNumber: "+1 (361) 226-7988",
+    AuthPassword: { Value: "secret" },
+    DidNumbers: { delta: ["13612267988"] },
+    Messaging: { Enabled: false, MESSAGING_API_KEY: "abc", Provider: "voip", PROVIDER_URL: "https://example.invalid" },
+    Gateway: { Host: "houston1.voip.ms", InboundParams: { delta: [{ ParamId: 1, Custom: "" }] } },
+  });
+  assert.equal("IsOnline" in cleaned, false);
+  assert.equal("Direction" in cleaned, false);
+  assert.equal(cleaned.ExternalNumber, "13612267988");
+  assert.equal((cleaned.AuthPassword as { Value: string }).Value, "secret");
+  assert.equal("MESSAGING_API_KEY" in (cleaned.Messaging as object), false);
+  assert.equal("PROVIDER_URL" in (cleaned.Messaging as object), false);
+  assert.equal((cleaned.Messaging as { Provider: string }).Provider, "voip");
+  assert.equal((cleaned.Gateway as { InboundParams: { delta: { Custom: string }[] } }).InboundParams.delta[0].Custom, "");
   assert.equal(outboundScopeVerdict({ DNRanges: { delta: [{ From: "510", To: "510" }] } }, "510", "510"), "scoped");
 });
 
