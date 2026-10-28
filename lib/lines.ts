@@ -134,8 +134,8 @@ export async function attachTrunk(lineId: number) {
   }
   if (!created.ok || !trunkId) {
     const note = `VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"} is ready. 3CX did not add the trunk. Add it on the server for ${department?.name || departmentName(line.user_id)}, route inbound ${line.did} to extension ${extension}, and add an outbound rule limited to extensions ${span.from}–${span.to}. ${hideSecret(failures.filter(Boolean).join(" | "), sub.password)}`;
-      openTask(line.id, line.user_id, line.did, note);
-      recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
+    openTask(line.id, line.user_id, line.did, note);
+    recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
     return { ok: false, message: "3CX did not add the trunk. A task was saved for the team." };
   }
   const rule = await pbxRequest("InboundRules", {
