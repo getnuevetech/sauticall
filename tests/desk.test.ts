@@ -4,7 +4,7 @@ import { ADMIN_NAV, DEFAULT_ROLES, PERMISSIONS, permissionForDocument } from "..
 import { defaultFlags } from "../lib/seed-data.ts";
 import { flagGroups } from "../lib/admin-controls.ts";
 import { WEBSITE_LINKS } from "../lib/admin-website.ts";
-import { homeSections } from "../lib/home-sections.ts";
+import { homeSections, pagePreview, pageSections } from "../lib/home-sections.ts";
 import { liveCopy } from "../lib/public-copy.ts";
 import { defaultPages } from "../lib/seed-data.ts";
 import { renderFaq, slugify } from "../lib/faq-markdown.ts";
@@ -48,6 +48,29 @@ test("seeded access levels only use known permissions", () => {
   assert.equal(liveSections.some((section) => section.id === "more"), false);
   assert.ok(liveSections.some((section) => section.fields.some((field) => field.path.join(".") === "shown.title")));
   assert.equal(liveSections.some((section) => section.keys.includes("titleLead")), false);
+  for (const docKey of ["page.solutions", "page.ai", "page.how", "page.pricing", "page.help"]) {
+    const copy = liveCopy[docKey] as Record<string, unknown>;
+    const sections = pageSections(docKey, copy);
+    const covered = new Set(sections.flatMap((section) => section.keys));
+    for (const key of Object.keys(copy.shown as Record<string, unknown>)) assert.ok(covered.has(key), `${docKey}.${key}`);
+    assert.equal(sections.some((section) => section.id === "more"), false, docKey);
+  }
+  for (const [docKey, seedKey] of [["page.solutions", "solutions"], ["page.ai", "ai"], ["page.how", "how"], ["page.pricing", "pricing"], ["page.about", "about"], ["page.contact", "contact"], ["page.custom", "custom"]] as const) {
+    const copy = defaultPages[seedKey] as Record<string, unknown>;
+    const sections = pageSections(docKey, copy);
+    const covered = new Set(sections.flatMap((section) => section.keys));
+    for (const key of Object.keys(copy)) assert.ok(covered.has(key), `${docKey}.${key}`);
+    assert.equal(sections.some((section) => section.id === "more"), false, docKey);
+  }
+  const priced = { ...(defaultPages.pricing as Record<string, unknown>), ...(liveCopy["page.pricing"] as Record<string, unknown>) };
+  const pricedSections = pageSections("page.pricing", priced);
+  assert.ok(pricedSections.some((section) => section.fields.some((field) => field.path.join(".") === "eyebrow")));
+  assert.ok(pricedSections.some((section) => section.fields.some((field) => field.path.join(".") === "shown.ribbon")));
+  assert.equal(pricedSections.some((section) => section.keys.includes("languageBadge")), false);
+  const solutionsPreview = pagePreview("page.solutions", { ...(defaultPages.solutions as Record<string, unknown>), ...(liveCopy["page.solutions"] as Record<string, unknown>) });
+  assert.equal(solutionsPreview.title, "The right tools for every business call.");
+  assert.equal(solutionsPreview.accent, "");
+  assert.equal(pagePreview("page.pricing", priced).accent, "for your business calls.");
 });
 
 test("group numbers skip extensions and other groups", () => {
