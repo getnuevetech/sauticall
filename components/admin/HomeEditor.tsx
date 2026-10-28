@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { saveDocument } from "@/app/admin/actions";
 import { fieldLabel } from "@/lib/admin-labels";
-import { destinationChoices, homePreview, homeSections, homeValue, shownCopy, type HomeField } from "@/lib/home-sections";
+import { destinationChoices, PAGE_PUBLIC, pagePreview, pageSections, homeValue, shownCopy, type HomeField } from "@/lib/home-sections";
 
 function textOf(value: unknown) {
   if (Array.isArray(value)) return value.map((item) => String(item ?? "")).join("\n");
@@ -24,16 +24,20 @@ function setPath(page: Record<string, unknown>, path: string[], value: unknown) 
 }
 
 export function HomeEditor({ initial }: { initial: Record<string, unknown> }) {
+  return <PageEditor docKey="page.home" initial={initial} />;
+}
+
+export function PageEditor({ docKey, initial }: { docKey: string; initial: Record<string, unknown> }) {
   const [saved, setSaved] = useState(initial);
   const [page, setPage] = useState(initial);
   const [sectionId, setSectionId] = useState("hero");
   const [narrow, setNarrow] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const sections = homeSections(page);
+  const sections = pageSections(docKey, page);
   const section = sections.find((item) => item.id === sectionId) || sections[0];
   const dirty = JSON.stringify(page) !== JSON.stringify(saved);
-  const preview = homePreview(page);
+  const preview = pagePreview(docKey, page);
 
   useEffect(() => {
     if (!dirty) return;
@@ -53,7 +57,7 @@ export function HomeEditor({ initial }: { initial: Record<string, unknown> }) {
     setSaving(true);
     setError("");
     try {
-      await saveDocument("page.home", JSON.stringify(page));
+      await saveDocument(docKey, JSON.stringify(page));
       setSaved(page);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
@@ -64,7 +68,7 @@ export function HomeEditor({ initial }: { initial: Record<string, unknown> }) {
 
   return (
     <div className="home-editor">
-      <p className="ap-note">Header and footer links are edited once under <Link href="/admin/website?tab=navigation">Navigation</Link>. The header buttons on this page are stored with the home page. Saving updates the live site.</p>
+      <p className="ap-note">Header and footer links are edited once under <Link href="/admin/website?tab=navigation">Navigation</Link>. {docKey === "page.home" ? "The header buttons on this page are stored with the home page. " : ""}{docKey === "page.pricing" ? <>Plan prices stay in <Link href="/admin/content/plans">Catalog & billing</Link>. Minute bundles stay in <Link href="/admin/content/minute_bundles">Call minute bundles</Link>. </> : null}{docKey === "page.help" ? <>Longer articles stay under <Link href="/admin/faq">FAQ articles</Link>. </> : null}Saving updates the live site.</p>
       <div className="home-editor-grid">
         <nav className="home-sections" aria-label="Page sections">
           {sections.map((item) => (
@@ -89,14 +93,14 @@ export function HomeEditor({ initial }: { initial: Record<string, unknown> }) {
             <p>{preview.lead}</p>
             <span className="home-preview-btn">{preview.button || "Button"}</span>
           </div>
-          <a className="home-saved" href="/" target="_blank" rel="noreferrer">Open saved page</a>
+          <a className="home-saved" href={PAGE_PUBLIC[docKey] || "/"} target="_blank" rel="noreferrer">Open saved page</a>
         </aside>
       </div>
       {dirty ? (
         <div className="ap-savebar">
           <div>
             <strong>Unsaved changes</strong>
-            <p>Saving updates the live home page.</p>
+            <p>Saving updates the live page.</p>
           </div>
           <button type="button" className="btn btn-secondary" onClick={() => setPage(saved)}>Discard</button>
           <button type="button" className="btn btn-primary" disabled={saving} onClick={() => void save()}>{saving ? "Saving" : "Save to live"}</button>
@@ -148,6 +152,13 @@ function FieldEditor({ page, field, onChange }: { page: Record<string, unknown>;
         ))}
         <button type="button" className="btn btn-secondary" onClick={() => onChange(field.path, [...rows, Object.fromEntries(columns.map((column) => [column.key, ""]))])}>Add</button>
       </div>
+    );
+  }
+  if (typeof value === "number") {
+    return (
+      <label>{label}
+        <input value={String(value)} onChange={(event) => onChange(field.path, Number(event.target.value))} />
+      </label>
     );
   }
   if (value && typeof value === "object") {
