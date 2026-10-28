@@ -34,7 +34,7 @@ export async function sendSms(message: { userId: number; to: string; body: strin
     return { ok: false as const, message: "Use a different mobile number." };
   }
   const text = message.body.replace(/\s+/g, " ").trim().slice(0, 160);
-  const result = await callVoipms("sendSMS", { did: from, dst: destination, message: text });
+  const result = await callVoipms("sendSMS", { did: from, dst: destination, message: text }, 20000);
   if (!result.ok) {
     console.error(`[sauticall] sms ${result.status}`);
     record(message.userId, message.to, "failed", result.status);

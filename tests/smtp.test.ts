@@ -4,10 +4,17 @@ import fs from "node:fs";
 import net from "net";
 import test from "node:test";
 import tls from "tls";
-import { MAIL_REPLY_MS, ehloName, mailboxAddress, sendMail } from "../lib/smtp.ts";
+import { MAIL_REPLY_MS, ehloName, mailAttempts, mailboxAddress, sendMail } from "../lib/smtp.ts";
 
 test("a mail server reply can take twenty seconds", () => {
   assert.equal(MAIL_REPLY_MS, 20000);
+});
+
+test("port 587 starts in plain text even when secure is checked, and port 465 starts encrypted", () => {
+  assert.deepEqual(mailAttempts(587, true), ["plain", "tls"]);
+  assert.deepEqual(mailAttempts(2525, true), ["plain", "tls"]);
+  assert.deepEqual(mailAttempts(465, false), ["tls", "plain"]);
+  assert.deepEqual(mailAttempts(2525, false), ["plain", "tls"]);
 });
 
 test("the sender address and hello name come from the from line", () => {
