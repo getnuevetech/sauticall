@@ -76,6 +76,8 @@ async function keepExtensionWelcomeOff() {
 }
 
 async function deliverWelcome(person: { xapiId: number; firstName: string; number: string; email: string }) {
+  const sent = await pbxRequest(`Users(${person.xapiId})/Pbx.SendWelcomeEmail`, { method: "POST", body: {} });
+  const phone = sent.ok ? "The phone system sent the welcome email." : `The phone system did not send the welcome email (${sent.message}).`;
   try {
     const { getConnection } = await import("./carriers");
     const { mailSettings } = await import("./tickets");
@@ -84,7 +86,7 @@ async function deliverWelcome(person: { xapiId: number; firstName: string; numbe
     const webClient = webClientUrl(String(getConnection("3cx").public.base_url || ""));
     const text = extensionWelcomeText({ firstName: person.firstName, number: person.number, email: person.email, webClient });
     if (!settings?.smtp_host || !settings.smtp_from) {
-      return { note: welcomeCustomerNote(false), detail: "Outgoing email is not set up, so the SautiCall setup email was not sent." };
+      return { note: welcomeCustomerNote(sent.ok), detail: `${phone} Outgoing email is not set up, so the SautiCall setup email was not sent.` };
     }
     const result = await sendMail({
       host: settings.smtp_host,
@@ -98,11 +100,11 @@ async function deliverWelcome(person: { xapiId: number; firstName: string; numbe
       text,
       messageId: `sc-ext-${person.xapiId}-${crypto.randomBytes(6).toString("hex")}@sauticall`,
     });
-    if (result.ok) return { note: welcomeCustomerNote(true), detail: "SautiCall sent the setup email." };
-    return { note: welcomeCustomerNote(false), detail: `The SautiCall setup email failed: ${result.message}` };
+    const setup = result.ok ? "SautiCall sent the setup email." : `The SautiCall setup email failed: ${result.message}`;
+    return { note: welcomeCustomerNote(sent.ok || result.ok), detail: `${phone} ${setup}` };
   } catch (error) {
     const message = error instanceof Error ? error.message : "The setup email could not be sent.";
-    return { note: welcomeCustomerNote(false), detail: message };
+    return { note: welcomeCustomerNote(sent.ok), detail: `${phone} ${message}` };
   }
 }
 
@@ -636,7 +638,7 @@ export async function provisionExtension(id: number) {
     }
     const confirmed = await pbxRequest(`Users(${xapiId})?$select=Id,Number`);
     if (confirmed.ok) row.number = rememberLiveNumber(id, row.user_id, row.number, liveNumber(confirmed.body));
-    const welcome = createdHere ? await deliverWelcome({ xapiId, firstName: row.first_name, number: row.number, email: row.email }) : { note: "", detail: "" };
+    const welcome = await deliverWelcome({ xapiId, firstName: row.first_name, number: row.number, email: row.email });
     const message = [linkedExisting || `Extension ${row.number} is on the phone system.`, welcomeBlocked, welcome.detail].filter(Boolean).join(" ");
     database.prepare("UPDATE pbx_extensions SET number = ?, xapi_id = ?, status = 'created', last_message = ?, welcome_note = ? WHERE id = ?").run(row.number, xapiId, message.slice(0, 1200), welcome.note, id);
     await routeDepartment(department);

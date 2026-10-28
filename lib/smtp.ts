@@ -1,3 +1,4 @@
+import dns from "dns/promises";
 import net from "net";
 import tls from "tls";
 
@@ -18,6 +19,38 @@ export type OutboundMail = {
 export const MAIL_REPLY_MS = 20000;
 
 const SESSION_MS = MAIL_REPLY_MS;
+const CONNECT_MS = 10000;
+
+export function mailTransport(port: number, secure: boolean): "plain" | "tls" {
+  if (port === 465) return "tls";
+  if (port === 587 || port === 25 || port === 2525) return "plain";
+  return secure ? "tls" : "plain";
+}
+
+export function mailAttempts(port: number, secure: boolean): Array<"plain" | "tls"> {
+  const first = mailTransport(port, secure);
+  return [first, first === "tls" ? "plain" : "tls"];
+}
+
+function retryTransport(message: string) {
+  return !/was refused by the mail server/i.test(message);
+}
+
+async function mailTargets(host: string) {
+  const ip = net.isIP(host);
+  if (ip === 4 || ip === 6) return [{ address: host, family: ip as 4 | 6 }];
+  try {
+    const found = await dns.lookup(host, { all: true });
+    const ranked = found
+      .filter((item) => item.family === 4 || item.family === 6)
+      .sort((left, right) => left.family - right.family)
+      .slice(0, 2);
+    if (ranked.length) return ranked.map((item) => ({ address: item.address, family: item.family as 4 | 6 }));
+  } catch {
+    return [{ address: host, family: 4 as const }];
+  }
+  return [{ address: host, family: 4 as const }];
+}
 
 export function mailboxAddress(value: string) {
   const trimmed = value.trim();
@@ -120,19 +153,20 @@ function write(socket: net.Socket, line: string) {
   socket.write(`${line}\r\n`);
 }
 
-function connectMail(host: string, port: number, implicitTls: boolean) {
+function connectMail(address: string, family: 4 | 6, port: number, implicitTls: boolean, hostname: string) {
   return new Promise<net.Socket | tls.TLSSocket>((resolve, reject) => {
     let settled = false;
+    const servername = net.isIP(hostname) ? undefined : hostname;
     const next = implicitTls
-      ? tls.connect({ host, port, servername: host }, () => {
+      ? tls.connect({ host: address, port, servername }, () => {
         settled = true;
         resolve(next);
       })
-      : net.connect({ host, port, autoSelectFamily: true }, () => {
+      : net.connect({ host: address, port, family }, () => {
         settled = true;
         resolve(next);
       });
-    next.setTimeout(SESSION_MS);
+    next.setTimeout(CONNECT_MS);
     next.once("timeout", () => {
       if (settled) return;
       next.destroy();
@@ -146,7 +180,8 @@ function connectMail(host: string, port: number, implicitTls: boolean) {
 
 async function upgrade(socket: net.Socket, host: string) {
   return new Promise<tls.TLSSocket>((resolve, reject) => {
-    const secure = tls.connect({ socket, servername: host }, () => resolve(secure));
+    const servername = net.isIP(host) ? undefined : host;
+    const secure = tls.connect({ socket, servername }, () => resolve(secure));
     secure.once("error", reject);
   });
 }
@@ -159,15 +194,12 @@ function messageIdentity(messageId: string, from: string) {
   return `${local}@${ehloName(from)}`;
 }
 
-export async function sendMail(message: OutboundMail) {
+async function deliverMail(message: OutboundMail, target: { address: string; family: 4 | 6 }, implicitTls: boolean) {
   const from = mailboxAddress(message.from);
   const recipients = message.to.map((item) => mailboxAddress(item));
-  if (!message.host || !from || recipients.some((item) => !item)) return { ok: false, message: "Outgoing email is not set up." };
-  const port = message.port || 587;
-  const implicitTls = message.secure || port === 465;
   let socket: net.Socket | tls.TLSSocket | null = null;
   try {
-    socket = await connectMail(message.host, port, implicitTls);
+    socket = await connectMail(target.address, target.family, message.port || 587, implicitTls, message.host);
     socket.setTimeout(SESSION_MS, () => {
       socket?.destroy(new Error("The mail server took too long."));
     });
@@ -223,4 +255,22 @@ export async function sendMail(message: OutboundMail) {
     const detail = error instanceof Error ? error.message : "Email could not be sent.";
     return { ok: false, message: detail.replace(/\s+/g, " ").trim().slice(0, 400) };
   }
+}
+
+export async function sendMail(message: OutboundMail) {
+  const from = mailboxAddress(message.from);
+  const recipients = message.to.map((item) => mailboxAddress(item));
+  if (!message.host || !from || recipients.some((item) => !item)) return { ok: false, message: "Outgoing email is not set up." };
+  const port = message.port || 587;
+  const targets = await mailTargets(message.host);
+  let last = "Email could not be sent.";
+  for (const mode of mailAttempts(port, message.secure)) {
+    for (const target of targets) {
+      const result = await deliverMail({ ...message, port }, target, mode === "tls");
+      if (result.ok) return result;
+      last = result.message;
+      if (!retryTransport(result.message)) return result;
+    }
+  }
+  return { ok: false, message: last };
 }
