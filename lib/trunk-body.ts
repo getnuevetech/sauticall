@@ -178,6 +178,11 @@ const BLANK_KEYS = new Set([
   "Webhook",
 ]);
 
+export const trunkContentTypes = [
+  ["odata", "application/json;odata.metadata=minimal;odata.streaming=true;IEEE754Compatible=false"],
+  ["minimal", "application/json;odata.metadata=minimal"],
+] as const;
+
 export function trunkPostBody(body: Record<string, unknown>) {
   return sanitizeTrunk(structuredClone(body), "") as Record<string, unknown>;
 }

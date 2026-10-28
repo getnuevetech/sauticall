@@ -260,7 +260,7 @@ async function accessToken(connection: ReturnType<typeof getConnection>) {
   return { origin, token: token.access_token };
 }
 
-export async function pbxRequest(path: string, init: { method?: string; body?: unknown; contentType?: string } = {}) {
+export async function pbxRequest(path: string, init: { method?: string; body?: unknown; contentType?: string; headers?: Record<string, string> } = {}) {
   try {
     const { origin, token } = await accessToken(getConnection("3cx"));
     const contentType = init.contentType || "application/json";
@@ -268,9 +268,10 @@ export async function pbxRequest(path: string, init: { method?: string; body?: u
       method: init.method || "GET",
       headers: {
         authorization: `Bearer ${token}`,
-        accept: init.body ? contentType : "application/json",
+        accept: "application/json",
         "odata-version": "4.0",
         ...(init.body ? { "content-type": contentType, prefer: "return=representation" } : {}),
+        ...init.headers,
       },
       body: init.body ? JSON.stringify(init.body) : undefined,
       cache: "no-store",
