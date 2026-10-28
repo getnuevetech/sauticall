@@ -116,53 +116,6 @@ export type AdminLink = { label: string; href: string; permission: string | stri
 
 export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
   {
-    title: "Website",
-    links: [
-      { label: "Colors and font", href: "/admin/theme", permission: "settings.theme" },
-      { label: "Images", href: "/admin/media", permission: "inbox.media" },
-      { label: "Home", href: "/admin/content/page.home", permission: "content.home" },
-      { label: "Solutions", href: "/admin/content/page.solutions", permission: "content.solutions" },
-      { label: "AI receptionist", href: "/admin/content/page.ai", permission: "content.ai" },
-      { label: "How it works", href: "/admin/content/page.how", permission: "content.how" },
-      { label: "Pricing", href: "/admin/content/page.pricing", permission: "content.pricing" },
-      { label: "About", href: "/admin/content/page.about", permission: "content.about" },
-      { label: "Contact", href: "/admin/content/page.contact", permission: "content.contact" },
-      { label: "Custom plan", href: "/admin/content/page.custom", permission: "content.custom" },
-      { label: "Menu", href: "/admin/content/nav", permission: "content.nav" },
-      { label: "Footer", href: "/admin/content/footer", permission: "content.footer" },
-      { label: "Services", href: "/admin/content/services", permission: "content.services" },
-      { label: "Help center", href: "/admin/content/page.help", permission: "content.faqs" },
-      { label: "More questions", href: "/admin/content/faqs", permission: "content.faqs" },
-      { label: "Who it's for", href: "/admin/content/personas", permission: "content.personas" },
-      { label: "Account wording", href: "/admin/content/page.account", permission: "content.account" },
-      { label: "FAQ articles", href: "/admin/faq", permission: "blog.manage" },
-    ],
-  },
-  {
-    title: "Catalog",
-    links: [
-      { label: "Plans", href: "/admin/content/plans", permission: "content.plans" },
-      { label: "Call minute bundles", href: "/admin/content/minute_bundles", permission: "content.bundles" },
-    ],
-  },
-  {
-    title: "Integrations",
-    links: [
-      { label: "Payment APIs", href: "/admin/gateways", permission: "settings.payments" },
-      { label: "Phone connections", href: "/admin/connections", permission: "settings.connections" },
-      { label: "Line variables", href: "/admin/variables", permission: "settings.connections" },
-      { label: "Live switches", href: "/admin/flags", permission: "settings.flags" },
-    ],
-  },
-  {
-    title: "Phone",
-    links: [
-      { label: "Extensions and groups", href: "/admin/phone", permission: "settings.phone" },
-      { label: "Lines and trunks", href: "/admin/lines", permission: "settings.lines" },
-      { label: "3CX trunks", href: "/admin/trunks", permission: "settings.lines" },
-    ],
-  },
-  {
     title: "Customers",
     links: [
       { label: "Customer accounts", href: "/admin/customers", permission: "users.customers" },
@@ -172,14 +125,49 @@ export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
     ],
   },
   {
-    title: "Support",
+    title: "Phone operations",
+    links: [
+      { label: "Extensions and groups", href: "/admin/phone", permission: "settings.phone" },
+      { label: "Lines and trunks", href: "/admin/lines", permission: "settings.lines" },
+      { label: "Trunks", href: "/admin/trunks", permission: "settings.lines" },
+    ],
+  },
+  {
+    title: "Catalog & billing",
+    links: [
+      { label: "Plans", href: "/admin/content/plans", permission: "content.plans" },
+      { label: "Call minute bundles", href: "/admin/content/minute_bundles", permission: "content.bundles" },
+    ],
+  },
+  {
+    title: "Integrations",
+    links: [
+      { label: "Phone connections", href: "/admin/connections", permission: "settings.connections" },
+      { label: "Line variables", href: "/admin/variables", permission: "settings.connections" },
+      { label: "Payment APIs", href: "/admin/gateways", permission: "settings.payments" },
+    ],
+  },
+  {
+    title: "Platform controls",
+    links: [
+      { label: "Platform controls", href: "/admin/flags", permission: "settings.flags" },
+    ],
+  },
+  {
+    title: "Website & content",
+    links: [
+      { label: "Website & content", href: "/admin/website", permission: ["content.home", "content.solutions", "content.ai", "content.how", "content.pricing", "content.about", "content.contact", "content.custom", "content.nav", "content.footer", "content.services", "content.faqs", "content.personas", "content.account", "settings.theme", "inbox.media", "blog.manage"] },
+    ],
+  },
+  {
+    title: "Support desk",
     links: [
       { label: "Ticket desk", href: "/admin/tickets", permission: ["tickets.view", "tickets.view_all", "tickets.reply"] },
       { label: "Queues and email", href: "/admin/tickets/settings", permission: "tickets.manage" },
     ],
   },
   {
-    title: "Team",
+    title: "Team & access",
     links: [
       { label: "Admin users", href: "/admin/team", permission: "access.manage" },
       { label: "Access levels", href: "/admin/access", permission: "access.manage" },

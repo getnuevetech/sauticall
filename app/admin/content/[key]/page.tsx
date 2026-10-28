@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { DocumentEditor } from "@/components/admin/Editors";
 import { PlanEditor } from "@/components/admin/PlanEditor";
@@ -35,7 +36,7 @@ export default async function ContentPage({ params, searchParams }: { params: Pr
       <span className="eyebrow">{catalog ? "Catalog" : "Website wording"}</span>
       <h2>{screen.title}</h2>
       <p>{screen.intro}</p>
-      {catalog ? null : <p>These fields change words on the public site. Creating an account, plan features, prices, payments, and phone connections are set in Catalog, Integrations, and Customers.</p>}
+      {catalog ? null : <p>Saving updates the live site. Header and footer are shared from <Link href="/admin/website?tab=navigation">Website & content</Link>. Plan prices stay in <Link href="/admin/content/plans">Catalog & billing</Link>.</p>}
       <DocumentEditor docKey={key} initial={JSON.parse(row.json)} />
     </>
   );

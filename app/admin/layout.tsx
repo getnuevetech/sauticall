@@ -1,20 +1,15 @@
 import { redirect } from "next/navigation";
-import { Frame } from "@/components/site/Frame";
-import { AdminNav } from "@/components/admin/AdminNav";
+import { AdminFrame } from "@/components/admin/AdminFrame";
 import { visibleAdminNav } from "@/lib/access";
 import { requireStaff } from "@/lib/auth";
+import "./admin.css";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireStaff();
   if (!user) redirect("/account/login");
   return (
-    <Frame pathname="/admin">
-      <main className="admin-page">
-        <div className="admin-shell">
-          <AdminNav groups={visibleAdminNav(user)} />
-          <div className="admin-main">{children}</div>
-        </div>
-      </main>
-    </Frame>
+    <AdminFrame name={user.name} email={user.email} groups={visibleAdminNav(user)}>
+      {children}
+    </AdminFrame>
   );
 }

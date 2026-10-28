@@ -1,17 +1,16 @@
-import { DocumentEditor } from "@/components/admin/Editors";
+import { PlatformControls } from "@/components/admin/PlatformControls";
 import { requirePermission } from "@/lib/access";
-import { screenFor } from "@/lib/admin-labels";
+import type { FlagRecord } from "@/lib/admin-controls";
 import { readDoc } from "@/lib/db";
 
 export default async function FlagsPage() {
   await requirePermission("settings.flags");
-  const screen = screenFor("flags");
+  const flags = readDoc<FlagRecord[]>("flags");
   return (
     <>
-      <span className="eyebrow">Integrations</span>
-      <h2>{screen.title}</h2>
-      <p>{screen.intro} Buying numbers and sending transfers spend money at the phone company, so those stay off until you mean to use them.</p>
-      <DocumentEditor docKey="flags" initial={readDoc("flags")} />
+      <h1>Platform controls</h1>
+      <p>Turn customer operations on or off. A switch shows the choice you are making. It applies after you save.</p>
+      <PlatformControls initial={Array.isArray(flags) ? flags : []} />
     </>
   );
 }
