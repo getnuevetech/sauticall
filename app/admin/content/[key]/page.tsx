@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { DocumentEditor } from "@/components/admin/Editors";
-import { HomeEditor } from "@/components/admin/HomeEditor";
+import { PageEditor } from "@/components/admin/HomeEditor";
+import { usesSectionEditor } from "@/lib/home-sections";
 import { PlanEditor } from "@/components/admin/PlanEditor";
 import { requirePermission } from "@/lib/access";
 import { permissionForDocument } from "@/lib/access-catalog";
@@ -30,12 +31,13 @@ export default async function ContentPage({ params, searchParams }: { params: Pr
       </>
     );
   }
-  if (key === "page.home") {
+  if (usesSectionEditor(key)) {
+    const screen = screenFor(key);
     return (
       <>
-        <h1>Home</h1>
-        <p>Edit one section at a time. The preview shows the unsaved hero. The public page changes when you save.</p>
-        <HomeEditor initial={JSON.parse(row.json) as Record<string, unknown>} />
+        <h1>{screen.title}</h1>
+        <p>{screen.intro} The preview shows the unsaved top of the page. The public page changes when you save.</p>
+        <PageEditor docKey={key} initial={JSON.parse(row.json) as Record<string, unknown>} />
       </>
     );
   }
