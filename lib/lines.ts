@@ -8,7 +8,7 @@ import { enforceUser } from "./minutes";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "./outbound-rule";
 import { extensionRange, paidPlan, readExtensionPlan } from "./pbx";
 import { idFromPbx } from "./pbx-id";
-import { mentionsDelta, trunkArrayBody, trunkCreateBody, wrapCollections } from "./trunk-body";
+import { mentionsDelta, trunkCreateBody, trunkDeltaBody, wrapCollections } from "./trunk-body";
 import { acceptedDepartmentName } from "./pbx-user";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
@@ -117,20 +117,22 @@ export async function attachTrunk(lineId: number) {
     host: sub.sip_host || "",
     groupId: department?.xapi_id || undefined,
   });
-  const created = await pbxRequest("Trunks", { method: "POST", body });
+  const attempts = [body, trunkDeltaBody(body)];
+  let created = await pbxRequest("Trunks", { method: "POST", body: attempts[0] });
   let trunkId = idFromPbx(created.body, created.location);
-  let failure = created;
+  const failures = [created.message];
+  for (const attempt of attempts.slice(1)) {
+    if (created.ok && trunkId) break;
+    if (!mentionsDelta(failures.join(" "))) break;
+    created = await pbxRequest("Trunks", { method: "POST", body: attempt });
+    trunkId = idFromPbx(created.body, created.location);
+    failures.push(created.message);
+  }
   if (!created.ok || !trunkId) {
-    const alternate = trunkArrayBody(body);
-    const fallback = await pbxRequest("Trunks", { method: "POST", body: alternate });
-    failure = fallback.ok ? created : fallback;
-    trunkId = idFromPbx(fallback.body, fallback.location);
-    if (!fallback.ok || !trunkId) {
-      const note = `VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"} is ready. 3CX did not add the trunk. Add it on the server for ${department?.name || departmentName(line.user_id)}, route inbound ${line.did} to extension ${extension}, and add an outbound rule limited to extensions ${span.from}–${span.to}. ${hideSecret(failure.message || created.message, sub.password)}`;
+    const note = `VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"} is ready. 3CX did not add the trunk. Add it on the server for ${department?.name || departmentName(line.user_id)}, route inbound ${line.did} to extension ${extension}, and add an outbound rule limited to extensions ${span.from}–${span.to}. ${hideSecret(failures.filter(Boolean).join(" | "), sub.password)}`;
       openTask(line.id, line.user_id, line.did, note);
       recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
-      return { ok: false, message: "3CX did not add the trunk. A task was saved for the team." };
-    }
+    return { ok: false, message: "3CX did not add the trunk. A task was saved for the team." };
   }
   const rule = await pbxRequest("InboundRules", {
     method: "POST",
