@@ -23,8 +23,8 @@ export function outboundScopeVerdict(body: unknown, from: string, to: string) {
   walk(body, (record) => {
     if (!("DNRanges" in record)) return;
     sawRanges = true;
-    const ranges = record.DNRanges;
-    if (!Array.isArray(ranges)) return;
+    const ranges = collectionItems(record.DNRanges);
+    if (!ranges) return;
     scoped = scoped || ranges.some((item) => {
       if (!item || typeof item !== "object") return false;
       const range = item as { From?: unknown; To?: unknown };
@@ -33,6 +33,12 @@ export function outboundScopeVerdict(body: unknown, from: string, to: string) {
   });
   if (!sawRanges) return "unknown" as const;
   return scoped ? "scoped" as const : "open" as const;
+}
+
+function collectionItems(value: unknown) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object" && Array.isArray((value as { delta?: unknown }).delta)) return (value as { delta: unknown[] }).delta;
+  return null;
 }
 
 function walk(value: unknown, visit: (record: Record<string, unknown>) => void) {
