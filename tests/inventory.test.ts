@@ -7,7 +7,7 @@ import { didInfoIsAbsent, lookupMayOrder, normalizeRequestedDid, readDids } from
 import { balanceCovers, planFundAmount, readClientBalance, resellerOrderFees } from "../lib/client-funding.ts";
 import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
-import { trunkAsArrays, trunkCreateBody } from "../lib/trunk-body.ts";
+import { trunkCreateBody, trunkDeltaBody, trunkGroupBody } from "../lib/trunk-body.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
@@ -341,48 +341,37 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
       },
     },
     name: "SautiCall 3612267988",
-    number: "13612267988",
+    number: "+1 (361) 226-7988",
     authId: "line-account",
     password: "secret",
     host: "houston1.voip.ms",
-    groupId: 12,
   });
   assert.equal("@odata.context" in trunk, false);
-  assert.equal((trunk.AuthPassword as { Value: string }).Value, "secret");
-  assert.deepEqual(trunk.DidNumbers, { delta: ["13612267988"] });
-  assert.equal((trunk.RoutingRules as { "@odata.type": string })["@odata.type"], "#Collection(Pbx.InboundRule)");
-  assert.equal((trunk.RoutingRules as { delta: { RuleName: string }[] }).delta[0].RuleName, "Main");
-  const groups = trunk.Groups as { GroupId: number; Rights: { RoleName: string } }[];
-  assert.equal(groups[0].GroupId, 12);
-  assert.equal(groups[0].Rights.RoleName, "system");
+  assert.equal(trunk["@odata.type"], "#Pbx.Trunk");
+  assert.equal((trunk.AuthPassword as { Value: string; "@odata.type": string }).Value, "secret");
+  assert.equal((trunk.AuthPassword as { "@odata.type": string })["@odata.type"], "#Pbx.ConcealedPassword");
+  assert.equal(trunk.ExternalNumber, "13612267988");
+  assert.deepEqual(trunk.DidNumbers, ["13612267988"]);
+  assert.equal("RoutingRules" in trunk, false);
+  assert.equal("Groups" in trunk, false);
   const gateway = trunk.Gateway as {
+    "@odata.type": string;
     Host: string;
     TemplateFilename: string;
     Lines: number;
-    InboundParams: { delta: { Custom: string }[] };
-    OutboundParams: { delta: unknown[] };
+    InboundParams: { "@odata.type": string; Custom: string }[];
   };
+  assert.equal(gateway["@odata.type"], "#Pbx.Gateway");
   assert.equal(gateway.Host, "houston1.voip.ms");
   assert.equal(gateway.TemplateFilename, "GenericSIPTrunk.pv.xml");
   assert.equal(gateway.Lines, 2);
-  assert.equal(gateway.InboundParams.delta[0].Custom, "$CalledNum");
-  assert.deepEqual(gateway.OutboundParams.delta, []);
-  const arrays = trunkAsArrays(trunk);
-  assert.equal("@odata.type" in arrays, false);
-  assert.deepEqual(arrays.DidNumbers, ["13612267988"]);
-  assert.deepEqual((arrays.RoutingRules as { RuleName: string }[])[0], { RuleName: "Main" });
-  assert.deepEqual((arrays.Gateway as { InboundParams: { Custom: string }[] }).InboundParams, [{ ParamId: 1, Custom: "$CalledNum" }]);
-  assert.deepEqual((arrays.Gateway as { OutboundParams: unknown[] }).OutboundParams, []);
-  const seedOnly = trunkCreateBody({
-    seed: { Gateway: { TemplateFilename: "GenericSIPTrunk.pv.xml", InboundParams: { delta: [{ ParamId: 1, Custom: "$CalledNum" }] } } },
-    name: "SautiCall 3612267988",
-    number: "13612267988",
-    authId: "line-account",
-    password: "secret",
-    host: "houston1.voip.ms",
-  });
-  assert.equal("RoutingRules" in seedOnly, false);
-  assert.equal("OutboundParams" in (seedOnly.Gateway as object), false);
+  assert.equal(gateway.InboundParams[0]["@odata.type"], "#Pbx.GatewayParameterBinding");
+  assert.equal(gateway.InboundParams[0].Custom, "$CalledNum");
+  assert.equal("OutboundParams" in gateway, false);
+  const delta = trunkDeltaBody(trunk);
+  assert.deepEqual(delta.DidNumbers, { "@odata.type": "#Collection(String)", delta: ["13612267988"] });
+  assert.equal((delta.Gateway as { InboundParams: { delta: { Custom: string }[] } }).InboundParams.delta[0].Custom, "$CalledNum");
+  assert.equal(trunkGroupBody(12).Groups[0].GroupId, 12);
   assert.equal(JSON.stringify(trunk).split("secret").length - 1, 1);
   assert.equal(outboundScopeVerdict({ DNRanges: { delta: [{ From: "510", To: "510" }] } }, "510", "510"), "scoped");
 });

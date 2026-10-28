@@ -8,7 +8,7 @@ import { enforceUser } from "./minutes";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "./outbound-rule";
 import { extensionRange, paidPlan, readExtensionPlan } from "./pbx";
 import { idFromPbx } from "./pbx-id";
-import { mentionsDelta, trunkAsArrays, trunkCreateBody, wrapCollections } from "./trunk-body";
+import { mentionsDelta, trunkCreateBody, trunkDeltaBody, trunkGroupBody, wrapCollections } from "./trunk-body";
 import { acceptedDepartmentName } from "./pbx-user";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
@@ -106,19 +106,18 @@ export async function attachTrunk(lineId: number) {
   const extension = extensionFor(line.user_id);
   const seeded = await pbxRequest(`Trunks/Pbx.InitTrunk(template=${encodeURIComponent(`'${template}'`)})`);
   const seed = seeded.ok ? trunkSeed(seeded.body) : null;
-  const templateBody = trunkCreateBody({
+  const typed = trunkCreateBody({
     seed,
     name: `SautiCall ${line.did}`,
     number,
     authId: sub.account,
     password: sub.password,
     host: sub.sip_host || "",
-    groupId: department?.xapi_id || undefined,
     template,
   });
   const attempts = [
-    ["arrays", trunkAsArrays(templateBody)],
-    ["template", templateBody],
+    ["typed", typed],
+    ["delta", trunkDeltaBody(typed)],
   ] as const;
   let created = await pbxRequest("Trunks", { method: "POST", body: attempts[0][1] });
   let trunkId = idFromPbx(created.body, created.location);
@@ -137,6 +136,18 @@ export async function attachTrunk(lineId: number) {
     recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
     return { ok: false, message: "3CX did not add the trunk. A task was saved for the team." };
   }
+  let departmentNote = "";
+  if (department?.xapi_id) {
+    const group = trunkGroupBody(department.xapi_id);
+    let grouped = await pbxRequest(`Trunks(${trunkId})`, { method: "PATCH", body: group });
+    if (!grouped.ok && grouped.status === 400) {
+      grouped = await pbxRequest(`Trunks(${trunkId})`, {
+        method: "PATCH",
+        body: { Groups: { "@odata.type": "#Collection(Pbx.UserGroup)", delta: group.Groups } },
+      });
+    }
+    if (!grouped.ok) departmentNote = ` The trunk is not limited to ${department.name} yet.`;
+  }
   const rule = await pbxRequest("InboundRules", {
     method: "POST",
     body: {
@@ -154,7 +165,7 @@ export async function attachTrunk(lineId: number) {
     recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
     return { ok: false, message: "The trunk exists, but inbound and outbound still need a person." };
   }
-  const outbound = await addOutboundRule({ name: `SautiCall ${line.did}`, trunkId, callerId: `+${number}`, from: span.from, to: span.to });
+  const outbound = await addOutboundRule({ name: `SautiCall ${line.did}`, trunkId, callerId: number, from: span.from, to: span.to });
   if (!outbound.ok) {
     const note = `The trunk is on 3CX and inbound calls go to extension ${extension}. ${outbound.message} Add that outbound rule on the server. VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"}.`;
     getDb().prepare("UPDATE phone_lines SET trunk_id = ?, status = 'trunk_waiting', last_message = ? WHERE id = ?").run(trunkId, note.slice(0, 400), line.id);
@@ -162,7 +173,7 @@ export async function attachTrunk(lineId: number) {
     recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
     return { ok: false, message: "Inbound is connected. Outbound still needs the team." };
   }
-  const done = `This number is a trunk on the phone system. ${outbound.message}`;
+  const done = `This number is a trunk on the phone system. ${outbound.message}${departmentNote}`;
   getDb().prepare("UPDATE phone_lines SET trunk_id = ?, status = 'trunk_live', last_message = ? WHERE id = ?").run(trunkId, done.slice(0, 400), line.id);
   getDb().prepare("UPDATE trunk_tasks SET status = 'done', note = ? WHERE line_id = ?").run(done.slice(0, 500), line.id);
   return { ok: true, message: done };

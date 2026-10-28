@@ -90,7 +90,8 @@ export function pbxErrorText(body: unknown, fallback: string) {
       for (const part of parts) add(typeof part === "string" && part.trim() ? `${key}: ${part}` : part);
     }
   }
-  const message = [...new Set(messages)].join(" ").slice(0, 800);
+  const unique = [...new Set(messages)];
+  const message = unique.filter((item, _, all) => !all.some((other) => other !== item && other.includes(item))).join(" ").slice(0, 800);
   return { code, message: message || fallback.replace(/\s+/g, " ").trim().slice(0, 800) };
 }
 
