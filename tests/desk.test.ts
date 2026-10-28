@@ -4,6 +4,8 @@ import { ADMIN_NAV, DEFAULT_ROLES, PERMISSIONS, permissionForDocument } from "..
 import { defaultFlags } from "../lib/seed-data.ts";
 import { flagGroups } from "../lib/admin-controls.ts";
 import { WEBSITE_LINKS } from "../lib/admin-website.ts";
+import { homeSections } from "../lib/home-sections.ts";
+import { defaultPages } from "../lib/seed-data.ts";
 import { renderFaq, slugify } from "../lib/faq-markdown.ts";
 import { nextFreeNumber } from "../lib/group-numbers.ts";
 import { parseMailPayload, ticketIdFromText } from "../lib/mail-parse.ts";
@@ -32,6 +34,11 @@ test("seeded access levels only use known permissions", () => {
   assert.ok(ADMIN_NAV.find((group) => group.title === "Team & access")?.links.some((link) => link.href === "/admin/access"));
   const grouped = new Set(flagGroups(defaultFlags).flatMap((group) => group.rows.map((row) => row.key)));
   for (const flag of defaultFlags) assert.ok(grouped.has(flag.key), flag.key);
+  const home = defaultPages.home as Record<string, unknown>;
+  const covered = new Set(homeSections(home).flatMap((section) => section.keys));
+  for (const key of Object.keys(home)) assert.ok(covered.has(key), key);
+  assert.ok(homeSections(home).some((section) => section.id === "header" && section.keys.includes("headerTalk")));
+  assert.ok(homeSections(home).every((section) => section.id !== "more"));
 });
 
 test("group numbers skip extensions and other groups", () => {
