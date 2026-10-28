@@ -7,7 +7,7 @@ import { didInfoIsAbsent, lookupMayOrder, normalizeRequestedDid, readDids } from
 import { balanceCovers, planFundAmount, readClientBalance, resellerOrderFees } from "../lib/client-funding.ts";
 import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
-import { trunkCreateBody, trunkDeltaBody, trunkGroupBody } from "../lib/trunk-body.ts";
+import { trunkCreateBody, trunkDeltaBody, trunkGroupBody, trunkReplayBody, trunkShape } from "../lib/trunk-body.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
@@ -373,6 +373,42 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
   assert.equal((delta.Gateway as { InboundParams: { delta: { Custom: string }[] } }).InboundParams.delta[0].Custom, "$CalledNum");
   assert.equal(trunkGroupBody(12).Groups[0].GroupId, 12);
   assert.equal(JSON.stringify(trunk).split("secret").length - 1, 1);
+  const replay = trunkReplayBody({
+    seed: {
+      "@odata.context": "https://pbx.example/xapi/v1/$metadata#Trunks/$entity",
+      "@odata.type": "#Pbx.Trunk",
+      Id: 0,
+      AuthPassword: { "@odata.type": "#Pbx.ConcealedPassword", Value: "" },
+      DidNumbers: { "@odata.context": "https://pbx.example/xapi/v1/$metadata#Collection(String)" },
+      RoutingRules: { "@odata.type": "#Collection(Pbx.InboundRule)", delta: [{ RuleName: "Main" }] },
+      Gateway: {
+        "@odata.type": "#Pbx.Gateway",
+        TemplateFilename: "GenericSIPTrunk.pv.xml",
+        Port: 5060,
+        InboundParams: { "@odata.type": "#Collection(Pbx.GatewayParameterBinding)", delta: [{ ParamId: 1, Custom: "$CalledNum" }] },
+        OutboundParams: { "@odata.context": "https://pbx.example/xapi/v1/$metadata#Collection(Pbx.GatewayParameterBinding)", delta: null },
+      },
+    },
+    name: "SautiCall 3612267988",
+    number: "+1 (361) 226-7988",
+    authId: "line-account",
+    password: "secret",
+    host: "houston1.voip.ms",
+    template: "GenericSIPTrunk.pv.xml",
+  });
+  assert.equal("@odata.context" in replay, false);
+  assert.equal(replay["@odata.type"], "#Pbx.Trunk");
+  assert.equal(replay.Id, 0);
+  assert.equal((replay.RoutingRules as { delta: { RuleName: string }[] }).delta[0].RuleName, "Main");
+  assert.deepEqual((replay.DidNumbers as { delta: string[] }).delta, ["13612267988"]);
+  assert.deepEqual(replay.AuthPassword, { "@odata.type": "#Pbx.ConcealedPassword", Value: "secret" });
+  const replayGateway = replay.Gateway as { Host: string; InboundParams: { delta: { Custom: string }[] }; OutboundParams: { delta: unknown[] } };
+  assert.equal(replayGateway.Host, "houston1.voip.ms");
+  assert.equal(replayGateway.InboundParams.delta[0].Custom, "$CalledNum");
+  assert.deepEqual(replayGateway.OutboundParams.delta, []);
+  assert.equal(JSON.stringify(replay).split("secret").length - 1, 1);
+  assert.match(trunkShape(replay), /RoutingRules:delta\(1\)/);
+  assert.equal(trunkShape(replay).includes("secret"), false);
   assert.equal(outboundScopeVerdict({ DNRanges: { delta: [{ From: "510", To: "510" }] } }, "510", "510"), "scoped");
 });
 

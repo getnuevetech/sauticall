@@ -108,6 +108,52 @@ export function mentionsDelta(message: string) {
   return /delta/i.test(message);
 }
 
+export function trunkReplayBody(input: {
+  seed: Record<string, unknown> | null;
+  name: string;
+  number: string;
+  authId: string;
+  password: string;
+  host: string;
+  template?: string;
+}) {
+  const body = input.seed ? structuredClone(input.seed) : {};
+  ensureDeltas(body);
+  const number = digits(input.number);
+  body.Name = input.name;
+  if (number) body.ExternalNumber = number;
+  body.AuthID = input.authId;
+  if ("AuthUser" in body) body.AuthUser = input.authId;
+  const currentPassword = body.AuthPassword;
+  const passwordType = currentPassword && typeof currentPassword === "object" && !Array.isArray(currentPassword)
+    ? text((currentPassword as Record<string, unknown>)["@odata.type"])
+    : "";
+  body.AuthPassword = passwordType ? { "@odata.type": passwordType, Value: input.password } : { Value: input.password };
+  const gateway = body.Gateway && typeof body.Gateway === "object" && !Array.isArray(body.Gateway)
+    ? body.Gateway as Record<string, unknown>
+    : {};
+  body.Gateway = gateway;
+  if (input.host) gateway.Host = input.host;
+  if (!gateway.Port) gateway.Port = 5060;
+  if (!gateway.TemplateFilename && input.template) gateway.TemplateFilename = input.template;
+  if (number) replaceDid(body, number);
+  cleanLinks(body);
+  return body;
+}
+
+export function trunkShape(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  return Object.entries(value as Record<string, unknown>).filter(([key]) => key !== "AuthPassword").map(([key, child]) => {
+    if (Array.isArray(child)) return `${key}:array(${child.length})`;
+    if (child && typeof child === "object") {
+      const record = child as Record<string, unknown>;
+      if (Array.isArray(record.delta)) return `${key}:delta(${record.delta.length})`;
+      return `${key}:object`;
+    }
+    return `${key}:${typeof child}`;
+  }).join(",");
+}
+
 function wrap(record: Record<string, unknown>) {
   for (const [key, type] of Object.entries(COLLECTION_TYPES)) {
     if (Array.isArray(record[key])) record[key] = { "@odata.type": type, delta: record[key] };
@@ -170,4 +216,41 @@ function collectionItems(value: unknown): unknown[] {
 
 function text(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function ensureDeltas(value: unknown) {
+  if (Array.isArray(value)) {
+    value.forEach(ensureDeltas);
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  const record = value as Record<string, unknown>;
+  if (isCollection(record) && !Array.isArray(record.delta)) record.delta = [];
+  for (const child of Object.values(record)) ensureDeltas(child);
+}
+
+function replaceDid(body: Record<string, unknown>, number: string) {
+  const current = body.DidNumbers;
+  if (Array.isArray(current)) {
+    body.DidNumbers = [number];
+    return;
+  }
+  if (current && typeof current === "object" && isCollection(current as Record<string, unknown>)) {
+    (current as Record<string, unknown>).delta = [number];
+    return;
+  }
+  body.DidNumbers = [number];
+}
+
+function cleanLinks(value: unknown) {
+  if (Array.isArray(value)) {
+    value.forEach(cleanLinks);
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  const record = value as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (key !== "@odata.type" && !key.endsWith("@odata.type") && (key.startsWith("@") || key.includes("@odata."))) delete record[key];
+    else cleanLinks(record[key]);
+  }
 }
