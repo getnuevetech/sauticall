@@ -1,55 +1,23 @@
-const TRUNK_FIELDS = [
-  "Direction",
-  "DisableCallTransfer",
-  "DisableVideo",
-  "DiversionHeader",
-  "E164CountryCode",
-  "E164ProcessIncomingNumber",
-  "EnableInboundCalls",
-  "EnableOutboundCalls",
-  "IPRestriction",
-  "OutboundCallerID",
-  "PublicIPinSIP",
-  "PublishInfo",
-  "ReceiveInfo",
-  "RemoteMyPhoneUriHost",
-  "RemotePBXPreffix",
-  "SecondaryRegistrar",
-  "SeparateAuthId",
-  "SimultaneousCalls",
-  "TransportRestriction",
-  "TunnelEnabled",
-  "TunnelRemoteAddr",
-  "TunnelRemotePort",
-  "UseSeparateAuthId",
-];
+const TRUNK_COLLECTIONS: Record<string, string> = {
+  DidNumbers: "#Collection(String)",
+  EmergencyGeoLocations: "#Collection(Pbx.EmergencyGeoTrunkLocation)",
+  Groups: "#Collection(Pbx.UserGroup)",
+  InCIDFormatting: "#Collection(Pbx.CIDFormatting)",
+  OutCIDFormatting: "#Collection(Pbx.CIDFormatting)",
+  PublicInfoGroups: "#Collection(String)",
+  ReceiveExtensions: "#Collection(Pbx.Peer)",
+  RoutingRules: "#Collection(Pbx.InboundRule)",
+  Tags: "#Collection(Pbx.UserTag)",
+  TrunkRegTimes: "#Collection(Pbx.Variable)",
+};
 
-const GATEWAY_FIELDS = [
-  "DeliverAudio",
-  "DestNumberInRemotePartyIDCalled",
-  "DestNumberInRequestLineURI",
-  "DestNumberInTo",
-  "IPInRegistrationContact",
-  "Internal",
-  "Lines",
-  "MatchingStrategy",
-  "Name",
-  "OutboundCallerID",
-  "Port",
-  "ProxyHost",
-  "ProxyPort",
-  "RequireRegistrationFor",
-  "SRTPMode",
-  "SpecifiedIPForRegistrationContact",
-  "SupportReinvite",
-  "SupportReplaces",
-  "TemplateFilename",
-  "TimeBetweenReg",
-  "Type",
-  "UseIPInContact",
-];
-
-const LIST_FIELDS = ["Codecs", "InboundParams", "OutboundParams", "SourceIdentification", "VariableChoices"];
+const GATEWAY_COLLECTIONS: Record<string, string> = {
+  Codecs: "#Collection(String)",
+  InboundParams: "#Collection(Pbx.GatewayParameterBinding)",
+  OutboundParams: "#Collection(Pbx.GatewayParameterBinding)",
+  SourceIdentification: "#Collection(Pbx.GatewayParameterBinding)",
+  VariableChoices: "#Collection(Pbx.Choice)",
+};
 
 export function trunkCreateBody(input: {
   seed: Record<string, unknown> | null;
@@ -59,47 +27,44 @@ export function trunkCreateBody(input: {
   password: string;
   host: string;
   groupId?: number;
-  includeGatewayLists?: boolean;
+  fillEmptyCollections?: boolean;
 }) {
-  const seed = input.seed || {};
-  const gatewaySeed = seed.Gateway && typeof seed.Gateway === "object" && !Array.isArray(seed.Gateway)
-    ? seed.Gateway as Record<string, unknown>
+  const body = cleanValue(input.seed || {}) as Record<string, unknown>;
+  body["@odata.type"] = text(body["@odata.type"]) || "#Pbx.Trunk";
+  body.Name = input.name;
+  body.ExternalNumber = input.number;
+  body.AuthID = input.authId;
+  if ("AuthUser" in body) body.AuthUser = input.authId;
+  body.AuthPassword = {
+    "@odata.type": "#Pbx.ConcealedPassword",
+    ...passwordFields(body.AuthPassword),
+    Value: input.password,
+  };
+  const gateway = body.Gateway && typeof body.Gateway === "object" && !Array.isArray(body.Gateway)
+    ? { ...(body.Gateway as Record<string, unknown>) }
     : {};
-  const gateway = scalars(gatewaySeed, GATEWAY_FIELDS);
+  gateway["@odata.type"] = text(gateway["@odata.type"]) || "#Pbx.Gateway";
   if (input.host) gateway.Host = input.host;
   if (!gateway.Port) gateway.Port = 5060;
   if (!gateway.Name) gateway.Name = "VoIP.ms";
-  if (input.includeGatewayLists !== false) {
-    const codecs = listItems(gatewaySeed.Codecs).filter((item): item is string => typeof item === "string");
-    if (codecs.length) gateway.Codecs = codecs;
-    for (const key of LIST_FIELDS) {
-      if (key === "Codecs") continue;
-      const items = listItems(gatewaySeed[key]).map(cleanBinding).filter((item): item is Record<string, unknown> => Boolean(item));
-      if (items.length) gateway[key] = items;
-    }
+  for (const [key, type] of Object.entries(GATEWAY_COLLECTIONS)) {
+    const items = collectionItems(gateway[key]);
+    if (items.length || input.fillEmptyCollections !== false) gateway[key] = typedCollection(gateway[key], type, items);
+    else delete gateway[key];
   }
-  const body: Record<string, unknown> = {
-    ...scalars(seed, TRUNK_FIELDS),
-    Name: input.name,
-    ExternalNumber: input.number,
-    AuthID: input.authId,
-    AuthPassword: { Value: input.password },
-    Gateway: gateway,
-    DidNumbers: [input.number],
-  };
-  if ("AuthUser" in seed) body.AuthUser = input.authId;
-  if (input.groupId) body.Groups = [{ GroupId: input.groupId, Rights: { RoleName: "system" } }];
+  body.Gateway = gateway;
+  body.DidNumbers = typedCollection(body.DidNumbers, TRUNK_COLLECTIONS.DidNumbers, [input.number]);
+  if (input.groupId) {
+    body.Groups = typedCollection(body.Groups, TRUNK_COLLECTIONS.Groups, [{ GroupId: input.groupId, Rights: { "@odata.type": "#Pbx.Rights", RoleName: "system" } }]);
+  } else if (input.fillEmptyCollections !== false) body.Groups = typedCollection(body.Groups, TRUNK_COLLECTIONS.Groups, collectionItems(body.Groups));
+  else delete body.Groups;
+  for (const [key, type] of Object.entries(TRUNK_COLLECTIONS)) {
+    if (key === "DidNumbers" || key === "Groups") continue;
+    const items = collectionItems(body[key]);
+    if (items.length || input.fillEmptyCollections !== false) body[key] = typedCollection(body[key], type, items);
+    else delete body[key];
+  }
   return body;
-}
-
-export function trunkCollectionBody(body: Record<string, unknown>) {
-  const next: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(body)) {
-    if (Array.isArray(value)) next[key] = { delta: value };
-    else if (value && typeof value === "object") next[key] = trunkCollectionBody(value as Record<string, unknown>);
-    else next[key] = value;
-  }
-  return next;
 }
 
 export function wrapCollections(body: Record<string, unknown>, keys: string[]) {
@@ -112,16 +77,12 @@ export function mentionsDelta(message: string) {
   return /delta/i.test(message);
 }
 
-function scalars(record: Record<string, unknown>, keys: string[]) {
-  const next: Record<string, unknown> = {};
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") next[key] = value;
-  }
-  return next;
+function typedCollection(current: unknown, fallbackType: string, items: unknown[]) {
+  const record = current && typeof current === "object" && !Array.isArray(current) ? current as Record<string, unknown> : {};
+  return { "@odata.type": text(record["@odata.type"]) || fallbackType, delta: items };
 }
 
-function listItems(value: unknown): unknown[] {
+function collectionItems(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
@@ -131,14 +92,57 @@ function listItems(value: unknown): unknown[] {
   return [];
 }
 
-function cleanBinding(item: unknown) {
-  if (!item || typeof item !== "object" || Array.isArray(item)) return null;
-  const record = item as Record<string, unknown>;
+function passwordFields(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const next: Record<string, unknown> = {};
-  if (typeof record.ParamId === "number") next.ParamId = record.ParamId;
-  if (typeof record.ValueId === "number") next.ValueId = record.ValueId;
-  if (typeof record.Custom === "string") next.Custom = record.Custom;
-  if (typeof record.Key === "string") next.Key = record.Key;
-  if (typeof record.Value === "string" || typeof record.Value === "number") next.Value = record.Value;
-  return Object.keys(next).length ? next : null;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (key.startsWith("@") || key === "delta") continue;
+    if (typeof child === "string" || typeof child === "number" || typeof child === "boolean") next[key] = child;
+  }
+  return next;
+}
+
+function cleanValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(cleanValue);
+  if (!value || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  const declared = text(record["@odata.type"]);
+  const context = text(record["@odata.context"]);
+  if ("delta" in record || /Collection\(/i.test(`${declared} ${context}`)) {
+    const items = collectionItems(record).map(cleanValue);
+    const next: Record<string, unknown> = { delta: items };
+    const type = declared || collectionTypeFromContext(context);
+    if (type) next["@odata.type"] = type;
+    return next;
+  }
+  const next: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(record)) {
+    if (key === "@odata.type" || key.endsWith("@odata.type")) {
+      next[key] = child;
+      continue;
+    }
+    if (key.startsWith("@") || key.includes("@odata.")) continue;
+    const cleaned = cleanValue(child);
+    if (cleaned && typeof cleaned === "object" && !Array.isArray(cleaned) && Object.keys(cleaned as object).length === 0) continue;
+    next[key] = cleaned;
+  }
+  for (const key of Object.keys(next)) {
+    if (!key.endsWith("@odata.type")) continue;
+    const name = key.slice(0, -"@odata.type".length);
+    const type = text(next[key]);
+    if (!name || !type || !Array.isArray(next[name])) continue;
+    next[name] = { "@odata.type": type.startsWith("#") ? type : `#${type}`, delta: next[name] };
+    delete next[key];
+  }
+  return next;
+}
+
+function collectionTypeFromContext(context: string) {
+  const match = context.match(/#Collection\([^)]+\)/i) || context.match(/Collection\([^)]+\)/i);
+  if (!match) return "";
+  return match[0].startsWith("#") ? match[0] : `#${match[0]}`;
+}
+
+function text(value: unknown) {
+  return typeof value === "string" ? value : "";
 }
