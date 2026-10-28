@@ -8,7 +8,7 @@ import { enforceUser } from "./minutes";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "./outbound-rule";
 import { extensionRange, paidPlan, readExtensionPlan } from "./pbx";
 import { idFromPbx } from "./pbx-id";
-import { mentionsDelta, trunkCollectionBody, trunkCreateBody, wrapCollections } from "./trunk-body";
+import { mentionsDelta, trunkCreateBody, wrapCollections } from "./trunk-body";
 import { acceptedDepartmentName } from "./pbx-user";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
@@ -116,11 +116,10 @@ export async function attachTrunk(lineId: number) {
     password: sub.password,
     host: sub.sip_host || "",
   };
-  const plain = trunkCreateBody({ ...shared, groupId: department?.xapi_id || undefined });
+  const groupId = department?.xapi_id || undefined;
   const attempts = [
-    ["template", plain],
-    ["collections", trunkCollectionBody(plain)],
-    ["basic", trunkCreateBody({ ...shared, includeGatewayLists: false })],
+    ["typed", trunkCreateBody({ ...shared, groupId })],
+    ["seed", trunkCreateBody({ ...shared, groupId, fillEmptyCollections: false })],
   ] as const;
   let created = await pbxRequest("Trunks", { method: "POST", body: attempts[0][1] });
   let trunkId = idFromPbx(created.body, created.location);
