@@ -4,7 +4,7 @@ import fs from "node:fs";
 import net from "net";
 import test from "node:test";
 import tls from "tls";
-import { MAIL_REPLY_MS, connectFailure, ehloName, mailAttempts, mailboxAddress, retryTransport, sendMail, submissionHost } from "../lib/smtp.ts";
+import { MAIL_REPLY_MS, connectFailure, ehloName, explainMailFailure, mailAttempts, mailboxAddress, retryTransport, sendMail, smtpPassword, submissionHost } from "../lib/smtp.ts";
 
 test("a mail server reply waits eight seconds and a timeout is not tried again", () => {
   assert.equal(MAIL_REPLY_MS, 8000);
@@ -18,6 +18,10 @@ test("a mail server reply waits eight seconds and a timeout is not tried again",
   assert.match(connectFailure("nuevetech.io", 25), /Save port 587/);
   assert.equal(retryTransport("Recipient was refused by the mail server: 550 no such user"), false);
   assert.equal(retryTransport("wrong version number"), true);
+  assert.equal(smtpPassword("smtp.gmail.com", "abcd efgh ijkl mnop"), "abcdefghijklmnop");
+  assert.equal(smtpPassword("smtp.example.com", "keep spaces"), "keep spaces");
+  assert.match(explainMailFailure("Could not open a connection to smtp.gmail.com:587.", "smtp.gmail.com"), /password was not checked/);
+  assert.match(explainMailFailure("Sign-in was refused by the mail server: 535 5.7.8", "smtp.gmail.com"), /app password/);
 });
 
 test("port 587 starts in plain text even when secure is checked, and port 465 starts encrypted", () => {

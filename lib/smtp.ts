@@ -49,6 +49,22 @@ export function connectFailure(host: string, port: number) {
   return `Could not open a connection to ${where}.`;
 }
 
+export function smtpPassword(host: string, pass: string) {
+  const trimmed = pass.trim();
+  if (submissionHost(host) !== "smtp.gmail.com") return trimmed;
+  return trimmed.replace(/\s+/g, "");
+}
+
+export function explainMailFailure(message: string, host: string) {
+  if (/Could not open a connection|took too long to accept the connection/i.test(message)) {
+    return `${message} The saved password was not checked, because that server never accepted the connection.`;
+  }
+  if (/Sign-in was refused/i.test(message) && submissionHost(host) === "smtp.gmail.com") {
+    return `${message} The connection worked. Google rejected the username or app password. The username must be the full mailbox address, and the password must be a Google app password.`;
+  }
+  return message;
+}
+
 async function googleMailHost(from: string) {
   const domain = mailboxAddress(from).split("@")[1]?.toLowerCase() || "";
   if (!domain) return "";
@@ -184,29 +200,54 @@ function write(socket: net.Socket, line: string) {
   socket.write(`${line}\r\n`);
 }
 
+async function preferredAddress(hostname: string) {
+  const literal = net.isIP(hostname);
+  if (literal === 4 || literal === 6) return { address: hostname, family: literal as 4 | 6 };
+  try {
+    const found = await Promise.race([
+      dns.lookup(hostname, { all: true }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("dns")), 2000)),
+    ]);
+    const ipv4 = found.find((item) => item.family === 4);
+    if (ipv4) return { address: ipv4.address, family: 4 as const };
+    const ipv6 = found.find((item) => item.family === 6);
+    if (ipv6) return { address: ipv6.address, family: 6 as const };
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 function connectMail(hostname: string, port: number, implicitTls: boolean) {
-  return new Promise<net.Socket | tls.TLSSocket>((resolve, reject) => {
+  return preferredAddress(hostname).then((target) => new Promise<net.Socket | tls.TLSSocket>((resolve, reject) => {
     let settled = false;
     const servername = net.isIP(hostname) ? undefined : hostname;
-    const next = implicitTls
-      ? tls.connect({ host: hostname, port, servername }, () => {
-        settled = true;
-        resolve(next);
-      })
-      : net.connect({ host: hostname, port }, () => {
-        settled = true;
-        resolve(next);
-      });
-    next.setTimeout(CONNECT_MS);
-    next.once("timeout", () => {
+    const host = target?.address || hostname;
+    const family = target?.family;
+    const plain = net.connect({ host, port, family });
+    const fail = (error: Error) => {
       if (settled) return;
-      next.destroy();
-      reject(new Error(connectFailure(hostname, port)));
+      settled = true;
+      plain.destroy();
+      reject(error);
+    };
+    plain.setTimeout(CONNECT_MS);
+    plain.once("timeout", () => fail(new Error(connectFailure(hostname, port))));
+    plain.once("error", (error) => fail(error instanceof Error ? error : new Error("Email could not be sent.")));
+    plain.once("connect", () => {
+      if (!implicitTls) {
+        settled = true;
+        resolve(plain);
+        return;
+      }
+      const secure = tls.connect({ socket: plain, servername });
+      secure.once("secureConnect", () => {
+        settled = true;
+        resolve(secure);
+      });
+      secure.once("error", (error) => fail(error instanceof Error ? error : new Error("Email could not be sent.")));
     });
-    next.once("error", (error) => {
-      if (!settled) reject(error instanceof Error ? error : new Error("Email could not be sent."));
-    });
-  });
+  }));
 }
 
 async function upgrade(socket: net.Socket, host: string) {
@@ -273,8 +314,9 @@ async function deliverMail(message: OutboundMail, implicitTls: boolean) {
     }
     if (message.user) {
       const offered = authMechanisms(hello);
-      if (offered.has("PLAIN")) await authPlain(socket, reader.read, message.user, message.pass);
-      else await authLogin(socket, reader.read, message.user, message.pass);
+      const pass = smtpPassword(message.host, message.pass);
+      if (offered.has("PLAIN")) await authPlain(socket, reader.read, message.user.trim(), pass);
+      else await authLogin(socket, reader.read, message.user.trim(), pass);
     }
     write(socket, `MAIL FROM:<${from}>`);
     await expectOk(reader.read, "Sender");
@@ -333,5 +375,5 @@ export async function sendMail(message: OutboundMail) {
       last = `${again.message} ${requestedHost}:${requestedPort} did not open. This domain receives mail at Google, so the SMTP host should be smtp.gmail.com on port 587.`;
     }
   }
-  return { ok: false, message: last };
+  return { ok: false, message: explainMailFailure(last, host) };
 }

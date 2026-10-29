@@ -164,6 +164,11 @@
 .ops-jump{display:grid;gap:4px;font-size:.8rem;font-weight:700;color:#344054}
 .btn-danger{background:#fff;color:#b42318;border:1px solid #fda29b}
 .ops-jump select{min-width:180px}
+.mail-test{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+.mail-test label{flex:1;min-width:220px;margin:0}
+.mail-result{margin:0 0 12px;padding:10px 12px;border-radius:12px;font-weight:650}
+.mail-result.ok{background:#e8f8ef;color:#17803d}
+.mail-result.bad{background:#fef3f2;color:#b42318}
 @media(max-width:960px){
   .ap-side{position:fixed;z-index:12;transform:translateX(-105%)}
   .admin-portal.nav-open .ap-side{transform:none}
