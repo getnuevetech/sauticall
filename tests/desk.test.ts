@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ADMIN_NAV, DEFAULT_ROLES, PERMISSIONS, permissionForDocument } from "../lib/access-catalog.ts";
+import { ADMIN_NAV, DEFAULT_ROLES, PERMISSIONS, accessSummary, permissionForDocument } from "../lib/access-catalog.ts";
 import { defaultFlags } from "../lib/seed-data.ts";
 import { flagGroups } from "../lib/admin-controls.ts";
 import { WEBSITE_LINKS } from "../lib/admin-website.ts";
@@ -38,6 +38,11 @@ test("seeded access levels only use known permissions", () => {
   assert.equal(ADMIN_NAV.some((group) => group.links.some((link) => link.href === "/admin/trunks")), false);
   assert.equal(ADMIN_NAV.find((group) => group.title === "Customers")?.links.some((link) => link.href === "/admin/messages"), false);
   assert.equal(ADMIN_NAV.find((group) => group.title === "Support desk")?.links[0]?.href, "/admin/messages");
+  assert.equal(ADMIN_NAV.find((group) => group.title === "Support desk")?.links[2]?.label, "Queues & email");
+  assert.equal(accessSummary(["tickets.view"], "staff")[0]?.title, "Group-scoped tickets");
+  assert.equal(accessSummary(["tickets.view_all"], "staff")[0]?.title, "Every ticket");
+  assert.equal(accessSummary([], "staff")[1]?.title, "No team administration");
+  assert.equal(accessSummary([], "super_admin")[0]?.title, "Full admin access");
   const grouped = new Set(flagGroups(defaultFlags).flatMap((group) => group.rows.map((row) => row.key)));
   for (const flag of defaultFlags) assert.ok(grouped.has(flag.key), flag.key);
   const home = defaultPages.home as Record<string, unknown>;

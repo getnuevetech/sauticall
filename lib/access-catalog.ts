@@ -20,8 +20,8 @@ export const PERMISSIONS: Permission[] = [
   { key: "settings.theme", group: "Website", label: "Colors and font", description: "Change colors, font, and the logo address." },
   { key: "inbox.media", group: "Website", label: "Images", description: "Upload pictures for the site." },
   { key: "blog.manage", group: "Website", label: "FAQ articles", description: "Write, publish, and unpublish FAQ articles." },
-  { key: "settings.payments", group: "Integrations", label: "Payment APIs", description: "Add and check Stripe, PayPal, and Square." },
-  { key: "settings.connections", group: "Integrations", label: "Phone connections", description: "Save VoIP.ms and 3CX credentials." },
+  { key: "settings.payments", group: "Integrations", label: "Payments", description: "Add and check Stripe, PayPal, and Square." },
+  { key: "settings.connections", group: "Integrations", label: "System connections", description: "Save VoIP.ms and 3CX credentials." },
   { key: "settings.flags", group: "Integrations", label: "Live switches", description: "Turn live ordering, provisioning, and other customer features on or off." },
   { key: "settings.phone", group: "Phone", label: "Extensions and groups", description: "Choose where extension numbers start. How many a customer can add is set on each plan." },
   { key: "settings.lines", group: "Phone", label: "Lines and trunks", description: "See purchased numbers, trunks, emergency addresses, and call-minute limits." },
@@ -86,6 +86,22 @@ export function knownPermissions(keys: string[]) {
   return keys.filter((key) => PERMISSION_KEYS.has(key));
 }
 
+export function accessSummary(permissions: string[], kind: "staff" | "super_admin" = "staff") {
+  if (kind === "super_admin") {
+    return [{ ok: true, title: "Full admin access", detail: "This account bypasses access levels and can open every admin area." }];
+  }
+  const has = (key: string) => permissions.includes(key);
+  const tickets = has("tickets.view_all")
+    ? { ok: true, title: "Every ticket", detail: "Can see every ticket in Support desk." }
+    : has("tickets.view") || has("tickets.reply")
+      ? { ok: true, title: "Group-scoped tickets", detail: "Can see tickets for assigned groups. Access every ticket is off." }
+      : { ok: false, title: "No ticket access", detail: "Cannot open Support desk tickets." };
+  const team = has("access.manage")
+    ? { ok: true, title: "Team administration", detail: "Can manage admin users and access levels." }
+    : { ok: false, title: "No team administration", detail: "Cannot manage admin users or access levels." };
+  return [tickets, team];
+}
+
 const DOCUMENT_PERMISSIONS: Record<string, string> = {
   "page.home": "content.home",
   "page.solutions": "content.solutions",
@@ -140,9 +156,9 @@ export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
   {
     title: "Integrations",
     links: [
-      { label: "Phone connections", href: "/admin/connections", permission: "settings.connections" },
+      { label: "System connections", href: "/admin/connections", permission: "settings.connections" },
+      { label: "Payments", href: "/admin/gateways", permission: "settings.payments" },
       { label: "Line variables", href: "/admin/variables", permission: "settings.connections" },
-      { label: "Payment APIs", href: "/admin/gateways", permission: "settings.payments" },
     ],
   },
   {
@@ -161,8 +177,8 @@ export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
     title: "Support desk",
     links: [
       { label: "Contact messages", href: "/admin/messages", permission: "inbox.messages" },
-      { label: "Tickets", href: "/admin/tickets", permission: ["tickets.view", "tickets.view_all", "tickets.reply"] },
-      { label: "Queues and email", href: "/admin/tickets/settings", permission: "tickets.manage" },
+      { label: "Ticket desk", href: "/admin/tickets", permission: ["tickets.view", "tickets.view_all", "tickets.reply"] },
+      { label: "Queues & email", href: "/admin/tickets/settings", permission: "tickets.manage" },
     ],
   },
   {

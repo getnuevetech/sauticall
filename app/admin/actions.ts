@@ -115,6 +115,7 @@ export async function saveGateway(formData: FormData) {
   if (provider === "paypal" && (!config.client_id || !key)) return { error: "PayPal needs the client ID and the secret." };
   if (provider === "square" && (!config.application_id || !config.location_id || !key)) return { error: "Square needs the application ID, location ID, and access token." };
   const secret = writeGatewaySecret({ key, webhook });
+  let savedId = id;
   if (id) {
     getDb()
       .prepare("UPDATE gateways SET name=?, provider_key=?, public_label=?, enabled=?, priority=?, mode=?, currencies=?, config_json=?, secret=? WHERE id=?")
@@ -124,9 +125,10 @@ export async function saveGateway(formData: FormData) {
     const info = getDb()
       .prepare("INSERT INTO gateways (name, provider_key, public_label, enabled, priority, mode, currencies, config_json, secret_ref, secret) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?)")
       .run(payload.name, payload.provider_key, payload.public_label, payload.enabled, payload.priority, payload.mode, payload.currencies, JSON.stringify(config), secret);
-    audit(user.email, "gateway.create", String(info.lastInsertRowid));
+    savedId = Number(info.lastInsertRowid);
+    audit(user.email, "gateway.create", String(savedId));
   }
-  redirect("/admin/gateways");
+  redirect(`/admin/gateways?id=${savedId}&saved=1`);
 }
 
 export async function testGateway(formData: FormData) {
@@ -135,7 +137,7 @@ export async function testGateway(formData: FormData) {
   const { testGateway: check } = await import("@/lib/payments");
   const result = await check(id);
   audit(user.email, "gateway.test", `${id}:${result.ok ? "ok" : "failed"}`);
-  redirect("/admin/gateways");
+  redirect(`/admin/gateways?id=${id}`);
 }
 
 export async function setGatewayEnabled(formData: FormData) {
@@ -144,7 +146,7 @@ export async function setGatewayEnabled(formData: FormData) {
   const enabled = Number(formData.get("enabled"));
   getDb().prepare("UPDATE gateways SET enabled = ? WHERE id = ?").run(enabled ? 1 : 0, id);
   audit(user.email, enabled ? "gateway.enable" : "gateway.disable", String(id));
-  redirect("/admin/gateways");
+  redirect(`/admin/gateways?id=${id}`);
 }
 
 export async function saveConnection(formData: FormData) {
@@ -187,7 +189,7 @@ export async function saveConnection(formData: FormData) {
     }, secret);
   }
   audit(user.email, "connection.save", provider);
-  redirect("/admin/connections");
+  redirect(`/admin/connections?provider=${provider}&saved=1`);
 }
 
 export async function testConnection(formData: FormData) {
@@ -196,7 +198,7 @@ export async function testConnection(formData: FormData) {
   const { test3cx, testVoipms } = await import("@/lib/carriers");
   const result = provider === "3cx" ? await test3cx() : await testVoipms();
   audit(user.email, "connection.test", `${provider}:${result.ok ? "ok" : "failed"}`);
-  redirect("/admin/connections");
+  redirect(`/admin/connections?provider=${provider === "3cx" ? "3cx" : "voipms"}`);
 }
 
 export async function orderSavedNumber(formData: FormData) {
@@ -453,12 +455,18 @@ export async function completeGroup(formData: FormData) {
 export async function saveLineVariables(formData: FormData) {
   const user = await staff("settings.connections");
   const { listLineVariables, saveLineVariables: persist } = await import("@/lib/line-variable-store");
-  const rows = listLineVariables().map((item) => ({
-    key: item.key,
-    adminValue: String(formData.get(`value_${item.key}`) || ""),
-    audience: String(formData.get(`audience_${item.key}`) || "admin"),
-  }));
+  const current = listLineVariables();
+  const { variableUpdates } = await import("@/lib/line-variables");
+  const fields: Record<string, string | undefined> = {};
+  for (const item of current) {
+    const value = formData.get(`value_${item.key}`);
+    const audience = formData.get(`audience_${item.key}`);
+    if (typeof value === "string") fields[`value_${item.key}`] = value;
+    if (typeof audience === "string") fields[`audience_${item.key}`] = audience;
+  }
+  const rows = variableUpdates(current, fields);
+  const savedKey = rows[0]?.key || "";
   persist(rows);
-  audit(user.email, "line.variables", "saved");
-  redirect("/admin/variables?saved=1");
+  audit(user.email, "line.variables", savedKey || "saved");
+  redirect(`/admin/variables?key=${encodeURIComponent(savedKey)}&saved=1`);
 }
