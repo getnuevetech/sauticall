@@ -3,7 +3,7 @@ import { requirePermission } from "@/lib/access";
 import { getDb } from "@/lib/db";
 import { mailSettings } from "@/lib/tickets";
 
-export default async function TicketSettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; sent?: string }> }) {
+export default async function TicketSettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; sent?: string; notice?: string }> }) {
   await requirePermission("tickets.manage");
   const params = await searchParams;
   const groups = getDb().prepare("SELECT id, name, description FROM ticket_groups ORDER BY name").all() as { id: number; name: string; description: string }[];
@@ -27,7 +27,7 @@ export default async function TicketSettingsPage({ searchParams }: { searchParam
       </article>
       <form className="contact-form" action={saveOutboundMail} style={{ marginBottom: 18 }}>
         <h3>Outgoing email</h3>
-        <p>Replies to customers, notices to the group, and account confirmation codes are sent from here. Leave the password blank to keep the saved one.</p>
+        <p>Replies to customers, notices to the group, and account confirmation codes are sent from here. Leave the password blank to keep the saved one. For Google Workspace, use smtp.gmail.com and port 587. smtp.google.com does not accept outgoing mail.</p>
         <div className="form-grid">
           <label>SMTP host <input name="smtp_host" defaultValue={mail?.smtp_host || ""} placeholder="smtp.example.com" /></label>
           <label>Port <input name="smtp_port" type="number" defaultValue={mail?.smtp_port || 587} /></label>
@@ -43,7 +43,7 @@ export default async function TicketSettingsPage({ searchParams }: { searchParam
       <form className="contact-form" action={sendTestMail} style={{ marginBottom: 18 }}>
         <h3>Send a test email</h3>
         <p>This uses the saved outgoing mail and waits a few seconds for that server. If it fails, the mail server’s reply is shown here and kept under Failed requests.</p>
-        {params.sent ? <p className="form-feedback">Test email sent.</p> : null}
+        {params.sent ? <p className="form-feedback">{params.notice || "Test email sent."}</p> : null}
         <label>To <input name="to" type="email" required placeholder="you@example.com" /></label>
         <button className="btn btn-secondary" type="submit">Send a test</button>
       </form>
