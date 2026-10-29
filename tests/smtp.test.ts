@@ -4,12 +4,18 @@ import fs from "node:fs";
 import net from "net";
 import test from "node:test";
 import tls from "tls";
-import { MAIL_REPLY_MS, ehloName, mailAttempts, mailboxAddress, retryTransport, sendMail } from "../lib/smtp.ts";
+import { MAIL_REPLY_MS, connectFailure, ehloName, mailAttempts, mailboxAddress, retryTransport, sendMail, submissionHost } from "../lib/smtp.ts";
 
 test("a mail server reply waits eight seconds and a timeout is not tried again", () => {
   assert.equal(MAIL_REPLY_MS, 8000);
   assert.equal(retryTransport("The mail server took too long during Greeting."), false);
-  assert.equal(retryTransport("The mail server took too long to accept the connection."), false);
+  assert.equal(retryTransport("Could not open a connection to smtp.example.com:587."), false);
+  assert.equal(submissionHost("smtp.google.com"), "smtp.gmail.com");
+  assert.equal(submissionHost("aspmx.l.google.com"), "smtp.gmail.com");
+  assert.equal(submissionHost("smtp.gmail.com"), "smtp.gmail.com");
+  assert.equal(submissionHost("smtp.example.com"), "smtp.example.com");
+  assert.match(connectFailure("nuevetech.io", 587), /nuevetech.io:587/);
+  assert.match(connectFailure("nuevetech.io", 25), /Save port 587/);
   assert.equal(retryTransport("Recipient was refused by the mail server: 550 no such user"), false);
   assert.equal(retryTransport("wrong version number"), true);
 });
