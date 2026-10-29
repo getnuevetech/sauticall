@@ -639,6 +639,10 @@ export async function provisionExtension(id: number) {
     const confirmed = await pbxRequest(`Users(${xapiId})?$select=Id,Number`);
     if (confirmed.ok) row.number = rememberLiveNumber(id, row.user_id, row.number, liveNumber(confirmed.body));
     const welcome = await deliverWelcome({ xapiId, firstName: row.first_name, number: row.number, email: row.email });
+    if (/setup email failed|Outgoing email is not set up/.test(welcome.detail)) {
+      const { recordFailure } = await import("./failure-log");
+      recordFailure({ area: "email", userId: row.user_id, subject: row.email, detail: welcome.detail });
+    }
     const message = [linkedExisting || `Extension ${row.number} is on the phone system.`, welcomeBlocked, welcome.detail].filter(Boolean).join(" ");
     database.prepare("UPDATE pbx_extensions SET number = ?, xapi_id = ?, status = 'created', last_message = ?, welcome_note = ? WHERE id = ?").run(row.number, xapiId, message.slice(0, 1200), welcome.note, id);
     await routeDepartment(department);

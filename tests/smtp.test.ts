@@ -116,6 +116,124 @@ test("a confirmation is accepted and keeps the code in the message", async () =>
   }
 });
 
+test("a mail server can answer with the code alone", async () => {
+  const server = net.createServer((socket) => {
+    let buffer = "";
+    let dataMode = false;
+    const reply = (line: string) => socket.write(`${line}\r\n`);
+    reply("220");
+    socket.on("data", (chunk) => {
+      buffer += chunk.toString("latin1");
+      if (dataMode) {
+        if (buffer.includes("\r\n.\r\n")) {
+          dataMode = false;
+          buffer = "";
+          reply("250");
+        }
+        return;
+      }
+      while (buffer.includes("\n")) {
+        const cut = buffer.indexOf("\n");
+        const line = buffer.slice(0, cut).replace(/\r$/, "");
+        buffer = buffer.slice(cut + 1);
+        const upper = line.toUpperCase();
+        if (upper.startsWith("EHLO") || upper.startsWith("HELO")) reply("250-localhost\r\n250");
+        else if (upper.startsWith("MAIL FROM") || upper.startsWith("RCPT TO")) reply("250");
+        else if (upper === "DATA") {
+          reply("354");
+          dataMode = true;
+        } else if (upper === "QUIT") {
+          reply("221");
+          socket.end();
+        } else reply("250");
+      }
+    });
+  });
+  const port = await listen(server);
+  try {
+    const result = await sendMail({
+      host: "127.0.0.1",
+      port,
+      user: "",
+      pass: "",
+      secure: false,
+      from: "hello@sauticall.com",
+      to: ["person@example.com"],
+      subject: "Confirm",
+      text: "code 111222",
+      messageId: "sc-bare@sauticall.com",
+    });
+    assert.equal(result.ok, true, result.message);
+  } finally {
+    server.close();
+  }
+});
+
+test("sign-in uses AUTH PLAIN when that is the mechanism offered", async () => {
+  const captured: string[] = [];
+  const server = net.createServer((socket) => {
+    let buffer = "";
+    let dataMode = false;
+    let auth = 0;
+    const reply = (line: string) => socket.write(`${line}\r\n`);
+    reply("220 localhost ESMTP");
+    socket.on("data", (chunk) => {
+      buffer += chunk.toString("latin1");
+      if (dataMode) {
+        if (buffer.includes("\r\n.\r\n")) {
+          dataMode = false;
+          buffer = "";
+          reply("250 queued");
+        }
+        return;
+      }
+      while (buffer.includes("\n")) {
+        const cut = buffer.indexOf("\n");
+        const line = buffer.slice(0, cut).replace(/\r$/, "");
+        buffer = buffer.slice(cut + 1);
+        captured.push(line);
+        const upper = line.toUpperCase();
+        if (upper.startsWith("EHLO") || upper.startsWith("HELO")) reply("250-localhost\r\n250 AUTH PLAIN");
+        else if (upper === "AUTH PLAIN") {
+          auth = 1;
+          reply("334");
+        } else if (auth === 1) {
+          auth = 0;
+          reply("235 authenticated");
+        } else if (upper.startsWith("MAIL FROM") || upper.startsWith("RCPT TO")) reply("250");
+        else if (upper === "DATA") {
+          reply("354 start");
+          dataMode = true;
+        } else if (upper === "QUIT") {
+          reply("221 bye");
+          socket.end();
+        } else reply("250 ok");
+      }
+    });
+  });
+  const port = await listen(server);
+  try {
+    const result = await sendMail({
+      host: "127.0.0.1",
+      port,
+      user: "mailbox",
+      pass: "secret",
+      secure: false,
+      from: "hello@sauticall.com",
+      to: ["person@example.com"],
+      subject: "Confirm",
+      text: "code 111222",
+      messageId: "sc-plain@sauticall.com",
+    });
+    assert.equal(result.ok, true, result.message);
+    assert.ok(captured.includes("AUTH PLAIN"));
+    assert.ok(captured.includes(Buffer.from("\0mailbox\0secret").toString("base64")));
+    assert.equal(captured.includes("AUTH LOGIN"), false);
+  } finally {
+    server.close();
+  }
+});
+
 test("a refused recipient keeps the mail server reply", async () => {
   const { server } = plainServer(true);
   const port = await listen(server);
