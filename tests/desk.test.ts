@@ -36,6 +36,8 @@ test("seeded access levels only use known permissions", () => {
   const phone = ADMIN_NAV.find((group) => group.title === "Phone operations");
   assert.deepEqual(phone?.links.map((link) => link.href), ["/admin/requests", "/admin/phone", "/admin/lines"]);
   assert.equal(ADMIN_NAV.some((group) => group.links.some((link) => link.href === "/admin/trunks")), false);
+  assert.equal(ADMIN_NAV.find((group) => group.title === "Customers")?.links.some((link) => link.href === "/admin/messages"), false);
+  assert.equal(ADMIN_NAV.find((group) => group.title === "Support desk")?.links[0]?.href, "/admin/messages");
   const grouped = new Set(flagGroups(defaultFlags).flatMap((group) => group.rows.map((row) => row.key)));
   for (const flag of defaultFlags) assert.ok(grouped.has(flag.key), flag.key);
   const home = defaultPages.home as Record<string, unknown>;

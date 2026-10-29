@@ -4,7 +4,9 @@
 .admin-portal h2{font-size:1.2rem;margin:0}
 .admin-portal p{color:#475467}
 .ap-side{width:240px;flex:none;background:#fff;border-right:1px solid #e4e7ec;display:flex;flex-direction:column;padding:18px 12px;position:sticky;top:0;height:100vh}
-.ap-brand{display:grid;padding:4px 10px 16px;color:#101828;font-weight:800;letter-spacing:0}
+.ap-brand{display:flex;align-items:center;gap:10px;padding:4px 10px 16px;color:#101828;font-weight:800;letter-spacing:0}
+.ap-logo{width:32px;height:32px;border-radius:8px;background:#2f5bff;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.ap-brand span{display:block}
 .ap-brand small{font-weight:700;color:#667085;font-size:.72rem}
 .ap-nav{display:grid;gap:14px;overflow:auto}
 .ap-nav>a,.ap-group a{display:block;padding:8px 10px;border-radius:8px;color:#344054;font-weight:650;font-size:.94rem}
@@ -108,6 +110,7 @@
 .ops-facts div{display:flex;justify-content:space-between;gap:12px}
 .ops-facts dt{color:#667085}
 .ops-facts dd{margin:0;text-align:right;font-weight:650}
+.ops-facts small{display:block;color:#667085;font-weight:500}
 .ops-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}
 .ops-stats div{background:#fff;border:1px solid #e4e7ec;border-radius:14px;padding:12px;position:relative}
 .ops-stats span{display:block;color:#667085;font-size:.8rem}
@@ -139,6 +142,12 @@
 .ops-route strong,.ops-route span,.ops-route small{display:block}
 .ops-route small,.ops-card p{color:#667085}
 .ops-card{background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:16px}
+.ops-empty{background:#fff;border:1px solid #e4e7ec;border-radius:16px;min-height:280px;display:grid;align-content:center;justify-items:center;text-align:center;padding:36px 20px;gap:6px}
+.ops-empty h2{margin:0}
+.ops-empty p{margin:0;color:#667085}
+.ops-empty a{color:#155eef;font-weight:700}
+.ops-mark{width:72px;height:72px;border-radius:999px;background:#eef2ff;display:grid;place-items:center;margin-bottom:8px;color:#155eef}
+.ops-badge.info{background:#eef4ff;color:#155eef}
 .ops-banner{background:#eef4ff;border-radius:12px;padding:10px 12px;color:#1849a9}
 .ops-jump{display:grid;gap:4px;font-size:.8rem;font-weight:700;color:#344054}
 .btn-danger{background:#fff;color:#b42318;border:1px solid #fda29b}

@@ -5,7 +5,7 @@ import { readExtensionPlan } from "./extension-plan";
 import { extensionCapacity } from "./plan-features";
 import { paidPlan } from "./pbx";
 
-export { companyMatches, formatDid, lineStatusLabel, maskCredential, personState, setupLabel, setupStatus, trunkStep } from "./phone-ops-view";
+export { companyMatches, formatDid, lineStatusLabel, maskCredential, personState, setupEmailState, setupLabel, setupStatus, trunkStep } from "./phone-ops-view";
 import { formatDid, lineStatusLabel, personState, setupStatus } from "./phone-ops-view";
 
 type Count = { user_id: number; status: string; n: number };
@@ -115,14 +115,15 @@ export type PersonRow = {
   status: string;
   xapiId: number;
   message: string;
+  welcome: string;
 };
 
 export function listPeople(userId: number, query = "", status = "", includeRemoved = false) {
   const needle = query.trim().toLowerCase();
   const rows = getDb().prepare(
-    `SELECT id, user_id, number, former_number, first_name, last_name, email, status, xapi_id, last_message
+    `SELECT id, user_id, number, former_number, first_name, last_name, email, status, xapi_id, last_message, welcome_note
      FROM pbx_extensions WHERE user_id = ? ORDER BY number`,
-  ).all(userId) as { id: number; user_id: number; number: string; former_number: string; first_name: string; last_name: string; email: string; status: string; xapi_id: number; last_message: string }[];
+  ).all(userId) as { id: number; user_id: number; number: string; former_number: string; first_name: string; last_name: string; email: string; status: string; xapi_id: number; last_message: string; welcome_note: string }[];
   return rows.filter((row) => {
     if (!includeRemoved && row.status === "removed") return false;
     if (status && status !== "all" && personState(row.status).tone !== status && row.status !== status) return false;
@@ -139,6 +140,7 @@ export function listPeople(userId: number, query = "", status = "", includeRemov
     status: row.status,
     xapiId: row.xapi_id,
     message: row.last_message,
+    welcome: row.welcome_note,
   }));
 }
 
@@ -192,6 +194,7 @@ export function companyRouting(userId: number) {
     daytime: group ? `${group.kind === "queue" ? "Queue" : "Ring group"} ${group.name} · ${group.number}` : first ? `Extension ${first.number}` : "Not set",
     daytimeNote: group ? (confirmed ? "Saved as the daytime target. Not rechecked on the phone system." : "Saved here. The phone system has not accepted this group.") : "No group answers daytime calls, so the first extension is the saved target.",
     afterHours: "Voicemail",
+    fallback: "First extension",
   };
 }
 

@@ -46,6 +46,18 @@ export function trunkStep(input: { hasAccount: boolean; trunkId: number; status:
   return { provider, trunk: "Not started", routing: "Not verified" };
 }
 
+export function setupEmailState(detail: string, note = "") {
+  const text = `${detail} ${note}`;
+  const failed = /setup email failed|the setup email could not be sent|outgoing email is not set up/i.test(text);
+  const sent = /SautiCall sent the setup email/i.test(detail) || (/a setup email was sent/i.test(note) && !/setup email failed/i.test(detail));
+  if (sent && !failed) return { key: "sent" as const, label: "Sent", tone: "muted" as const, cause: "" };
+  if (failed) {
+    const cause = detail.split(/setup email failed:\s*/i)[1]?.trim() || "";
+    return { key: "failed" as const, label: "Delivery failed", tone: "warn" as const, cause };
+  }
+  return { key: "none" as const, label: "Not sent", tone: "muted" as const, cause: "" };
+}
+
 export function lineStatusLabel(status: string) {
   if (status === "trunk_live") return "Provisioned";
   if (status === "trunk_done") return "Recorded manually";
