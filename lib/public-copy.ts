@@ -148,6 +148,15 @@ export const liveCopy: Record<string, Record<string, unknown>> = {
       secondaryCta: "Talk to us",
       secondaryHref: "/contact",
       heroAlt: "A caller on the phone with the business",
+      servicesTitle: "Five AI services. One SautiCall account.",
+      servicesLead: "An administrator turns each service on, registers the models, and assigns a model to each job. Customers use only the services on their plan.",
+      services: [
+        { title: "Automated notifications", body: "Send an approved voice message. The recipient presses 1 to listen, 2 to decline, or 9 to stop future messages." },
+        { title: "AI receptionist", body: "Answer inbound calls from the company's approved information and transfer or take a message." },
+        { title: "Personal assistant", body: "Screen the owner's calls using the rules that owner saved." },
+        { title: "Outbound assistant", body: "Hold a short, task-limited conversation with someone who already agreed to the call." },
+        { title: "Setup assistant", body: "Turn a plain-language description into a phone-system proposal a person approves." },
+      ],
       points: [
         { title: "Welcome callers", body: "A friendly, consistent greeting for every call." },
         { title: "Answer routine questions", body: "Share approved information about your business." },

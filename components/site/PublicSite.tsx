@@ -425,6 +425,20 @@ export function PublicAi({ page, plans, faqs }: { page: Record<string, unknown>;
           ))}
         </div>
       </section>
+      <section className="section">
+        <div className="wrap">
+          <h2 className="center">{say("servicesTitle")}</h2>
+          <p className="center">{say("servicesLead")}</p>
+          <div className="ai-points">
+            {copyRows(page, "page.ai", "services").map((item) => (
+              <article key={item.title}>
+                <span className="feature-ico blue"><Icon name="spark" size={16} /></span>
+                <div><h3>{item.title}</h3><p>{item.body}</p></div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
       <section className="section ai-unfold">
         <div className="wrap">
           <p className="pub-kicker">{say("flowKicker")}</p>

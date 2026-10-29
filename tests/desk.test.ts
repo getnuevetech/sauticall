@@ -20,7 +20,8 @@ test("seeded access levels only use known permissions", () => {
   assert.equal(permissionForDocument("page.home"), "content.home");
   assert.equal(permissionForDocument("minute_bundles"), "content.bundles");
   assert.equal(permissionForDocument("unknown"), "");
-  assert.deepEqual(ADMIN_NAV.map((group) => group.title), ["Customers", "Phone operations", "Catalog & billing", "Integrations", "Platform controls", "Website & content", "Support desk", "Team & access"]);
+  assert.deepEqual(ADMIN_NAV.map((group) => group.title), ["Customers", "Phone operations", "Catalog & billing", "Integrations", "Platform controls", "AI System", "Website & content", "Support desk", "Team & access"]);
+  assert.equal(ADMIN_NAV.find((group) => group.title === "AI System")?.links[0]?.href, "/admin/ai");
   const website = WEBSITE_LINKS.map((link) => link.href);
   assert.ok(website.includes("/admin/theme"));
   assert.ok(website.includes("/admin/content/page.home"));

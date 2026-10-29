@@ -2,7 +2,7 @@ export const accountNav = [
   { href: "/account", label: "Overview", icon: "home", exact: true },
   { href: "/account/numbers", label: "Phone numbers", icon: "phone", exact: false },
   { href: "/account/phone", label: "Phone system", icon: "server", exact: false },
-  { href: "/account/ai", label: "AI receptionist", icon: "spark", exact: false },
+  { href: "/account/ai", label: "AI services", icon: "spark", exact: false },
   { href: "/account/minutes", label: "Calls & voicemail", icon: "mic", exact: false },
   { href: "/account/billing", label: "Usage & billing", icon: "calendar", exact: false },
   { href: "/account/tickets", label: "Support", icon: "headset", exact: false },
