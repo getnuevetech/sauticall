@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { saveDocument, saveGateway } from "@/app/admin/actions";
+import { SecretField } from "@/components/admin/SecretField";
 import { choicesFor, currencyChoices, providerChoices, withCurrent } from "@/lib/admin-choices";
 import { fieldLabel } from "@/lib/admin-labels";
 
@@ -148,65 +149,84 @@ export function DocumentEditor({ docKey, initial }: { docKey: string; initial: u
   );
 }
 
+const COMPANY: Record<string, string> = { stripe: "Stripe", paypal: "PayPal", square: "Square" };
+
 export function GatewayForm({ gateway }: { gateway?: { id: number; name: string; provider_key: string; public_label: string; enabled: number; priority: number; mode: string; currencies: string; config: { publishable_key: string; client_id: string; application_id: string; location_id: string }; hasSecret: boolean; hasWebhook: boolean } }) {
   const [error, setError] = useState("");
   const [provider, setProvider] = useState(gateway?.provider_key || "stripe");
+  const [enabled, setEnabled] = useState(gateway ? gateway.enabled === 1 : false);
   const savedHere = gateway?.provider_key === provider;
-  const secretHint = savedHere && gateway?.hasSecret ? "Saved. Leave blank to keep it." : "Paste the secret";
+  const company = COMPANY[provider] || "gateway";
   return (
     <form
-      className="contact-form"
+      className="ops-stack"
       action={async (formData) => {
         const result = await saveGateway(formData);
         if (result?.error) setError(result.error);
       }}
     >
       {gateway ? <input type="hidden" name="id" value={gateway.id} /> : null}
-      <label>Name for your team <input name="name" defaultValue={gateway?.name || ""} required /></label>
-      <label>Payment company
-        <select name="provider_key" value={provider} onChange={(event) => setProvider(event.target.value)} required>
-          {withCurrent(providerChoices, provider).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-      </label>
-      <label>Name customers see <input name="public_label" defaultValue={gateway?.public_label || ""} required /></label>
-      <label>Order on the page, 1 shows first <input name="priority" type="number" defaultValue={gateway?.priority ?? 100} /></label>
-      <label>Money
-        <select name="currencies" defaultValue={gateway?.currencies || "USD"}>
-          {withCurrent(currencyChoices, gateway?.currencies || "USD").map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-      </label>
-      <label>Payments
+      <div className="ops-feature">
+        <div>
+          <strong>Gateway usage</strong>
+          <p>Turning this on does not charge a customer. Checkout still needs a confirmed payment.</p>
+        </div>
+        <label className="ops-toggle-row"><span>{enabled ? "Enabled" : "Disabled"}</span><span className="ops-toggle"><input type="checkbox" name="enabled" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /><span /></span></label>
+      </div>
+      <h3>Credentials</h3>
+      {provider === "stripe" ? (
+        <>
+          <label>Publishable key <input name="publishable_key" defaultValue={savedHere ? gateway?.config.publishable_key || "" : ""} placeholder="pk_test_ or pk_live_" autoComplete="off" /></label>
+          <SecretField name="secret_key" label="Secret key" stored={Boolean(savedHere && gateway?.hasSecret)} hint="sk_test_ or sk_live_" />
+          <details className="ops-details">
+            <summary>Webhook configuration</summary>
+            <div className="ops-stack">
+              <p className="ops-muted">Point Stripe at /api/pay/stripe on this site. A blank field keeps the saved signing secret.</p>
+              <SecretField name="webhook_secret" label="Signing secret" stored={Boolean(savedHere && gateway?.hasWebhook)} hint="whsec_, optional" />
+            </div>
+          </details>
+        </>
+      ) : null}
+      {provider === "paypal" ? (
+        <>
+          <label>Client ID <input name="client_id" defaultValue={savedHere ? gateway?.config.client_id || "" : ""} autoComplete="off" /></label>
+          <SecretField name="secret_key" label="Secret" stored={Boolean(savedHere && gateway?.hasSecret)} />
+        </>
+      ) : null}
+      {provider === "square" ? (
+        <>
+          <label>Application ID <input name="application_id" defaultValue={savedHere ? gateway?.config.application_id || "" : ""} autoComplete="off" /></label>
+          <label>Location ID <input name="location_id" defaultValue={savedHere ? gateway?.config.location_id || "" : ""} autoComplete="off" /></label>
+          <SecretField name="secret_key" label="Access token" stored={Boolean(savedHere && gateway?.hasSecret)} />
+        </>
+      ) : null}
+      <label>Operating mode
         <select name="mode" defaultValue={gateway?.mode || "test"}>
           <option value="test">Practice only</option>
           <option value="live">Real payments</option>
         </select>
       </label>
-      {provider === "stripe" ? (
-        <>
-          <p>From Stripe → Developers → API keys. Practice only uses the test keys. Real payments uses the live keys. If you add a webhook, point it at /api/pay/stripe on this site.</p>
-          <label>Publishable key <input name="publishable_key" defaultValue={savedHere ? gateway?.config.publishable_key || "" : ""} placeholder="pk_test_ or pk_live_" autoComplete="off" /></label>
-          <label>Secret key <input name="secret_key" type="password" placeholder={secretHint} autoComplete="new-password" /></label>
-          <label>Webhook signing secret <input name="webhook_secret" type="password" placeholder={savedHere && gateway?.hasWebhook ? "Saved. Leave blank to keep it." : "whsec_ optional"} autoComplete="new-password" /></label>
-        </>
-      ) : null}
-      {provider === "paypal" ? (
-        <>
-          <p>From PayPal → Apps & Credentials. Practice only uses Sandbox. Real payments uses Live.</p>
-          <label>Client ID <input name="client_id" defaultValue={savedHere ? gateway?.config.client_id || "" : ""} autoComplete="off" /></label>
-          <label>Secret <input name="secret_key" type="password" placeholder={secretHint} autoComplete="new-password" /></label>
-        </>
-      ) : null}
-      {provider === "square" ? (
-        <>
-          <p>From the Square developer console. Practice only uses Sandbox. Real payments uses Production. The location ID is in the Square account.</p>
-          <label>Application ID <input name="application_id" defaultValue={savedHere ? gateway?.config.application_id || "" : ""} autoComplete="off" /></label>
-          <label>Location ID <input name="location_id" defaultValue={savedHere ? gateway?.config.location_id || "" : ""} autoComplete="off" /></label>
-          <label>Access token <input name="secret_key" type="password" placeholder={secretHint} autoComplete="new-password" /></label>
-        </>
-      ) : null}
-      <label className="check-option"><input type="checkbox" name="enabled" defaultChecked={gateway ? gateway.enabled === 1 : false} /> Customers can use this</label>
-      <button className="btn btn-primary" type="submit">{gateway ? "Save gateway" : "Add gateway"}</button>
-      {error ? <div className="form-feedback">{error}</div> : null}
+      <p className="ops-muted">{provider === "stripe" ? "Practice uses pk_test_ and sk_test_. Real payments uses pk_live_ and sk_live_ and charges only at checkout." : `Practice uses the ${company} sandbox. Real payments charges only at checkout.`}</p>
+      <details className="ops-details" open={!gateway}>
+        <summary>Names, order, and currency</summary>
+        <div className="ops-stack">
+          <label>Name for your team <input name="name" defaultValue={gateway?.name || ""} required /></label>
+          <label>Payment company
+            <select name="provider_key" value={provider} onChange={(event) => setProvider(event.target.value)} required>
+              {withCurrent(providerChoices, provider).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+          <label>Name customers see <input name="public_label" defaultValue={gateway?.public_label || ""} required /></label>
+          <label>Order on the page, 1 shows first <input name="priority" type="number" defaultValue={gateway?.priority ?? 100} /></label>
+          <label>Currency
+            <select name="currencies" defaultValue={gateway?.currencies || "USD"}>
+              {withCurrent(currencyChoices, gateway?.currencies || "USD").map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+        </div>
+      </details>
+      <button className="btn btn-primary" type="submit">{gateway ? "Save configuration" : "Add gateway"}</button>
+      {error ? <p className="form-feedback">{error}</p> : null}
     </form>
   );
 }

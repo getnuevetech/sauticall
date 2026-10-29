@@ -331,7 +331,7 @@ export function dashboardFor(user: Staff) {
   if (can(user, permissions, "settings.connections")) {
     const connections = database.prepare("SELECT provider, enabled, last_ok, last_message FROM connections").all() as { provider: string; enabled: number; last_ok: number; last_message: string }[];
     cards.push({
-      title: "Phone connections",
+      title: "System connections",
       href: "/admin/connections",
       kind: "donut",
       slices: [
