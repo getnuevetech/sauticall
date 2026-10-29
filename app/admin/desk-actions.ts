@@ -270,7 +270,8 @@ export async function sendTestMail(formData: FormData) {
     back("/admin/tickets/settings", result.message);
   }
   audit(user.email, "ticket.mail", "test");
-  redirect("/admin/tickets/settings?sent=1");
+  const notice = result.message === "Email sent." ? "" : `&notice=${encodeURIComponent(result.message)}`;
+  redirect(`/admin/tickets/settings?sent=1${notice}`);
 }
 
 export async function rotateMailSecret() {

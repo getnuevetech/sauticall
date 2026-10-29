@@ -19,7 +19,7 @@ export type OutboundMail = {
 export const MAIL_REPLY_MS = 8000;
 
 const SESSION_MS = MAIL_REPLY_MS;
-const CONNECT_MS = 4000;
+const CONNECT_MS = 8000;
 
 export function mailTransport(port: number, secure: boolean): "plain" | "tls" {
   if (port === 465) return "tls";
@@ -32,24 +32,36 @@ export function mailAttempts(port: number, secure: boolean): Array<"plain" | "tl
 }
 
 export function retryTransport(message: string) {
-  if (/took too long|was refused by the mail server/i.test(message)) return false;
+  if (/took too long|was refused by the mail server|Could not open a connection/i.test(message)) return false;
   return /wrong version|ECONNREFUSED|EPROTO|ssl|tls|handshake/i.test(message);
 }
 
-async function mailTargets(host: string) {
-  const ip = net.isIP(host);
-  if (ip === 4 || ip === 6) return [{ address: host, family: ip as 4 | 6 }];
+export function submissionHost(host: string) {
+  const name = host.trim().toLowerCase().replace(/\.$/, "");
+  if (name === "smtp.gmail.com") return name;
+  if (name === "smtp.google.com" || name === "smtp.googlemail.com" || /(^|\.)aspmx\.l\.google\.com$/.test(name) || /^alt\d\.aspmx\.l\.google\.com$/.test(name)) return "smtp.gmail.com";
+  return host.trim();
+}
+
+export function connectFailure(host: string, port: number) {
+  const where = `${host}:${port}`;
+  if (port === 25) return `Could not open a connection to ${where}. Port 25 is often blocked from this server. Save port 587.`;
+  return `Could not open a connection to ${where}.`;
+}
+
+async function googleMailHost(from: string) {
+  const domain = mailboxAddress(from).split("@")[1]?.toLowerCase() || "";
+  if (!domain) return "";
   try {
-    const found = await Promise.race([
-      dns.lookup(host, { all: true, family: 4 }),
+    const records = await Promise.race([
+      dns.resolveMx(domain),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("dns")), 2000)),
     ]);
-    const ipv4 = found.find((item) => item.family === 4);
-    if (ipv4) return [{ address: ipv4.address, family: 4 as const }];
+    const google = records.some((item) => /google(?:mail)?\.com\.?$/i.test(item.exchange));
+    return google ? "smtp.gmail.com" : "";
   } catch {
-    return [{ address: host, family: 4 as const }];
+    return "";
   }
-  return [{ address: host, family: 4 as const }];
 }
 
 export function mailboxAddress(value: string) {
@@ -172,16 +184,16 @@ function write(socket: net.Socket, line: string) {
   socket.write(`${line}\r\n`);
 }
 
-function connectMail(address: string, family: 4 | 6, port: number, implicitTls: boolean, hostname: string) {
+function connectMail(hostname: string, port: number, implicitTls: boolean) {
   return new Promise<net.Socket | tls.TLSSocket>((resolve, reject) => {
     let settled = false;
     const servername = net.isIP(hostname) ? undefined : hostname;
     const next = implicitTls
-      ? tls.connect({ host: address, port, servername }, () => {
+      ? tls.connect({ host: hostname, port, servername }, () => {
         settled = true;
         resolve(next);
       })
-      : net.connect({ host: address, port, family }, () => {
+      : net.connect({ host: hostname, port }, () => {
         settled = true;
         resolve(next);
       });
@@ -189,7 +201,7 @@ function connectMail(address: string, family: 4 | 6, port: number, implicitTls: 
     next.once("timeout", () => {
       if (settled) return;
       next.destroy();
-      reject(new Error("The mail server took too long to accept the connection."));
+      reject(new Error(connectFailure(hostname, port)));
     });
     next.once("error", (error) => {
       if (!settled) reject(error instanceof Error ? error : new Error("Email could not be sent."));
@@ -230,12 +242,12 @@ function messageIdentity(messageId: string, from: string) {
   return `${local}@${ehloName(from)}`;
 }
 
-async function deliverMail(message: OutboundMail, target: { address: string; family: 4 | 6 }, implicitTls: boolean) {
+async function deliverMail(message: OutboundMail, implicitTls: boolean) {
   const from = mailboxAddress(message.from);
   const recipients = message.to.map((item) => mailboxAddress(item));
   let socket: net.Socket | tls.TLSSocket | null = null;
   try {
-    socket = await connectMail(target.address, target.family, message.port || 587, implicitTls, message.host);
+    socket = await connectMail(message.host, message.port || 587, implicitTls);
     socket.setTimeout(SESSION_MS, () => {
       socket?.destroy(new Error("The mail server took too long."));
     });
@@ -295,17 +307,30 @@ export async function sendMail(message: OutboundMail) {
   const from = mailboxAddress(message.from);
   const recipients = message.to.map((item) => mailboxAddress(item));
   if (!message.host || !from || recipients.some((item) => !item)) return { ok: false, message: "Outgoing email is not set up." };
-  const port = message.port || 587;
-  const targets = await mailTargets(message.host);
+  const requestedHost = message.host.trim();
+  const requestedPort = message.port || 587;
+  let host = submissionHost(requestedHost);
+  let port = requestedPort;
+  if (host === "smtp.gmail.com" && (port === 25 || port === 2525)) port = 587;
   const modes = mailAttempts(port, message.secure);
   let last = "Email could not be sent.";
-  for (const target of targets) {
-    for (const mode of modes) {
-      const result = await deliverMail({ ...message, port }, target, mode === "tls");
-      if (result.ok) return result;
-      last = result.message;
-      if (modes.length === 1 && retryTransport(last)) modes.push(mode === "tls" ? "plain" : "tls");
-      else return result;
+  for (const mode of modes) {
+    const result = await deliverMail({ ...message, host, port }, mode === "tls");
+    if (result.ok) {
+      if (host === requestedHost && port === requestedPort) return result;
+      return { ok: true, message: `Email sent through ${host}:${port}. Save that host and port instead of ${requestedHost}:${requestedPort}.` };
+    }
+    last = result.message;
+    if (modes.length === 1 && retryTransport(last)) modes.push(mode === "tls" ? "plain" : "tls");
+    else break;
+  }
+  if (host !== "smtp.gmail.com" && /Could not open a connection/i.test(last)) {
+    const google = await googleMailHost(message.from);
+    if (google) {
+      const fallbackPort = port === 465 ? 465 : 587;
+      const again = await deliverMail({ ...message, host: google, port: fallbackPort }, fallbackPort === 465);
+      if (again.ok) return { ok: true, message: `Email sent through ${google}:${fallbackPort}. Save that host and port. ${requestedHost}:${requestedPort} did not accept a connection.` };
+      last = `${again.message} ${requestedHost}:${requestedPort} did not open. This domain receives mail at Google, so the SMTP host should be smtp.gmail.com on port 587.`;
     }
   }
   return { ok: false, message: last };
