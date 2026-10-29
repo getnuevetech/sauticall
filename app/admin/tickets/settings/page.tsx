@@ -1,9 +1,10 @@
+import { TestMailSubmit } from "@/components/admin/TestMailSubmit";
 import { rotateMailSecret, saveOutboundMail, saveRoutingGroup, saveRoutingMembers, saveRoutingTopic, sendTestMail, tryInboundMail } from "../../desk-actions";
 import { requirePermission } from "@/lib/access";
 import { getDb } from "@/lib/db";
 import { mailSettings } from "@/lib/tickets";
 
-export default async function TicketSettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; sent?: string; notice?: string }> }) {
+export default async function TicketSettingsPage({ searchParams }: { searchParams: Promise<{ error?: string; sent?: string; notice?: string; test?: string; to?: string }> }) {
   await requirePermission("tickets.manage");
   const params = await searchParams;
   const groups = getDb().prepare("SELECT id, name, description FROM ticket_groups ORDER BY name").all() as { id: number; name: string; description: string }[];
@@ -40,12 +41,15 @@ export default async function TicketSettingsPage({ searchParams }: { searchParam
         <label className="check-option"><input type="checkbox" name="smtp_secure" defaultChecked={mail?.smtp_secure === 1} /> Use a secure connection from the start (port 465). Port 587 upgrades after hello.</label>
         <button className="btn btn-primary" type="submit">Save outgoing email</button>
       </form>
-      <form className="contact-form" action={sendTestMail} style={{ marginBottom: 18 }}>
+      <form id="test-email" className="contact-form" action={sendTestMail} style={{ marginBottom: 18 }}>
         <h3>Send a test email</h3>
-        <p>This uses the saved outgoing mail and waits a few seconds for that server. If it fails, the mail server’s reply is shown here and kept under Failed requests.</p>
-        {params.sent ? <p className="form-feedback">{params.notice || "Test email sent."}</p> : null}
-        <label>To <input name="to" type="email" required placeholder="you@example.com" /></label>
-        <button className="btn btn-secondary" type="submit">Send a test</button>
+        <p>This uses the saved outgoing mail. The result appears here as soon as the mail server answers. Failures are also kept under Failed requests.</p>
+        {params.sent ? <p className="mail-result ok" role="status">{params.notice || `Sent to ${params.to || "that address"}. The mail server accepted it.`}</p> : null}
+        {params.test ? <p className="mail-result bad" role="alert">{params.test}</p> : null}
+        <div className="mail-test">
+          <label>To <input name="to" type="email" required defaultValue={params.to || ""} placeholder="you@example.com" /></label>
+          <TestMailSubmit />
+        </div>
       </form>
       <form className="contact-form" action={tryInboundMail} style={{ marginBottom: 18 }}>
         <h3>Try an inbound email</h3>

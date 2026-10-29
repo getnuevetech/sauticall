@@ -241,17 +241,27 @@ export async function saveOutboundMail(formData: FormData) {
   redirect("/admin/tickets/settings");
 }
 
+function mailTestResult(to: string, message: string, ok: boolean): never {
+  const query = new URLSearchParams();
+  if (to) query.set("to", to);
+  if (ok) {
+    query.set("sent", "1");
+    if (message && message !== "Email sent.") query.set("notice", message);
+  } else query.set("test", message.slice(0, 500));
+  redirect(`/admin/tickets/settings?${query.toString()}#test-email`);
+}
+
 export async function sendTestMail(formData: FormData) {
   const user = await requirePermission("tickets.manage");
   const to = String(formData.get("to") || "").trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) back("/admin/tickets/settings", "Enter an email address for the test.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) mailTestResult(to, "Enter an email address for the test.", false);
   const { sendMail } = await import("@/lib/smtp");
   const { recordFailure } = await import("@/lib/failure-log");
   const settings = mailSettings();
   if (!settings?.smtp_host || !settings.smtp_from) {
     const detail = "Outgoing email is not set up, so the test was not sent.";
     recordFailure({ area: "email", userId: user.id, subject: to, detail });
-    back("/admin/tickets/settings", detail);
+    mailTestResult(to, detail, false);
   }
   const result = await sendMail({
     host: settings.smtp_host,
@@ -267,11 +277,10 @@ export async function sendTestMail(formData: FormData) {
   });
   if (!result.ok) {
     recordFailure({ area: "email", userId: user.id, subject: to, detail: result.message });
-    back("/admin/tickets/settings", result.message);
+    mailTestResult(to, result.message, false);
   }
   audit(user.email, "ticket.mail", "test");
-  const notice = result.message === "Email sent." ? "" : `&notice=${encodeURIComponent(result.message)}`;
-  redirect(`/admin/tickets/settings?sent=1${notice}`);
+  mailTestResult(to, result.message, true);
 }
 
 export async function rotateMailSecret() {
