@@ -7,7 +7,7 @@ import { didInfoIsAbsent, lookupMayOrder, normalizeRequestedDid, readDids } from
 import { balanceCovers, planFundAmount, readClientBalance, resellerOrderFees } from "../lib/client-funding.ts";
 import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
-import { trunkArrayBody, trunkContentTypes, trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFilledDeltas, trunkGroupBody, trunkPostBody, trunkReadyBody, trunkReplayBody, trunkServiceBody, trunkShape, trunkSmallBody } from "../lib/trunk-body.ts";
+import { trunkArrayBody, trunkContentTypes, trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFailureText, trunkFilledDeltas, trunkGroupBody, trunkLeanBody, trunkPostBody, trunkReadyBody, trunkReplayBody, trunkServiceBody, trunkShape, trunkSmallBody } from "../lib/trunk-body.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
@@ -490,6 +490,9 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
       DidNumbers: { "@odata.context": "https://pbx.example/xapi/v1/$metadata#Collection(String)", delta: null },
       UseSeparateAuthId: true,
       SeparateAuthId: "",
+      Direction: "Nope",
+      IPRestriction: "Any",
+      Messaging: { Enabled: false, MESSAGING_API_KEY: "secret-key", PROVIDER_URL: "https://example.invalid", Provider: "voip", Webhook: "" },
       Gateway: {
         TemplateFilename: "GenericSIPTrunk.pv.xml",
         Port: 5060,
@@ -508,7 +511,11 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
   assert.equal("@odata.context" in ready, false);
   assert.equal("IsOnline" in ready, false);
   assert.equal("Direction" in ready, false);
+  assert.equal(ready.IPRestriction, "Any");
   assert.equal("PublicInfoGroups" in ready, false);
+  assert.equal("MESSAGING_API_KEY" in (ready.Messaging as object), false);
+  assert.equal("PROVIDER_URL" in (ready.Messaging as object), false);
+  assert.equal((ready.Messaging as { Provider: string }).Provider, "voip");
   assert.equal(ready.ExternalNumber, "13345397005");
   assert.equal(ready.SeparateAuthId, "line-account");
   assert.deepEqual(ready.DidNumbers, { "@odata.type": "#Collection(String)", delta: ["13345397005"] });
@@ -531,6 +538,17 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
   assert.deepEqual((arrays.Gateway as { Codecs: string[] }).Codecs, ["PCMU", "PCMA"]);
   assert.equal("@odata.context" in arrays, false);
   assert.equal(JSON.stringify(ready).split("secret").length - 1, 1);
+  const lean = trunkLeanBody(ready);
+  assert.equal("Messaging" in lean, false);
+  assert.equal("IPRestriction" in lean, false);
+  assert.deepEqual(lean.DidNumbers, ready.DidNumbers);
+  assert.equal((lean.Gateway as { Host: string; InboundParams: { delta: { Custom: string }[] } }).Host, "houston1.voip.ms");
+  assert.equal((lean.Gateway as { InboundParams: { delta: { Custom: string }[] } }).InboundParams.delta[0].Custom, "$CalledNum");
+  assert.deepEqual((trunkArrayBody(lean).DidNumbers as string[]), ["13345397005"]);
+  const failure = trunkFailureText(["lean: 3CX returned 400: The input was not valid. delta: The delta field is required."], trunkShape(lean));
+  assert.match(failure, /^lean: 3CX returned 400/);
+  assert.match(failure, /DidNumbers:delta\(1\)/);
+  assert.ok(failure.indexOf("lean:") < failure.indexOf("shape "));
 });
 
 test("a created 3CX user id can come from the Location header", () => {
