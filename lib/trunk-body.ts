@@ -202,7 +202,53 @@ export function trunkReadyBody(input: {
   if (!gateway.Port) gateway.Port = 5060;
   if (!gateway.TemplateFilename && input.template) gateway.TemplateFilename = input.template;
   body.DidNumbers = { "@odata.type": "#Collection(String)", delta: number ? [number] : [] };
+  return dropEmptyDeltas(sanitizeTrunk(body, "")) as Record<string, unknown>;
+}
+
+const TRUNK_ENUMS: Record<string, Set<string>> = {
+  Direction: new Set(["None", "Inbound", "Outbound", "Both"]),
+  IPRestriction: new Set(["Any", "IPV4", "IPV6"]),
+  TransportRestriction: new Set(["Any", "UDP", "TCP", "TLS"]),
+  SRTPMode: new Set(["SRTPDisabled", "SRTPEnabled", "SRTPEnforced"]),
+  IPInRegistrationContact: new Set(["External", "Internal", "Both", "Specified"]),
+  MatchingStrategy: new Set(["MatchAnyFields", "MatchAllFields"]),
+  RequireRegistrationFor: new Set(["Nothing", "IncomingCalls", "OutgoingCalls", "InOutCalls"]),
+  Type: new Set(["Unknown", "Analog", "Provider", "BridgeMaster", "BridgeSlave", "BridgeSlaveOverTunnel", "BRI", "T1", "E1"]),
+};
+
+export function trunkLeanBody(ready: Record<string, unknown>) {
+  const gateway = ready.Gateway && typeof ready.Gateway === "object" && !Array.isArray(ready.Gateway)
+    ? ready.Gateway as Record<string, unknown>
+    : {};
+  const nextGateway: Record<string, unknown> = {
+    "@odata.type": "#Pbx.Gateway",
+    Name: gateway.Name || "VoIP.ms",
+    Host: gateway.Host || "",
+    Port: gateway.Port || 5060,
+    TemplateFilename: gateway.TemplateFilename || "",
+    Lines: gateway.Lines || 1,
+  };
+  for (const key of ["Codecs", "InboundParams", "OutboundParams", "SourceIdentification"]) {
+    if (gateway[key]) nextGateway[key] = gateway[key];
+  }
+  const body: Record<string, unknown> = {
+    "@odata.type": "#Pbx.Trunk",
+    Name: ready.Name,
+    ExternalNumber: ready.ExternalNumber,
+    AuthID: ready.AuthID,
+    AuthPassword: ready.AuthPassword,
+    EnableInboundCalls: true,
+    EnableOutboundCalls: true,
+    DidNumbers: ready.DidNumbers,
+    Gateway: nextGateway,
+  };
+  if (typeof ready.Number === "string" && ready.Number.trim()) body.Number = ready.Number;
   return dropEmptyDeltas(body) as Record<string, unknown>;
+}
+
+export function trunkFailureText(failures: string[], shape: string) {
+  const errors = failures.filter(Boolean).map((item) => item.replace(/\s+/g, " ").trim().slice(0, 220)).join(" | ");
+  return `${errors} | shape ${shape.slice(0, 180)}`;
 }
 
 export function trunkArrayBody(body: Record<string, unknown>) {
@@ -297,6 +343,7 @@ export function omittedTrunkFields(body: Record<string, unknown>) {
 function sanitizeTrunk(value: unknown, key: string): unknown {
   if (typeof value === "string") {
     if (value.trim() === "" && BLANK_KEYS.has(key)) return undefined;
+    if (TRUNK_ENUMS[key] && !TRUNK_ENUMS[key].has(value)) return undefined;
     if (key === "ExternalNumber" || key === "OutboundCallerID" || key === "E164CountryCode") {
       const next = value.replace(/\D/g, "");
       return next || undefined;

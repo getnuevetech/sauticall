@@ -8,7 +8,7 @@ import { enforceUser } from "./minutes";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "./outbound-rule";
 import { extensionRange, paidPlan, readExtensionPlan } from "./pbx";
 import { firstListedId, idFromPbx } from "./pbx-id";
-import { mentionsDelta, trunkArrayBody, trunkGroupBody, trunkReadyBody, trunkShape, trunkSmallBody, wrapCollections } from "./trunk-body";
+import { mentionsDelta, trunkArrayBody, trunkFailureText, trunkGroupBody, trunkLeanBody, trunkReadyBody, trunkShape, wrapCollections } from "./trunk-body";
 import { acceptedDepartmentName } from "./pbx-user";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
@@ -32,8 +32,8 @@ function extensionFor(userId: number) {
 }
 
 function hideSecret(message: string, secret: string) {
-  if (!secret) return message.slice(0, 1200);
-  return message.split(secret).join("[hidden]").slice(0, 1200);
+  if (!secret) return message.slice(0, 2000);
+  return message.split(secret).join("[hidden]").slice(0, 2000);
 }
 
 function openTask(lineId: number, userId: number, did: string, note: string) {
@@ -42,8 +42,8 @@ function openTask(lineId: number, userId: number, did: string, note: string) {
     `INSERT INTO trunk_tasks (line_id, user_id, did, department_name, extension_number, sip_user, sip_host, status, note, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)
      ON CONFLICT(line_id) DO UPDATE SET status = 'open', note = excluded.note, sip_user = excluded.sip_user, sip_host = excluded.sip_host, department_name = excluded.department_name, extension_number = excluded.extension_number`,
-  ).run(lineId, userId, did, departmentName(userId), extensionFor(userId), sub?.account || "", sub?.sip_host || "", note.slice(0, 1200), new Date().toISOString());
-  getDb().prepare("UPDATE phone_lines SET status = 'trunk_waiting', last_message = ? WHERE id = ?").run(note.slice(0, 900), lineId);
+  ).run(lineId, userId, did, departmentName(userId), extensionFor(userId), sub?.account || "", sub?.sip_host || "", note.slice(0, 2000), new Date().toISOString());
+  getDb().prepare("UPDATE phone_lines SET status = 'trunk_waiting', last_message = ? WHERE id = ?").run(note.slice(0, 2000), lineId);
 }
 
 function extensionSpan(userId: number) {
@@ -129,10 +129,11 @@ export async function attachTrunk(lineId: number) {
     template,
   };
   const ready = trunkReadyBody(trunkInput);
+  const lean = trunkLeanBody(ready);
   const attempts = [
-    ["ready", ready, "application/json"],
-    ["arrays", trunkArrayBody(ready), "application/json"],
-    ["small", trunkSmallBody(trunkInput), "application/json"],
+    ["lean", lean, "application/json"],
+    ["arrays", trunkArrayBody(lean), "application/json"],
+    ["template", ready, "application/json"],
   ] as const;
   let created = trunkId
     ? { ok: true, status: 200, message: "An existing trunk was found and was not created again.", body: null, location: "" }
@@ -146,10 +147,10 @@ export async function attachTrunk(lineId: number) {
     trunkId = idFromPbx(created.body, created.location);
     failures.push(`${label}: ${created.message}`);
   }
-  if (!created.ok || !trunkId) failures.unshift(`shape ${trunkShape(ready).slice(0, 700)}`);
   if (!seeded.ok) failures.push(`template request: ${seeded.message || "3CX did not return a trunk template."}`);
   if (!created.ok || !trunkId) {
-    const note = `VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"} is ready. 3CX did not add the trunk. Add it on the server for ${department?.name || departmentName(line.user_id)}, route inbound ${line.did} to extension ${extension}, and add an outbound rule limited to extensions ${span.from}–${span.to}. ${hideSecret(failures.filter(Boolean).join(" | "), sub.password)}`;
+    const detail = trunkFailureText(failures, trunkShape(lean));
+    const note = `VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"} is ready. 3CX did not add the trunk. Add it on the server for ${department?.name || departmentName(line.user_id)}, route inbound ${line.did} to extension ${extension}, and add an outbound rule limited to extensions ${span.from}–${span.to}. ${hideSecret(detail, sub.password)}`;
     openTask(line.id, line.user_id, line.did, note);
     recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
     return { ok: false, message: "3CX did not add the trunk. A task was saved for the team." };
