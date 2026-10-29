@@ -86,6 +86,22 @@ export function knownPermissions(keys: string[]) {
   return keys.filter((key) => PERMISSION_KEYS.has(key));
 }
 
+export function accessSummary(permissions: string[], kind: "staff" | "super_admin" = "staff") {
+  if (kind === "super_admin") {
+    return [{ ok: true, title: "Full admin access", detail: "This account bypasses access levels and can open every admin area." }];
+  }
+  const has = (key: string) => permissions.includes(key);
+  const tickets = has("tickets.view_all")
+    ? { ok: true, title: "Every ticket", detail: "Can see every ticket in Support desk." }
+    : has("tickets.view") || has("tickets.reply")
+      ? { ok: true, title: "Group-scoped tickets", detail: "Can see tickets for assigned groups. Access every ticket is off." }
+      : { ok: false, title: "No ticket access", detail: "Cannot open Support desk tickets." };
+  const team = has("access.manage")
+    ? { ok: true, title: "Team administration", detail: "Can manage admin users and access levels." }
+    : { ok: false, title: "No team administration", detail: "Cannot manage admin users or access levels." };
+  return [tickets, team];
+}
+
 const DOCUMENT_PERMISSIONS: Record<string, string> = {
   "page.home": "content.home",
   "page.solutions": "content.solutions",
@@ -161,8 +177,8 @@ export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
     title: "Support desk",
     links: [
       { label: "Contact messages", href: "/admin/messages", permission: "inbox.messages" },
-      { label: "Tickets", href: "/admin/tickets", permission: ["tickets.view", "tickets.view_all", "tickets.reply"] },
-      { label: "Queues and email", href: "/admin/tickets/settings", permission: "tickets.manage" },
+      { label: "Ticket desk", href: "/admin/tickets", permission: ["tickets.view", "tickets.view_all", "tickets.reply"] },
+      { label: "Queues & email", href: "/admin/tickets/settings", permission: "tickets.manage" },
     ],
   },
   {

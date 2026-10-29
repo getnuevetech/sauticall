@@ -11,7 +11,8 @@ import { parseMailPayload } from "@/lib/mail-parse";
 import { createStaffTicket, findCustomersByEmail, mailSettings, receiveMail, rotateInboundSecret, saveGroupMembers, saveMail, saveTicketGroup, saveTopic, setTicketFields, staffReply } from "@/lib/tickets";
 
 function back(path: string, error: string): never {
-  redirect(`${path}?error=${encodeURIComponent(error)}`);
+  const join = path.includes("?") ? "&" : "?";
+  redirect(`${path}${join}error=${encodeURIComponent(error)}`);
 }
 
 export async function saveAccessRole(formData: FormData) {
@@ -20,7 +21,7 @@ export async function saveAccessRole(formData: FormData) {
   const name = String(formData.get("name") || "").trim().slice(0, 80);
   const description = String(formData.get("description") || "").trim().slice(0, 300);
   const permissions = knownPermissions(formData.getAll("permissions").map((item) => String(item)));
-  const path = id ? `/admin/access/${id}` : "/admin/access/new";
+  const path = id ? `/admin/access?level=${id}` : "/admin/access?level=new";
   if (!name) back(path, "Give the access level a name.");
   if (id) {
     const existing = getDb().prepare("SELECT id FROM access_roles WHERE id = ?").get(id);
@@ -31,12 +32,12 @@ export async function saveAccessRole(formData: FormData) {
       back(path, "An access level with that name already exists.");
     }
     audit(user.email, "access.role", String(id));
-    redirect(`${path}?saved=Saved.`);
+    redirect(`/admin/access?level=${id}&saved=1`);
   }
   try {
     const info = getDb().prepare("INSERT INTO access_roles (name, description, permissions_json) VALUES (?, ?, ?)").run(name, description, JSON.stringify(permissions));
     audit(user.email, "access.role", name);
-    redirect(`/admin/access/${Number(info.lastInsertRowid)}?saved=Access%20level%20created.`);
+    redirect(`/admin/access?level=${Number(info.lastInsertRowid)}&saved=1`);
   } catch {
     back(path, "An access level with that name already exists.");
   }
@@ -46,13 +47,14 @@ export async function deleteAccessRole(formData: FormData) {
   const user = await requirePermission("access.manage");
   const id = Number(formData.get("id") || 0);
   const assigned = getDb().prepare("SELECT COUNT(*) AS n FROM users WHERE access_role_id = ?").get(id) as { n: number };
-  if (assigned.n) back(`/admin/access/${id}`, "Move admin users off this access level before deleting it.");
+  if (assigned.n) back(`/admin/access?level=${id}`, "Move admin users off this access level before deleting it.");
   getDb().prepare("DELETE FROM access_roles WHERE id = ?").run(id);
   audit(user.email, "access.role.delete", String(id));
   redirect("/admin/access");
 }
 
 function accountPath(id: number, kind: "team" | "customers") {
+  if (kind === "team") return id ? `/admin/team?user=${id}` : "/admin/team?user=new";
   return id ? `/admin/${kind}/${id}` : `/admin/${kind}`;
 }
 
@@ -91,17 +93,17 @@ export async function saveAdminUser(formData: FormData) {
     }
     if (disabled) database.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
     audit(actor.email, "access.staff", email);
-    redirect(`${path}?saved=Saved.`);
+    redirect(`/admin/team?user=${id}&saved=1`);
   }
-  if (password.length < 10) back("/admin/team", "Use a password of at least 10 characters.");
+  if (password.length < 10) back("/admin/team?user=new", "Use a password of at least 10 characters.");
   try {
     const info = database
       .prepare("INSERT INTO users (email, name, password_hash, role, mfa_secret, access_role_id, disabled, created_at) VALUES (?, ?, ?, ?, NULL, ?, 0, ?)")
       .run(email, name, hashPassword(password), accountRole, accountRole === "super_admin" ? 0 : accessRoleId, new Date().toISOString());
     audit(actor.email, "access.staff", email);
-    redirect(`/admin/team/${Number(info.lastInsertRowid)}?saved=Admin%20account%20created.`);
+    redirect(`/admin/team?user=${Number(info.lastInsertRowid)}&saved=1`);
   } catch {
-    back("/admin/team", "That email is already in use.");
+    back("/admin/team?user=new", "That email is already in use.");
   }
 }
 
@@ -205,26 +207,26 @@ export async function updateTicket(formData: FormData) {
 export async function saveRoutingGroup(formData: FormData) {
   const user = await requirePermission("tickets.manage");
   const result = saveTicketGroup(Number(formData.get("id") || 0), String(formData.get("name") || ""), String(formData.get("description") || ""));
-  if (!result.ok) back("/admin/tickets/settings", result.message || "That group could not be saved.");
+  if (!result.ok) back("/admin/tickets/settings?tab=groups", result.message || "That group could not be saved.");
   audit(user.email, "ticket.group", String(result.id));
-  redirect("/admin/tickets/settings");
+  redirect(`/admin/tickets/settings?tab=groups&group=${result.id}&saved=1`);
 }
 
 export async function saveRoutingMembers(formData: FormData) {
   const user = await requirePermission("tickets.manage");
   const groupId = Number(formData.get("group_id") || 0);
   const result = saveGroupMembers(groupId, formData.getAll("user_id").map((item) => Number(item)));
-  if (!result.ok) back("/admin/tickets/settings", result.message);
+  if (!result.ok) back("/admin/tickets/settings?tab=groups", result.message);
   audit(user.email, "ticket.members", String(groupId));
-  redirect("/admin/tickets/settings");
+  redirect(`/admin/tickets/settings?tab=groups&group=${groupId}&saved=1`);
 }
 
 export async function saveRoutingTopic(formData: FormData) {
   const user = await requirePermission("tickets.manage");
   const result = saveTopic(Number(formData.get("id") || 0), String(formData.get("name") || ""), Number(formData.get("group_id") || 0), formData.get("enabled") === "on");
-  if (!result.ok) back("/admin/tickets/settings", result.message || "That topic could not be saved.");
+  if (!result.ok) back("/admin/tickets/settings?tab=topics", result.message || "That topic could not be saved.");
   audit(user.email, "ticket.topic", String(formData.get("name") || ""));
-  redirect("/admin/tickets/settings");
+  redirect(`/admin/tickets/settings?tab=topics&topic=${result.id || ""}&saved=1`);
 }
 
 export async function saveOutboundMail(formData: FormData) {
@@ -238,7 +240,7 @@ export async function saveOutboundMail(formData: FormData) {
     secure: formData.get("smtp_secure") === "on",
   });
   audit(user.email, "ticket.mail", result.ok ? "saved" : "failed");
-  redirect("/admin/tickets/settings");
+  redirect("/admin/tickets/settings?tab=outgoing&saved=1");
 }
 
 function mailTestResult(to: string, message: string, ok: boolean): never {
@@ -248,6 +250,7 @@ function mailTestResult(to: string, message: string, ok: boolean): never {
     query.set("sent", "1");
     if (message && message !== "Email sent.") query.set("notice", message);
   } else query.set("test", message.slice(0, 500));
+  query.set("tab", "outgoing");
   redirect(`/admin/tickets/settings?${query.toString()}#test-email`);
 }
 
@@ -285,9 +288,9 @@ export async function sendTestMail(formData: FormData) {
 
 export async function rotateMailSecret() {
   const user = await requirePermission("tickets.manage");
-  rotateInboundSecret();
+  const secret = rotateInboundSecret();
   audit(user.email, "ticket.mail", "secret");
-  redirect("/admin/tickets/settings");
+  return { secret };
 }
 
 export async function tryInboundMail(formData: FormData) {
@@ -298,10 +301,10 @@ export async function tryInboundMail(formData: FormData) {
     text: String(formData.get("text") || ""),
     messageId: `sample-${Date.now()}@sauticall.test`,
   });
-  if (!parsed) back("/admin/tickets/settings", "Use an email address in From.");
+  if (!parsed) back("/admin/tickets/settings?tab=diagnostics", "Use an email address in From.");
   const result = await receiveMail(parsed);
   audit(user.email, "ticket.inbound.sample", String(result.id || ""));
-  if (!result.ok) back("/admin/tickets/settings", result.message);
+  if (!result.ok) back("/admin/tickets/settings?tab=diagnostics", result.message);
   redirect(`/admin/tickets/${result.id}`);
 }
 

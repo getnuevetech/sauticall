@@ -6,7 +6,7 @@ export function TestMailSubmit() {
   const { pending } = useFormStatus();
   return (
     <button className="btn btn-secondary" type="submit" disabled={pending}>
-      {pending ? "Sending…" : "Send a test"}
+      {pending ? "Sending…" : "Send test email"}
     </button>
   );
 }
