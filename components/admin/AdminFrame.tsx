@@ -59,7 +59,7 @@ export function AdminFrame({
       <aside className="ap-side">
         <Link className="ap-brand" href="/admin" onClick={() => setOpen(false)}>
           <span className="ap-logo" aria-hidden="true">
-            <svg viewBox="0 0 32 32" width="32" height="32"><path d="M6 18c2.2-6 3.2-6 4.4 0s2.2 6 4.4 0 2.2-6 4.4 0 2.2 6 4.4 0" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" /></svg>
+            <svg viewBox="0 0 32 32" width="32" height="32"><path d="M6 18c2.2-6 3.2-6 4.4 0s2.2 6 4.4 0 2.2-6 4.4 0 2.2 6 4.4 0" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg>
           </span>
           <span>SautiCall<small>Admin portal</small></span>
         </Link>

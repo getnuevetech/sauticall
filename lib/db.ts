@@ -4,6 +4,7 @@ import Database from "better-sqlite3";
 import { hashPassword } from "./auth";
 import { upgradeContent } from "./content-upgrade";
 import { seedDesk } from "./desk-seed";
+import { AI_SWITCHES } from "./ai-system";
 import { defaultExtensionPlan } from "./extension-numbers";
 import { dataDir } from "./paths";
 import {
@@ -425,7 +426,29 @@ function migrate(database: Database.Database) {
       value TEXT NOT NULL DEFAULT '',
       PRIMARY KEY (user_id, key)
     );
+    CREATE TABLE IF NOT EXISTS ai_switches (
+      code TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS ai_engines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      model_name TEXT NOT NULL DEFAULT '',
+      endpoint TEXT NOT NULL DEFAULT '',
+      secret_ref TEXT NOT NULL DEFAULT '',
+      enabled INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS ai_assignments (
+      function_code TEXT PRIMARY KEY,
+      engine_id INTEGER NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT ''
+    );
   `);
+  const insertSwitch = database.prepare("INSERT INTO ai_switches (code, enabled, updated_at) VALUES (?, 0, '') ON CONFLICT(code) DO NOTHING");
+  for (const item of AI_SWITCHES) insertSwitch.run(item.code);
   const extensionCols = new Set((database.prepare("PRAGMA table_info(pbx_extensions)").all() as { name: string }[]).map((column) => column.name));
   if (!extensionCols.has("former_number")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN former_number TEXT NOT NULL DEFAULT ''");
   if (!extensionCols.has("removed_at")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN removed_at TEXT NOT NULL DEFAULT ''");

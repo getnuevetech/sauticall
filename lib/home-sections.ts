@@ -99,6 +99,7 @@ const SOLUTIONS_FLAT: Template[] = [
 const AI_SHOWN: Template[] = [
   { id: "hero", label: "Hero", keys: ["kicker", "title", "titleAccent", "lead", "primaryCta", "primaryHref", "secondaryCta", "secondaryHref", "heroAlt"] },
   { id: "points", label: "What it does", keys: ["points"], columns: { points: pair() } },
+  { id: "services", label: "AI services", keys: ["servicesTitle", "servicesLead", "services"], columns: { services: pair() } },
   { id: "flow", label: "Call flow", keys: ["flowKicker", "flowTitle"] },
   { id: "built", label: "Built around the business", keys: ["builtTitle", "built"], columns: { built: pair() } },
   { id: "choose", label: "Controls", keys: ["chooseTitle", "chooseBody", "choosePoints"] },

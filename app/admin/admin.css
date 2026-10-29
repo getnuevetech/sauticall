@@ -3,15 +3,15 @@
 .admin-portal h1{font-size:1.9rem;line-height:1.2;margin:0 0 6px}
 .admin-portal h2{font-size:1.2rem;margin:0}
 .admin-portal p{color:#475467}
-.ap-side{width:240px;flex:none;background:#fff;border-right:1px solid #e4e7ec;display:flex;flex-direction:column;padding:18px 12px;position:sticky;top:0;height:100vh}
-.ap-brand{display:flex;align-items:center;gap:10px;padding:4px 10px 16px;color:#101828;font-weight:800;letter-spacing:0}
-.ap-logo{width:32px;height:32px;border-radius:8px;background:#2f5bff;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.ap-side{width:240px;flex:none;background:#155eef;border-right:1px solid #1248c7;display:flex;flex-direction:column;padding:18px 12px;position:sticky;top:0;height:100vh}
+.ap-brand{display:flex;align-items:center;gap:10px;padding:4px 10px 16px;color:#fff;font-weight:800;letter-spacing:0}
+.ap-logo{width:32px;height:32px;border-radius:8px;background:#fff;color:#155eef;display:inline-flex;align-items:center;justify-content:center;flex:none}
 .ap-brand span{display:block}
-.ap-brand small{display:block;font-weight:700;color:#667085;font-size:.72rem}
+.ap-brand small{display:block;font-weight:700;color:#d6e4ff;font-size:.72rem}
 .ap-nav{display:grid;gap:14px;overflow:auto}
-.ap-nav>a,.ap-group a{display:block;padding:8px 10px;border-radius:8px;color:#344054;font-weight:650;font-size:.94rem}
-.ap-nav a[data-current="true"],.ap-nav a:hover{background:#eef4ff;color:#155eef}
-.ap-group h2{margin:0 8px 4px;font-size:.72rem;font-weight:700;color:#98a2b3;letter-spacing:0}
+.ap-nav>a,.ap-group a{display:block;padding:8px 10px;border-radius:8px;color:#fff;font-weight:650;font-size:.94rem}
+.ap-nav a[data-current="true"],.ap-nav a:hover{background:rgba(255,255,255,.16);color:#fff}
+.ap-group h2{margin:0 8px 4px;font-size:.72rem;font-weight:700;color:#d6e4ff;letter-spacing:0}
 .ap-main{flex:1;min-width:0}
 .ap-top{height:64px;display:flex;align-items:center;gap:12px;padding:0 24px;position:sticky;top:0;background:#fff;border-bottom:1px solid #e4e7ec;z-index:3}
 .ap-menu,.ap-scrim{display:none}
@@ -162,6 +162,7 @@
 .ops-route strong,.ops-route span,.ops-route small{display:block}
 .ops-route small,.ops-card p{color:#667085}
 .ops-card{background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:16px}
+.ops > div > .ops-card + .ops-card{margin-top:14px}
 .ops-pick{display:grid;gap:10px}
 .ops-provider{display:grid;grid-template-columns:auto 1fr auto auto;gap:4px 12px;align-items:center;text-decoration:none;color:inherit}
 .ops-provider strong,.ops-provider small{display:block}

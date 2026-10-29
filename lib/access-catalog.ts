@@ -23,6 +23,7 @@ export const PERMISSIONS: Permission[] = [
   { key: "settings.payments", group: "Integrations", label: "Payments", description: "Add and check Stripe, PayPal, and Square." },
   { key: "settings.connections", group: "Integrations", label: "System connections", description: "Save VoIP.ms and 3CX credentials." },
   { key: "settings.flags", group: "Integrations", label: "Live switches", description: "Turn live ordering, provisioning, and other customer features on or off." },
+  { key: "settings.ai", group: "AI", label: "AI system", description: "Turn AI services on or off, register engines, and assign each engine to a job." },
   { key: "settings.phone", group: "Phone", label: "Extensions and groups", description: "Choose where extension numbers start. How many a customer can add is set on each plan." },
   { key: "settings.lines", group: "Phone", label: "Lines and trunks", description: "See purchased numbers, trunks, emergency addresses, and call-minute limits." },
   { key: "users.customers", group: "Customers", label: "Customer accounts", description: "See customer accounts, reset passwords, and turn sign-in on or off." },
@@ -165,6 +166,12 @@ export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
     title: "Platform controls",
     links: [
       { label: "Platform controls", href: "/admin/flags", permission: "settings.flags" },
+    ],
+  },
+  {
+    title: "AI System",
+    links: [
+      { label: "AI System", href: "/admin/ai", permission: "settings.ai" },
     ],
   },
   {
