@@ -7,7 +7,7 @@ import { didInfoIsAbsent, lookupMayOrder, normalizeRequestedDid, readDids } from
 import { balanceCovers, planFundAmount, readClientBalance, resellerOrderFees } from "../lib/client-funding.ts";
 import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
-import { trunkContentTypes, trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFilledDeltas, trunkGroupBody, trunkPostBody, trunkReplayBody, trunkServiceBody, trunkShape, trunkSmallBody } from "../lib/trunk-body.ts";
+import { trunkArrayBody, trunkContentTypes, trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFilledDeltas, trunkGroupBody, trunkPostBody, trunkReadyBody, trunkReplayBody, trunkServiceBody, trunkShape, trunkSmallBody } from "../lib/trunk-body.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
@@ -479,6 +479,58 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
   assert.match(trunkContentTypes[0][1], /IEEE754Compatible=false/);
   assert.equal(trunkContentTypes[1][1].includes("charset"), false);
   assert.equal(outboundScopeVerdict({ DNRanges: { delta: [{ From: "510", To: "510" }] } }, "510", "510"), "scoped");
+  const ready = trunkReadyBody({
+    seed: {
+      "@odata.context": "https://pbx.example/xapi/v1/$metadata#Trunks/$entity",
+      Id: 0,
+      Number: "10000",
+      IsOnline: false,
+      Direction: "",
+      PublicInfoGroups: [],
+      DidNumbers: { "@odata.context": "https://pbx.example/xapi/v1/$metadata#Collection(String)", delta: null },
+      UseSeparateAuthId: true,
+      SeparateAuthId: "",
+      Gateway: {
+        TemplateFilename: "GenericSIPTrunk.pv.xml",
+        Port: 5060,
+        InboundParams: { "@odata.type": "#Collection(Pbx.GatewayParameterBinding)", delta: null, value: [{ ParamId: 9, Custom: "$CalledNum" }] },
+        OutboundParams: [],
+        Codecs: ["PCMU", "PCMA"],
+      },
+    },
+    name: "SautiCall 3345397005",
+    number: "1 (334) 539-7005",
+    authId: "line-account",
+    password: "secret",
+    host: "houston1.voip.ms",
+    template: "GenericSIPTrunk.pv.xml",
+  });
+  assert.equal("@odata.context" in ready, false);
+  assert.equal("IsOnline" in ready, false);
+  assert.equal("Direction" in ready, false);
+  assert.equal("PublicInfoGroups" in ready, false);
+  assert.equal(ready.ExternalNumber, "13345397005");
+  assert.equal(ready.SeparateAuthId, "line-account");
+  assert.deepEqual(ready.DidNumbers, { "@odata.type": "#Collection(String)", delta: ["13345397005"] });
+  const readyGateway = ready.Gateway as {
+    Host: string;
+    InboundParams: { "@odata.type": string; delta: { "@odata.type": string; Custom: string }[] };
+    Codecs: { "@odata.type": string; delta: string[] };
+  };
+  assert.equal(readyGateway.Host, "houston1.voip.ms");
+  assert.equal("OutboundParams" in readyGateway, false);
+  assert.equal(readyGateway.InboundParams["@odata.type"], "#Collection(Pbx.GatewayParameterBinding)");
+  assert.equal(readyGateway.InboundParams.delta[0]["@odata.type"], "#Pbx.GatewayParameterBinding");
+  assert.equal(readyGateway.InboundParams.delta[0].Custom, "$CalledNum");
+  assert.deepEqual(readyGateway.Codecs, { "@odata.type": "#Collection(String)", delta: ["PCMU", "PCMA"] });
+  assert.match(trunkShape(ready), /DidNumbers:delta\(1\)/);
+  assert.match(trunkShape(ready), /InboundParams:delta\(1\)/);
+  assert.equal(trunkShape(ready).includes("secret"), false);
+  const arrays = trunkArrayBody(ready);
+  assert.deepEqual(arrays.DidNumbers, ["13345397005"]);
+  assert.deepEqual((arrays.Gateway as { Codecs: string[] }).Codecs, ["PCMU", "PCMA"]);
+  assert.equal("@odata.context" in arrays, false);
+  assert.equal(JSON.stringify(ready).split("secret").length - 1, 1);
 });
 
 test("a created 3CX user id can come from the Location header", () => {
