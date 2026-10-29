@@ -112,10 +112,18 @@ export async function provisionCallGroup(id: number) {
         Members: members.map((member) => ({ Number: member.number })),
       };
   let number = group.number;
-  let created = group.xapi_id
-    ? await pbxRequest(`${path}(${group.xapi_id})`, { method: "PATCH", body: { ...bodyFor(number), Id: group.xapi_id } })
+  let existingId = group.xapi_id;
+  if (!existingId && /^\d+$/.test(number)) {
+    const found = await pbxRequest(`${path}?$filter=${encodeURIComponent(`Number eq '${number}'`)}&$select=Id,Number,Name&$top=5`);
+    const listed = found.ok && found.body && typeof found.body === "object" && Array.isArray((found.body as { value?: unknown }).value)
+      ? (found.body as { value: { Id?: unknown; Name?: unknown }[] }).value.find((item) => String(item.Name || "") === group.name)
+      : undefined;
+    existingId = listed ? Number(listed.Id) || 0 : 0;
+  }
+  let created = existingId
+    ? await pbxRequest(`${path}(${existingId})`, { method: "PATCH", body: { ...bodyFor(number), Id: existingId } })
     : await pbxRequest(path, { method: "POST", body: bodyFor(number) });
-  if (!group.xapi_id && !created.ok && numberAlreadyUsed(created.code || "", `${created.detail || ""} ${created.message || ""}`, created.status)) {
+  if (!existingId && !created.ok && numberAlreadyUsed(created.code || "", `${created.detail || ""} ${created.message || ""}`, created.status)) {
     const plan = readExtensionPlan();
     const used = [
       ...(database.prepare("SELECT number FROM pbx_extensions WHERE status != 'removed'").all() as { number: string }[]),
@@ -133,7 +141,7 @@ export async function provisionCallGroup(id: number) {
       if (created.ok || !numberAlreadyUsed(created.code || "", `${created.detail || ""} ${created.message || ""}`, created.status)) break;
     }
   }
-  const xapiId = group.xapi_id || idFromPbx(created.body, created.location);
+  const xapiId = existingId || idFromPbx(created.body, created.location);
   if (!created.ok || !xapiId) {
     const message = created.message || "3CX did not create this group.";
     database.prepare("UPDATE call_groups SET status = 'failed', last_message = ? WHERE id = ?").run(message.slice(0, 1200), id);

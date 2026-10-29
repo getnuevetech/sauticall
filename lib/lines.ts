@@ -7,7 +7,7 @@ import { finishAfterResponse } from "./later";
 import { enforceUser } from "./minutes";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "./outbound-rule";
 import { extensionRange, paidPlan, readExtensionPlan } from "./pbx";
-import { idFromPbx } from "./pbx-id";
+import { firstListedId, idFromPbx } from "./pbx-id";
 import { mentionsDelta, trunkContentTypes, trunkGroupBody, trunkReplayBody, trunkServiceBody, trunkShape, trunkSmallBody, wrapCollections } from "./trunk-body";
 import { acceptedDepartmentName } from "./pbx-user";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
@@ -67,6 +67,9 @@ async function addOutboundRule(input: { name: string; trunkId: number; callerId:
     });
   }
   const id = idFromPbx(created.body, created.location);
+  if (!created.ok && /duplicate|already exists/i.test(created.message || "")) {
+    return { ok: true, message: "An outbound rule for this number is already on the phone system. Its extension limit was not changed." };
+  }
   if (!created.ok || !id) return { ok: false, message: created.message || "3CX did not add the outbound rule." };
   const read = await pbxRequest(`OutboundRules(${id})`);
   if (outboundScopeVerdict(read.ok ? read.body : created.body, input.from, input.to) !== "scoped") {
@@ -104,7 +107,17 @@ export async function attachTrunk(lineId: number) {
   const number = publicNumber(line.did);
   const department = getDb().prepare("SELECT xapi_id, name FROM pbx_departments WHERE user_id = ?").get(line.user_id) as { xapi_id: number; name: string } | undefined;
   const extension = extensionFor(line.user_id);
-  const seeded = await pbxRequest(`Trunks/Pbx.InitTrunk(template=${encodeURIComponent(`'${template}'`)})`);
+  const trunkName = `SautiCall ${line.did}`.replace(/'/g, "");
+  let trunkId = line.trunk_id || 0;
+  if (trunkId) {
+    const saved = await pbxRequest(`Trunks(${trunkId})?$select=Id`);
+    if (!saved.ok) trunkId = 0;
+  }
+  if (!trunkId) {
+    const found = await pbxRequest(`Trunks?$filter=${encodeURIComponent(`Name eq '${trunkName}'`)}&$select=Id&$top=1`);
+    trunkId = found.ok ? firstListedId(found.body) : 0;
+  }
+  const seeded = trunkId ? { ok: true, message: "", body: null } : await pbxRequest(`Trunks/Pbx.InitTrunk(template=${encodeURIComponent(`'${template}'`)})`);
   const seed = seeded.ok ? trunkSeed(seeded.body) : null;
   const trunkInput = {
     seed,
@@ -122,9 +135,11 @@ export async function attachTrunk(lineId: number) {
     ["replay", replay, trunkContentTypes[0][1]],
     ["small", trunkSmallBody(trunkInput), "application/json"],
   ] as const;
-  let created = await pbxRequest("Trunks", { method: "POST", body: attempts[0][1], contentType: attempts[0][2] });
-  let trunkId = idFromPbx(created.body, created.location);
-  const failures = [`${attempts[0][0]}: ${created.message}`];
+  let created = trunkId
+    ? { ok: true, status: 200, message: "An existing trunk was found and was not created again.", body: null, location: "" }
+    : await pbxRequest("Trunks", { method: "POST", body: attempts[0][1], contentType: attempts[0][2] });
+  if (!trunkId) trunkId = idFromPbx(created.body, created.location);
+  const failures = trunkId && created.status === 200 && created.body == null ? [] : [`${attempts[0][0]}: ${created.message}`];
   for (const [label, body, contentType] of attempts.slice(1)) {
     if (created.ok && trunkId) break;
     if (created.status !== 400 && created.status !== 415) break;
@@ -152,7 +167,7 @@ export async function attachTrunk(lineId: number) {
     }
     if (!grouped.ok) departmentNote = ` The trunk is not limited to ${department.name} yet.`;
   }
-  const rule = await pbxRequest("InboundRules", {
+  let rule = await pbxRequest("InboundRules", {
     method: "POST",
     body: {
       Name: `SautiCall ${line.did}`,
@@ -162,6 +177,9 @@ export async function attachTrunk(lineId: number) {
       OutOfOfficeHoursDestination: { To: "VoiceMail", Number: extension, External: "" },
     },
   });
+  if (!rule.ok && /duplicate|already exists/i.test(`${rule.message} ${rule.code || ""}`)) {
+    rule = { ...rule, ok: true, message: "The inbound route is already on the phone system." };
+  }
   if (!rule.ok) {
     const note = `The trunk was created on 3CX. Inbound calls to extension ${extension} and outbound calls for extensions ${span.from}–${span.to} still need to be finished on the server. VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"}. ${hideSecret(rule.message, sub.password)}`;
     getDb().prepare("UPDATE phone_lines SET trunk_id = ?, status = 'trunk_waiting', last_message = ? WHERE id = ?").run(trunkId, note.slice(0, 400), line.id);
@@ -186,7 +204,7 @@ export async function attachTrunk(lineId: number) {
 export function markTrunkDone(lineId: number, note: string) {
   const line = getDb().prepare("SELECT id FROM phone_lines WHERE id = ?").get(lineId) as { id: number } | undefined;
   if (!line) return { ok: false, message: "That line was not found." };
-  const text = note.trim().slice(0, 400) || "Added on the 3CX server.";
+  const text = note.trim().slice(0, 400) || "Recorded by an administrator. Registration was not verified.";
   getDb().prepare("UPDATE phone_lines SET status = 'trunk_done', last_message = ? WHERE id = ?").run(text, lineId);
   getDb().prepare("UPDATE trunk_tasks SET status = 'done', note = ? WHERE line_id = ?").run(text, lineId);
   return { ok: true, message: text };

@@ -79,7 +79,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
         <section className="desk-card">
           <h3>3CX trunk</h3>
           <p>{openTrunks ? `${openTrunks} trunk${openTrunks === 1 ? "" : "s"} still need to be finished on 3CX.` : "No 3CX trunk is waiting for this customer."}</p>
-          <p><Link href={`/admin/trunks?user=${person.id}`}>Open this customer's trunk tasks</Link></p>
+          <p><Link href={`/admin/lines?company=${person.id}`}>Open this customer's lines and trunks</Link></p>
         </section>
         <section className="desk-card">
           <h3>Numbers</h3>
