@@ -49,6 +49,32 @@ export async function savePlans(json: string) {
   redirect("/admin/content/plans?saved=1");
 }
 
+export async function saveBundles(json: string) {
+  const user = await staff("content.bundles");
+  let incoming: unknown[];
+  try {
+    const value = JSON.parse(json) as unknown;
+    if (!Array.isArray(value)) throw new Error("bad");
+    incoming = value;
+  } catch {
+    redirect("/admin/content/minute_bundles?error=Those%20bundles%20could%20not%20be%20read.");
+  }
+  const row = getDb().prepare("SELECT json FROM documents WHERE key = 'minute_bundles'").get() as { json: string } | undefined;
+  const { applyBundleEdits, normalizeBundle } = await import("@/lib/catalog");
+  let stored: unknown[] = [];
+  try {
+    const parsed = JSON.parse(row?.json || "[]") as unknown;
+    stored = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    stored = [];
+  }
+  const result = applyBundleEdits(stored.map((item) => normalizeBundle(item as { name?: string; minutes?: number; price?: number; enabled?: boolean })), incoming as { name?: string; minutes?: number; price?: number; enabled?: boolean }[]);
+  if (!result.ok) redirect(`/admin/content/minute_bundles?error=${encodeURIComponent(result.message)}`);
+  writeDoc("minute_bundles", result.bundles, user.email);
+  revalidatePath("/", "layout");
+  redirect("/admin/content/minute_bundles?saved=1");
+}
+
 export async function saveGateway(formData: FormData) {
   const user = await staff("settings.payments");
   const id = Number(formData.get("id") || 0);
