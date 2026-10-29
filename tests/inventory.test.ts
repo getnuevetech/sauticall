@@ -7,7 +7,7 @@ import { didInfoIsAbsent, lookupMayOrder, normalizeRequestedDid, readDids } from
 import { balanceCovers, planFundAmount, readClientBalance, resellerOrderFees } from "../lib/client-funding.ts";
 import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
-import { trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFilledDeltas, trunkGroupBody, trunkPostBody, trunkReplayBody, trunkShape } from "../lib/trunk-body.ts";
+import { trunkContentTypes, trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFilledDeltas, trunkGroupBody, trunkPostBody, trunkReplayBody, trunkShape } from "../lib/trunk-body.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
@@ -444,6 +444,11 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
   assert.equal("PROVIDER_URL" in (cleaned.Messaging as object), false);
   assert.equal((cleaned.Messaging as { Provider: string }).Provider, "voip");
   assert.equal((cleaned.Gateway as { InboundParams: { delta: { Custom: string }[] } }).InboundParams.delta[0].Custom, "");
+  assert.equal(trunkContentTypes[0][1].includes("charset"), false);
+  assert.match(trunkContentTypes[0][1], /odata\.metadata=minimal/);
+  assert.match(trunkContentTypes[0][1], /odata\.streaming=true/);
+  assert.match(trunkContentTypes[0][1], /IEEE754Compatible=false/);
+  assert.equal(trunkContentTypes[1][1].includes("charset"), false);
   assert.equal(outboundScopeVerdict({ DNRanges: { delta: [{ From: "510", To: "510" }] } }, "510", "510"), "scoped");
 });
 
