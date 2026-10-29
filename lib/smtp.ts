@@ -33,7 +33,9 @@ export function mailAttempts(port: number, secure: boolean): Array<"plain" | "tl
 }
 
 function retryTransport(message: string) {
-  return !/was refused by the mail server/i.test(message);
+  if (/was refused by the mail server/i.test(message)) return false;
+  if (/took too long during /i.test(message) && !/during Greeting/i.test(message)) return false;
+  return true;
 }
 
 async function mailTargets(host: string) {
@@ -74,6 +76,18 @@ function commandCode(reply: string) {
   return Number(last.slice(0, 3)) || 0;
 }
 
+function replyFinished(line: string) {
+  return /^\d{3}( |$)/.test(line);
+}
+
+function authMechanisms(hello: string) {
+  const names = hello.split(/\r?\n/).flatMap((line) => {
+    const match = line.match(/^250(?:-| )AUTH\s+(.+)$/i);
+    return match ? match[1].toUpperCase().split(/\s+/) : [];
+  });
+  return new Set(names.filter(Boolean));
+}
+
 function createReader(socket: net.Socket) {
   let pending = Buffer.alloc(0);
   const waiters: { resolve: (value: string) => void; reject: (error: Error) => void }[] = [];
@@ -83,7 +97,7 @@ function createReader(socket: net.Socket) {
       const newline = pending.indexOf(0x0a, start);
       if (newline < 0) return "";
       const line = pending.subarray(start, newline).toString("latin1").replace(/\r$/, "");
-      if (/^\d{3} /.test(line)) {
+      if (replyFinished(line)) {
         const reply = pending.subarray(0, newline).toString("latin1").replace(/\r$/, "");
         pending = pending.subarray(newline + 1);
         return reply;
@@ -140,7 +154,14 @@ function createReader(socket: net.Socket) {
 }
 
 async function expectOk(read: () => Promise<string>, label: string) {
-  const reply = await read();
+  let reply = "";
+  try {
+    reply = await read();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message === "The mail server took too long.") throw new Error(`The mail server took too long during ${label}.`);
+    throw error;
+  }
   const code = commandCode(reply);
   if (code < 200 || code >= 400) {
     const detail = reply.replace(/[\r\n]+/g, " ").trim().slice(0, 300);
@@ -170,7 +191,7 @@ function connectMail(address: string, family: 4 | 6, port: number, implicitTls: 
     next.once("timeout", () => {
       if (settled) return;
       next.destroy();
-      reject(new Error("The mail server took too long."));
+      reject(new Error("The mail server took too long to accept the connection."));
     });
     next.once("error", (error) => {
       if (!settled) reject(error instanceof Error ? error : new Error("Email could not be sent."));
@@ -179,11 +200,28 @@ function connectMail(address: string, family: 4 | 6, port: number, implicitTls: 
 }
 
 async function upgrade(socket: net.Socket, host: string) {
+  socket.pause();
   return new Promise<tls.TLSSocket>((resolve, reject) => {
     const servername = net.isIP(host) ? undefined : host;
     const secure = tls.connect({ socket, servername }, () => resolve(secure));
     secure.once("error", reject);
   });
+}
+
+async function authLogin(socket: net.Socket, read: () => Promise<string>, user: string, pass: string) {
+  write(socket, "AUTH LOGIN");
+  await expectOk(read, "Sign-in");
+  write(socket, Buffer.from(user).toString("base64"));
+  await expectOk(read, "Sign-in");
+  write(socket, Buffer.from(pass).toString("base64"));
+  await expectOk(read, "Sign-in");
+}
+
+async function authPlain(socket: net.Socket, read: () => Promise<string>, user: string, pass: string) {
+  write(socket, "AUTH PLAIN");
+  await expectOk(read, "Sign-in");
+  write(socket, Buffer.from(`\0${user}\0${pass}`).toString("base64"));
+  await expectOk(read, "Sign-in");
 }
 
 function messageIdentity(messageId: string, from: string) {
@@ -207,12 +245,13 @@ async function deliverMail(message: OutboundMail, target: { address: string; fam
     await expectOk(reader.read, "Greeting");
     const helloName = ehloName(from);
     write(socket, `EHLO ${helloName}`);
-    const hello = await expectOk(reader.read, "Hello");
+    let hello = await expectOk(reader.read, "Hello");
     if (!implicitTls && /STARTTLS/i.test(hello)) {
       write(socket, "STARTTLS");
       await expectOk(reader.read, "Secure connection");
       const leftover = reader.unread();
       reader.stop();
+      socket.pause();
       if (leftover.length) socket.unshift(leftover);
       socket = await upgrade(socket, message.host);
       socket.setTimeout(SESSION_MS, () => {
@@ -220,15 +259,12 @@ async function deliverMail(message: OutboundMail, target: { address: string; fam
       });
       reader = createReader(socket);
       write(socket, `EHLO ${helloName}`);
-      await expectOk(reader.read, "Hello");
+      hello = await expectOk(reader.read, "Hello");
     }
     if (message.user) {
-      write(socket, "AUTH LOGIN");
-      await expectOk(reader.read, "Sign-in");
-      write(socket, Buffer.from(message.user).toString("base64"));
-      await expectOk(reader.read, "Sign-in");
-      write(socket, Buffer.from(message.pass).toString("base64"));
-      await expectOk(reader.read, "Sign-in");
+      const offered = authMechanisms(hello);
+      if (offered.has("PLAIN")) await authPlain(socket, reader.read, message.user, message.pass);
+      else await authLogin(socket, reader.read, message.user, message.pass);
     }
     write(socket, `MAIL FROM:<${from}>`);
     await expectOk(reader.read, "Sender");
