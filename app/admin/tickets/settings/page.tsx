@@ -42,7 +42,7 @@ export default async function TicketSettingsPage({ searchParams }: { searchParam
       </form>
       <form className="contact-form" action={sendTestMail} style={{ marginBottom: 18 }}>
         <h3>Send a test email</h3>
-        <p>This uses the saved outgoing mail. If it fails, the mail server’s reply is shown here and kept under Failed requests.</p>
+        <p>This uses the saved outgoing mail and waits a few seconds for that server. If it fails, the mail server’s reply is shown here and kept under Failed requests.</p>
         {params.sent ? <p className="form-feedback">Test email sent.</p> : null}
         <label>To <input name="to" type="email" required placeholder="you@example.com" /></label>
         <button className="btn btn-secondary" type="submit">Send a test</button>
