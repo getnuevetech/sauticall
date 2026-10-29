@@ -17,6 +17,7 @@ export default async function AccountHome() {
   const numbers = lines.filter((line) => line.status !== "not_on_carrier").length;
   const people = (getDb().prepare("SELECT COUNT(*) AS n FROM pbx_extensions WHERE user_id = ? AND status != 'removed'").get(user.id) as { n: number }).n;
   const groups = (getDb().prepare("SELECT COUNT(*) AS n FROM call_groups WHERE user_id = ?").get(user.id) as { n: number }).n;
+  const aiReady = Boolean(getDb().prepare("SELECT user_id FROM ai_receptionists WHERE user_id = ? AND status = 'created' AND enabled = 1").get(user.id));
   const calls = (getDb().prepare("SELECT COUNT(*) AS n FROM cdr_events WHERE user_id = ?").get(user.id) as { n: number }).n;
   const hours = Boolean(getDb().prepare("SELECT user_id FROM pbx_departments WHERE user_id = ?").get(user.id));
   const seats = plan?.seats && plan.seats > 0 ? plan.seats : 0;
@@ -26,7 +27,7 @@ export default async function AccountHome() {
     { title: "Create your account", detail: "Your workspace is ready.", href: "/account", done: true, action: "" },
     { title: "Connect a business number", detail: "Get a new number or transfer your existing one.", href: "/account/numbers", done: numbers > 0, action: "Get started" },
     { title: "Set your business hours", detail: "Choose when you want to take calls.", href: "/account/phone", done: hours, action: "Set hours" },
-    { title: "Choose how calls are answered", detail: "Set up your AI receptionist or call routing.", href: aiIncluded ? "/account/ai" : "/account/phone", done: groups > 0, action: "Set up" },
+    { title: "Choose how calls are answered", detail: "Set up your AI receptionist or call routing.", href: aiIncluded ? "/account/ai" : "/account/phone", done: groups > 0 || aiReady, action: "Set up" },
     { title: "Make a test call", detail: "See everything working before you go live.", href: "/account/phone", done: calls > 0, action: "Start" },
   ];
   const doneCount = steps.filter((step) => step.done).length;

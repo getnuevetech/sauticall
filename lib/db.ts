@@ -425,6 +425,18 @@ function migrate(database: Database.Database) {
       value TEXT NOT NULL DEFAULT '',
       PRIMARY KEY (user_id, key)
     );
+    CREATE TABLE IF NOT EXISTS ai_receptionists (
+      user_id INTEGER PRIMARY KEY,
+      xapi_id INTEGER NOT NULL DEFAULT 0,
+      number TEXT NOT NULL DEFAULT '',
+      email TEXT NOT NULL DEFAULT '',
+      access_password TEXT NOT NULL DEFAULT '',
+      extra TEXT NOT NULL DEFAULT '',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'waiting',
+      last_message TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT ''
+    );
   `);
   const extensionCols = new Set((database.prepare("PRAGMA table_info(pbx_extensions)").all() as { name: string }[]).map((column) => column.name));
   if (!extensionCols.has("former_number")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN former_number TEXT NOT NULL DEFAULT ''");
