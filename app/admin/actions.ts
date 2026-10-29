@@ -319,6 +319,18 @@ export async function provisionPerson(formData: FormData) {
   redirect(`/admin/phone/${company}?tab=extensions&ext=${id}`);
 }
 
+export async function resendPersonEmail(formData: FormData) {
+  const user = await staff("settings.phone");
+  const id = Number(formData.get("id"));
+  const row = getDb().prepare("SELECT user_id, status, xapi_id FROM pbx_extensions WHERE id = ?").get(id) as { user_id: number; status: string; xapi_id: number } | undefined;
+  const company = ownedCompany(formData, row?.user_id || 0, "/admin/phone");
+  const { resendSetupEmail } = await import("@/lib/pbx");
+  const result = await resendSetupEmail(id);
+  audit(user.email, "pbx.setup-email", `${id}:${result.ok ? "ok" : "failed"}`);
+  if (!result.ok) redirect(`/admin/phone/${company}?tab=extensions&ext=${id}&error=${encodeURIComponent(result.message)}`);
+  redirect(`/admin/phone/${company}?tab=extensions&ext=${id}&saved=email`);
+}
+
 export async function syncMinutes() {
   const user = await staff("settings.lines");
   const { syncAllMinutes } = await import("@/lib/minutes");
