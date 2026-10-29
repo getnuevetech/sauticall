@@ -56,7 +56,8 @@ export function saveLineVariables(rows: { key: string; adminValue: string; audie
   for (const row of rows) {
     const variable = current.get(row.key);
     if (!variable) continue;
-    const value = variable.kind === "days" ? (row.adminValue.trim() ? String(billingDays(row.adminValue)) : "") : row.adminValue.trim().slice(0, 200);
+    const raw = row.adminValue.trim();
+    const value = variable.kind === "days" ? (raw === "" ? "" : raw === "0" ? "0" : String(billingDays(raw))) : raw.slice(0, 200);
     update.run(value, audienceOf(row.audience), row.key);
   }
 }

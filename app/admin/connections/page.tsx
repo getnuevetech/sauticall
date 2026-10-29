@@ -1,110 +1,139 @@
+import Link from "next/link";
 import { saveConnection, testConnection } from "../actions";
 import { PlaceSelects } from "@/components/account/PlaceSelects";
+import { SecretField } from "@/components/admin/SecretField";
 import { requirePermission } from "@/lib/access";
 import { dialTimeChoices, withCurrent } from "@/lib/admin-choices";
 import { getConnection } from "@/lib/carriers";
 import { lineCodecs } from "@/lib/line-codecs";
 
-function VoipForm() {
-  const connection = getConnection("voipms");
+function whenChecked(iso: string) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return "";
+  const zone = "America/Chicago";
+  const day = new Intl.DateTimeFormat("en-US", { timeZone: zone, month: "short", day: "numeric" }).format(date);
+  const today = new Intl.DateTimeFormat("en-US", { timeZone: zone, month: "short", day: "numeric" }).format(new Date());
+  const time = new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "numeric", minute: "2-digit" }).format(date);
+  return `${day === today ? "Today" : day}, ${time}`;
+}
+
+function ProviderCard({ id, name, detail, current }: { id: string; name: string; detail: string; current: boolean }) {
+  const connection = getConnection(id);
+  return (
+    <Link className="ops-card ops-provider" href={`/admin/connections?provider=${id}`} data-current={current ? "true" : undefined}>
+      <span className="ops-mark-sm">{name.slice(0, 1)}</span>
+      <span>
+        <strong>{name}</strong>
+        <small>{detail}</small>
+      </span>
+      <span className={`ops-badge ${connection.enabled ? "ok" : "muted"}`}>{connection.enabled ? "Enabled" : "Disabled"}</span>
+      <span className="ops-check">
+        <span className={`ops-badge ${connection.checked_at ? (connection.last_ok ? "ok" : "warn") : "muted"}`}>{connection.checked_at ? (connection.last_ok ? "Passed" : "Failed") : "Not checked"}</span>
+        {whenChecked(connection.checked_at) ? <small>{whenChecked(connection.checked_at)}</small> : null}
+      </span>
+    </Link>
+  );
+}
+
+export default async function ConnectionsPage({ searchParams }: { searchParams: Promise<{ provider?: string; saved?: string }> }) {
+  await requirePermission("settings.connections");
+  const query = await searchParams;
+  const provider = query.provider === "3cx" ? "3cx" : "voipms";
+  const connection = getConnection(provider);
   const config = connection.public;
   return (
-    <form className="contact-form" action={saveConnection}>
-      <h3>VoIP.ms</h3>
-      <p>This login is the VoIP.ms reseller account. The check reads the balance and the reseller client list. Signing up creates a client and a line account under this login, so the customer can buy a number without waiting. Ordering also needs the routing and POP from this account.</p>
-      <input type="hidden" name="provider" value="voipms" />
-      <label className="check-option"><input type="checkbox" name="enabled" defaultChecked={connection.enabled === 1} /> Use this connection</label>
-      <label>API username <input name="api_username" defaultValue={config.api_username || ""} placeholder="you@company.com" autoComplete="off" /></label>
-      <label>API password <input name="secret" type="password" placeholder={connection.hasSecret ? "Saved. Leave blank to keep it." : "API password"} autoComplete="new-password" /></label>
-      <label>API address <input name="endpoint" defaultValue={config.endpoint || "https://voip.ms/api/v1/rest.php"} /></label>
-      <label>Routing <input name="routing" defaultValue={config.routing || ""} placeholder="account:100001" /></label>
-      <label>POP <input name="pop" defaultValue={config.pop || ""} placeholder="Point of presence" /></label>
-      <label>Text message number <input name="sms_did" defaultValue={config.sms_did || ""} placeholder="7135550100" inputMode="numeric" autoComplete="off" /></label>
-      <p>Account confirmation codes are texted from this number. It must already be on the VoIP.ms account, and that account must be allowed to send business texts. Leave it blank until both are ready.</p>
-      <details className="admin-more">
-        <summary>More settings</summary>
-        <div className="admin-more-body">
-          <label>How long the phone rings
-            <select name="dialtime" defaultValue={config.dialtime || "60"}>
-              {withCurrent(dialTimeChoices, config.dialtime || "60").map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-          <label>How the number is billed
-            <select name="billing_type" defaultValue={config.billing_type || "1"}><option value="1">Per minute</option><option value="2">One monthly price</option></select>
-          </label>
-          <label className="check-option"><input type="checkbox" name="cnam" defaultChecked={config.cnam === "1"} /> Show the caller’s name</label>
-          <label>Line account phone type code <input name="device_type" defaultValue={config.device_type || "1"} /></label>
-          <label>International route
-            <select name="international_route" defaultValue={config.international_route || "1"}><option value="1">Value</option><option value="2">Premium</option></select>
-          </label>
-          <label className="check-option"><input type="checkbox" name="lock_international" defaultChecked={config.lock_international === "1"} /> Block international calls on new line accounts</label>
-          <label>Hold music <input name="music_on_hold" defaultValue={config.music_on_hold || "default"} /></label>
-          <label>Codecs <input name="allowed_codecs" defaultValue={lineCodecs(config.allowed_codecs || "")} placeholder="ulaw;g729;gsm" /></label>
-          <p>VoIP.ms accepts ulaw, g729, gsm, or all. Other names, including alaw, are left out before a line account is created.</p>
-          <label>DTMF <input name="dtmf_mode" defaultValue={config.dtmf_mode || "auto"} /></label>
-          <label>NAT <input name="nat" defaultValue={config.nat || "yes"} /></label>
-          <p>Customers never see this client. Use an email domain you control so VoIP.ms does not mail the customer. The address and phone below are sent when the customer signs up. If they are blank, signup still creates the client with a placeholder, and the customer's emergency address replaces the street address when they save it.</p>
-          <label>Client email domain <input name="client_email_domain" defaultValue={config.client_email_domain || ""} placeholder="clients.example.com" autoComplete="off" /></label>
-          <label>Client phone <input name="client_phone" defaultValue={config.client_phone || ""} placeholder="7135550100" autoComplete="off" /></label>
-          <label>Street <input name="client_address" defaultValue={config.client_address || ""} autoComplete="off" /></label>
-          <div className="form-grid">
-            <PlaceSelects
-              countryLabel="Country"
-              regionLabel="State or province"
-              cityLabel="City"
-              countryName="client_country"
-              regionName="client_state"
-              cityName="client_city"
-              countryDefault={config.client_country || "US"}
-              regionDefault={config.client_state || ""}
-              cityDefault={config.client_city || ""}
-            />
-            <label>ZIP or postal code <input name="client_zip" defaultValue={config.client_zip || ""} autoComplete="off" /></label>
+    <div className="ops">
+      <div>
+        <p className="ops-kicker">Integrations / System connections</p>
+        <h1>System connections</h1>
+        <p>Configure provider access and inspect connection checks.</p>
+        {query.saved ? <p className="form-feedback">Connection saved. No number was bought and no trunk was added.</p> : null}
+        <div className="ops-pick">
+          <ProviderCard id="voipms" name="VoIP.ms" detail="SIP trunking, DIDs and SMS" current={provider === "voipms"} />
+          <ProviderCard id="3cx" name="3CX" detail="PBX and trunk management" current={provider === "3cx"} />
+        </div>
+        <p className="ops-muted"><Link href="/admin/flags">Operational permissions are in Platform controls.</Link> Searching, buying, porting, and funding stay on those switches.</p>
+      </div>
+      <aside className="ops-drawer">
+        <div className="ops-drawer-head">
+          <div>
+            <h2>{provider === "3cx" ? "3CX" : "VoIP.ms"}</h2>
+            <p className="ops-kicker">{provider === "3cx" ? "PBX and trunk management" : "SIP trunking, DIDs and SMS"}</p>
           </div>
         </div>
-      </details>
-      <p>{connection.checked_at ? `${connection.last_ok ? "Last check worked" : "Last check failed"}: ${connection.last_message}` : "Not checked yet."}</p>
-      <button className="btn btn-primary" type="submit">Save VoIP.ms</button>
-    </form>
-  );
-}
-
-function PbxForm() {
-  const connection = getConnection("3cx");
-  const config = connection.public;
-  return (
-    <form className="contact-form" action={saveConnection}>
-      <h3>3CX</h3>
-      <p>The check asks 3CX for an access token, reads the system version, and confirms the token is a System Owner. In 3CX Admin, open Integrations, then API. Add a client, turn on 3CX Configuration API Access, choose the DEFAULT department, and set the Role menu to System Owner. Owner is the department role, and 3CX answers 403 for it. Then open Advanced, Console Restrictions, and choose Allow access from everywhere. Paste the client ID and the API key here.</p>
-      <input type="hidden" name="provider" value="3cx" />
-      <label className="check-option"><input type="checkbox" name="enabled" defaultChecked={connection.enabled === 1} /> Use this connection</label>
-      <label>API base URL <input name="base_url" defaultValue={config.base_url || ""} placeholder="https://pbx.example.com" autoComplete="off" /></label>
-      <label>API client ID <input name="client_id" defaultValue={config.client_id || ""} autoComplete="off" /></label>
-      <label>API client secret <input name="secret" type="password" placeholder={connection.hasSecret ? "Saved. Leave blank to keep it." : "Client secret"} autoComplete="new-password" /></label>
-      <label>Trunk template <input name="trunk_template" defaultValue={config.trunk_template || "GenericSIPTrunk.pv.xml"} /></label>
-      <p>{connection.checked_at ? `${connection.last_ok ? "Last check worked" : "Last check failed"}: ${connection.last_message}` : "Not checked yet."}</p>
-      <button className="btn btn-primary" type="submit">Save 3CX</button>
-    </form>
-  );
-}
-
-export default async function ConnectionsPage() {
-  await requirePermission("settings.connections");
-  return (
-    <>
-      <span className="eyebrow">Integrations</span>
-      <h2>Phone connections</h2>
-      <p>Enter the VoIP.ms and 3CX API credentials. They stay on this server and are not shown again after you save. Searching, buying, sending transfers, reading call minutes, and adding trunks are separate switches under What customers can do. Buying a number spends money, so leave that switch off until you mean to.</p>
-      <div className="features-grid">
-        <div>
-          <VoipForm />
-          <form action={testConnection} style={{ marginTop: 12 }}><input type="hidden" name="provider" value="voipms" /><button className="btn btn-secondary" type="submit">Check VoIP.ms</button></form>
-        </div>
-        <div>
-          <PbxForm />
-          <form action={testConnection} style={{ marginTop: 12 }}><input type="hidden" name="provider" value="3cx" /><button className="btn btn-secondary" type="submit">Check 3CX</button></form>
-        </div>
-      </div>
-    </>
+        {connection.checked_at && !connection.last_ok ? <p className="ops-alert">The last authorization check failed. Review the saved access and the response below.</p> : null}
+        <form action={saveConnection} className="ops-stack">
+          <input type="hidden" name="provider" value={provider} />
+          <div className="ops-feature">
+            <div><strong>Enabled</strong><p>Saving this switch does not run a connection check.</p></div>
+            <label className="ops-toggle-row"><span>{connection.enabled ? "On" : "Off"}</span><span className="ops-toggle"><input type="checkbox" name="enabled" defaultChecked={connection.enabled === 1} /><span /></span></label>
+          </div>
+          <dl className="ops-facts">
+            <div><dt>Last saved check</dt><dd>{connection.checked_at ? (connection.last_ok ? "Passed" : "Failed") : "Not checked"}{whenChecked(connection.checked_at) ? <small>{whenChecked(connection.checked_at)}</small> : null}</dd></div>
+          </dl>
+          {provider === "voipms" ? (
+            <>
+              <label>API username <input name="api_username" defaultValue={config.api_username || ""} autoComplete="off" /></label>
+              <SecretField name="secret" label="API password" stored={connection.hasSecret} />
+              <label>API address <input name="endpoint" defaultValue={config.endpoint || "https://voip.ms/api/v1/rest.php"} /></label>
+              <label>Routing <input name="routing" defaultValue={config.routing || ""} placeholder="account:100001" /></label>
+              <label>POP <input name="pop" defaultValue={config.pop || ""} /></label>
+              <label>Text message number <input name="sms_did" defaultValue={config.sms_did || ""} inputMode="numeric" autoComplete="off" /></label>
+              <details className="ops-details">
+                <summary>Advanced settings</summary>
+                <div className="ops-stack">
+                  <label>How long the phone rings
+                    <select name="dialtime" defaultValue={config.dialtime || "60"}>
+                      {withCurrent(dialTimeChoices, config.dialtime || "60").map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                  <label>How the number is billed
+                    <select name="billing_type" defaultValue={config.billing_type || "1"}><option value="1">Per minute</option><option value="2">One monthly price</option></select>
+                  </label>
+                  <label className="check-option"><input type="checkbox" name="cnam" defaultChecked={config.cnam === "1"} /> Show the caller’s name</label>
+                  <label>Line account phone type code <input name="device_type" defaultValue={config.device_type || "1"} /></label>
+                  <label>International route
+                    <select name="international_route" defaultValue={config.international_route || "1"}><option value="1">Value</option><option value="2">Premium</option></select>
+                  </label>
+                  <label className="check-option"><input type="checkbox" name="lock_international" defaultChecked={config.lock_international === "1"} /> Block international calls on new line accounts</label>
+                  <label>Hold music <input name="music_on_hold" defaultValue={config.music_on_hold || "default"} /></label>
+                  <label>Codecs <input name="allowed_codecs" defaultValue={lineCodecs(config.allowed_codecs || "")} placeholder="ulaw;g729;gsm" /></label>
+                  <p className="ops-muted">VoIP.ms accepts ulaw, g729, gsm, or all. Other names are left out before a line account is created.</p>
+                  <label>DTMF <input name="dtmf_mode" defaultValue={config.dtmf_mode || "auto"} /></label>
+                  <label>NAT <input name="nat" defaultValue={config.nat || "yes"} /></label>
+                  <label>Client email domain <input name="client_email_domain" defaultValue={config.client_email_domain || ""} autoComplete="off" /></label>
+                  <label>Client phone <input name="client_phone" defaultValue={config.client_phone || ""} autoComplete="off" /></label>
+                  <label>Street <input name="client_address" defaultValue={config.client_address || ""} autoComplete="off" /></label>
+                  <PlaceSelects countryLabel="Country" regionLabel="State or province" cityLabel="City" countryName="client_country" regionName="client_state" cityName="client_city" countryDefault={config.client_country || "US"} regionDefault={config.client_state || ""} cityDefault={config.client_city || ""} />
+                  <label>ZIP or postal code <input name="client_zip" defaultValue={config.client_zip || ""} autoComplete="off" /></label>
+                </div>
+              </details>
+            </>
+          ) : (
+            <>
+              <label>API base URL <input name="base_url" defaultValue={config.base_url || ""} autoComplete="off" /></label>
+              <label>Client ID <input name="client_id" defaultValue={config.client_id || ""} autoComplete="off" /></label>
+              <SecretField name="secret" label="Client secret" stored={connection.hasSecret} />
+              <label>Trunk template <input name="trunk_template" defaultValue={config.trunk_template || "GenericSIPTrunk.pv.xml"} /></label>
+            </>
+          )}
+          <details className="ops-details">
+            <summary>Setup guide</summary>
+            {provider === "3cx" ? <p>In 3CX, open Integrations, then API. Add a client, turn on 3CX Configuration API Access, choose the DEFAULT department, and set the role to System Owner. Then open Advanced, Console Restrictions, and allow access from everywhere.</p> : <p>This login is the reseller account. Signup creates a client and a line account under it. Ordering also needs the routing and POP saved here. Account confirmation texts use the text message number when that number is already on the account.</p>}
+          </details>
+          <details className="ops-details">
+            <summary>Technical response</summary>
+            <p>{connection.last_message || "No check has been saved."}</p>
+          </details>
+          <button className="btn btn-primary" type="submit">Save connection</button>
+        </form>
+        <form action={testConnection}>
+          <input type="hidden" name="provider" value={provider} />
+          <button className="btn btn-secondary" type="submit">Check saved connection</button>
+        </form>
+        <p className="ops-muted">The check uses the saved credentials. It does not buy a number, add a trunk, or charge a customer.</p>
+      </aside>
+    </div>
   );
 }
