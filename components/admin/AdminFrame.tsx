@@ -18,6 +18,7 @@ function active(path: string, href: string) {
 
 function crumb(path: string, groups: Group[]) {
   if (path === "/admin") return ["Overview"];
+  if (path.startsWith("/admin/content/plans/edit")) return ["Catalog & billing", "Plans", "Edit plan"];
   if (path.startsWith("/admin/content/")) {
     const key = path.slice("/admin/content/".length).split("/")[0];
     const catalog = key === "plans" || key === "minute_bundles";

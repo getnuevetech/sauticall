@@ -59,6 +59,7 @@
 .ap-side-card p{display:flex;justify-content:space-between;gap:12px}
 .ap-side-card span{color:#667085}
 .ap-savebar{position:sticky;bottom:12px;display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #e4e7ec;border-radius:14px;padding:12px 14px}
+.ops-save{position:static;margin-top:16px}
 .ap-savebar p{margin:0}
 .ap-savebar .btn{margin-left:auto}
 .ap-savebar .btn + .btn{margin-left:0}
@@ -115,9 +116,20 @@
 .ops-stats div{background:#fff;border:1px solid #e4e7ec;border-radius:14px;padding:12px;position:relative}
 .ops-stats span{display:block;color:#667085;font-size:.8rem}
 .ops-stats i{display:block;height:6px;margin-top:8px;background:#155eef;border-radius:99px}
-.ops-tabs{display:flex;gap:18px;border-bottom:1px solid #e4e7ec;margin:8px 0 12px}
-.ops-tabs a{padding:10px 0;color:#667085;font-weight:700;border-bottom:2px solid transparent}
-.ops-tabs a[data-current="true"]{color:#155eef;border-bottom-color:#155eef}
+.ops-tabs{display:flex;gap:18px;border-bottom:1px solid #e4e7ec;margin:8px 0 12px;flex-wrap:wrap}
+.ops-tabs a,.ops-tabs button{padding:10px 0;color:#667085;font-weight:700;border-bottom:2px solid transparent;border-left:0;border-right:0;border-top:0;background:none;cursor:pointer}
+.ops-tabs a[data-current="true"],.ops-tabs button[data-current="true"]{color:#155eef;border-bottom-color:#155eef}
+.ops-feature{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 0;border-top:1px solid #eef2f6}
+.ops-feature p{margin:2px 0 0}
+.ops-changes{list-style:none;padding:0;display:grid;gap:8px}
+.ops-changes li{display:flex;justify-content:space-between;gap:12px}
+.ops-changes span{color:#475467}
+.ops-inline{display:flex;align-items:center;gap:8px}
+.ops-inline input{flex:1}
+.ops-price{font-size:1.8rem;font-weight:800;color:#101828;margin:8px 0}
+.ops-price small{font-size:.9rem;font-weight:600;color:#667085}
+.ops-drawer button[aria-label="Close"]{border:0;background:none;color:#667085;font-size:1.4rem;line-height:1;cursor:pointer}
+.ops-card label,.ops-drawer label,.ops-stack label{display:grid;gap:4px;font-weight:700}
 .ops-wide{width:100%;justify-content:center}
 .ops-foot,.ops-muted{color:#667085;font-size:.86rem}
 .ops-alert{background:#fef3f2;color:#b42318;border-radius:12px;padding:10px 12px}

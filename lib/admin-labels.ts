@@ -331,7 +331,7 @@ export const documentScreens: Record<string, { title: string; intro: string }> =
   footer: { title: "Footer", intro: "Edit the links and notes at the bottom of every page." },
   services: { title: "Services", intro: "These cards are saved with the site. The home and solutions pages use Live page wording on those screens." },
   plans: { title: "Plans", intro: "Check the features each plan includes. A subscribed customer gets those features in their account." },
-  minute_bundles: { title: "Call minute bundles", intro: "These are extra outbound minutes a customer can buy. Bought minutes last until they are used. Turn a bundle off to hide it." },
+  minute_bundles: { title: "Minute bundles", intro: "Extra outbound minutes a customer can buy. Bought minutes last until they are used. Hiding a bundle keeps its record and purchase history." },
   faqs: { title: "More questions", intro: "These questions are added to the help center and shown on the contact page." },
   personas: { title: "Who it is for", intro: "These short stories are saved with the site. The home page uses Live page wording on the home screen." },
   theme: { title: "Colors and font", intro: "Leave these as they are to keep the approved look. Change a color only when you mean to." },

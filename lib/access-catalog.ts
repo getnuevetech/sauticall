@@ -134,7 +134,7 @@ export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
     title: "Catalog & billing",
     links: [
       { label: "Plans", href: "/admin/content/plans", permission: "content.plans" },
-      { label: "Call minute bundles", href: "/admin/content/minute_bundles", permission: "content.bundles" },
+      { label: "Minute bundles", href: "/admin/content/minute_bundles", permission: "content.bundles" },
     ],
   },
   {
