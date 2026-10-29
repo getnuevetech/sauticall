@@ -4,17 +4,21 @@ import fs from "node:fs";
 import net from "net";
 import test from "node:test";
 import tls from "tls";
-import { MAIL_REPLY_MS, ehloName, mailAttempts, mailboxAddress, sendMail } from "../lib/smtp.ts";
+import { MAIL_REPLY_MS, ehloName, mailAttempts, mailboxAddress, retryTransport, sendMail } from "../lib/smtp.ts";
 
-test("a mail server reply can take twenty seconds", () => {
-  assert.equal(MAIL_REPLY_MS, 20000);
+test("a mail server reply waits eight seconds and a timeout is not tried again", () => {
+  assert.equal(MAIL_REPLY_MS, 8000);
+  assert.equal(retryTransport("The mail server took too long during Greeting."), false);
+  assert.equal(retryTransport("The mail server took too long to accept the connection."), false);
+  assert.equal(retryTransport("Recipient was refused by the mail server: 550 no such user"), false);
+  assert.equal(retryTransport("wrong version number"), true);
 });
 
 test("port 587 starts in plain text even when secure is checked, and port 465 starts encrypted", () => {
-  assert.deepEqual(mailAttempts(587, true), ["plain", "tls"]);
-  assert.deepEqual(mailAttempts(2525, true), ["plain", "tls"]);
-  assert.deepEqual(mailAttempts(465, false), ["tls", "plain"]);
-  assert.deepEqual(mailAttempts(2525, false), ["plain", "tls"]);
+  assert.deepEqual(mailAttempts(587, true), ["plain"]);
+  assert.deepEqual(mailAttempts(2525, true), ["plain"]);
+  assert.deepEqual(mailAttempts(465, false), ["tls"]);
+  assert.deepEqual(mailAttempts(2525, false), ["plain"]);
 });
 
 test("the sender address and hello name come from the from line", () => {
@@ -85,6 +89,32 @@ function plainServer(rejectRecipient = false) {
   });
   return { server, captured };
 }
+
+test("a silent mail server is reported once", async () => {
+  const server = net.createServer(() => {});
+  const port = await listen(server);
+  const started = Date.now();
+  try {
+    const result = await sendMail({
+      host: "127.0.0.1",
+      port,
+      user: "",
+      pass: "",
+      secure: false,
+      from: "hello@sauticall.com",
+      to: ["person@example.com"],
+      subject: "Confirm",
+      text: "code 111222",
+      messageId: "sc-silent@sauticall.com",
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.message, /took too long/);
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed < 12000, `waited ${elapsed}ms`);
+  } finally {
+    server.close();
+  }
+});
 
 test("a confirmation is accepted and keeps the code in the message", async () => {
   const { server, captured } = plainServer();

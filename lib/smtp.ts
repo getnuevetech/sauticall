@@ -16,10 +16,10 @@ export type OutboundMail = {
   inReplyTo?: string;
 };
 
-export const MAIL_REPLY_MS = 20000;
+export const MAIL_REPLY_MS = 8000;
 
 const SESSION_MS = MAIL_REPLY_MS;
-const CONNECT_MS = 10000;
+const CONNECT_MS = 4000;
 
 export function mailTransport(port: number, secure: boolean): "plain" | "tls" {
   if (port === 465) return "tls";
@@ -28,26 +28,24 @@ export function mailTransport(port: number, secure: boolean): "plain" | "tls" {
 }
 
 export function mailAttempts(port: number, secure: boolean): Array<"plain" | "tls"> {
-  const first = mailTransport(port, secure);
-  return [first, first === "tls" ? "plain" : "tls"];
+  return [mailTransport(port, secure)];
 }
 
-function retryTransport(message: string) {
-  if (/was refused by the mail server/i.test(message)) return false;
-  if (/took too long during /i.test(message) && !/during Greeting/i.test(message)) return false;
-  return true;
+export function retryTransport(message: string) {
+  if (/took too long|was refused by the mail server/i.test(message)) return false;
+  return /wrong version|ECONNREFUSED|EPROTO|ssl|tls|handshake/i.test(message);
 }
 
 async function mailTargets(host: string) {
   const ip = net.isIP(host);
   if (ip === 4 || ip === 6) return [{ address: host, family: ip as 4 | 6 }];
   try {
-    const found = await dns.lookup(host, { all: true });
-    const ranked = found
-      .filter((item) => item.family === 4 || item.family === 6)
-      .sort((left, right) => left.family - right.family)
-      .slice(0, 2);
-    if (ranked.length) return ranked.map((item) => ({ address: item.address, family: item.family as 4 | 6 }));
+    const found = await Promise.race([
+      dns.lookup(host, { all: true, family: 4 }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("dns")), 2000)),
+    ]);
+    const ipv4 = found.find((item) => item.family === 4);
+    if (ipv4) return [{ address: ipv4.address, family: 4 as const }];
   } catch {
     return [{ address: host, family: 4 as const }];
   }
@@ -299,13 +297,15 @@ export async function sendMail(message: OutboundMail) {
   if (!message.host || !from || recipients.some((item) => !item)) return { ok: false, message: "Outgoing email is not set up." };
   const port = message.port || 587;
   const targets = await mailTargets(message.host);
+  const modes = mailAttempts(port, message.secure);
   let last = "Email could not be sent.";
-  for (const mode of mailAttempts(port, message.secure)) {
-    for (const target of targets) {
+  for (const target of targets) {
+    for (const mode of modes) {
       const result = await deliverMail({ ...message, port }, target, mode === "tls");
       if (result.ok) return result;
       last = result.message;
-      if (!retryTransport(result.message)) return result;
+      if (modes.length === 1 && retryTransport(last)) modes.push(mode === "tls" ? "plain" : "tls");
+      else return result;
     }
   }
   return { ok: false, message: last };

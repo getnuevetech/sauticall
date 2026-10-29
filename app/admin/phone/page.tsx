@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/access";
 import { groupMembers, strategyLabel } from "@/lib/call-groups";
 import { flagOn, getDb, readDoc } from "@/lib/db";
 import { readExtensionPlan } from "@/lib/extension-plan";
+import { finishAfterResponse } from "@/lib/later";
 import { alignStoredExtensions } from "@/lib/pbx";
 import { extensionCapacity, normalizePlans } from "@/lib/plan-features";
 import type { Plan } from "@/lib/types";
@@ -13,7 +14,7 @@ type GroupRow = { id: number; email: string; kind: string; name: string; number:
 
 export default async function AdminPhonePage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string }> }) {
   await requirePermission("settings.phone");
-  await alignStoredExtensions();
+  finishAfterResponse(() => alignStoredExtensions());
   const params = await searchParams;
   const live = flagOn("pbx.live_provision");
   const plan = readExtensionPlan();
