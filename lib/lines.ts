@@ -8,7 +8,7 @@ import { enforceUser } from "./minutes";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "./outbound-rule";
 import { extensionRange, paidPlan, readExtensionPlan } from "./pbx";
 import { idFromPbx } from "./pbx-id";
-import { mentionsDelta, omittedTrunkFields, trunkContentTypes, trunkDeltaLists, trunkGroupBody, trunkPostBody, trunkReplayBody, wrapCollections } from "./trunk-body";
+import { mentionsDelta, trunkContentTypes, trunkGroupBody, trunkReplayBody, trunkServiceBody, trunkShape, trunkSmallBody, wrapCollections } from "./trunk-body";
 import { acceptedDepartmentName } from "./pbx-user";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
@@ -106,7 +106,7 @@ export async function attachTrunk(lineId: number) {
   const extension = extensionFor(line.user_id);
   const seeded = await pbxRequest(`Trunks/Pbx.InitTrunk(template=${encodeURIComponent(`'${template}'`)})`);
   const seed = seeded.ok ? trunkSeed(seeded.body) : null;
-  const replay = trunkReplayBody({
+  const trunkInput = {
     seed,
     name: `SautiCall ${line.did}`,
     number,
@@ -114,19 +114,25 @@ export async function attachTrunk(lineId: number) {
     password: sub.password,
     host: sub.sip_host || "",
     template,
-  });
-  const cleaned = trunkPostBody(trunkDeltaLists(replay));
-  let created = await pbxRequest("Trunks", { method: "POST", body: cleaned, contentType: trunkContentTypes[0][1] });
+  };
+  const service = trunkServiceBody(trunkInput);
+  const replay = trunkReplayBody(trunkInput);
+  const attempts = [
+    ["service", service, "application/json"],
+    ["replay", replay, trunkContentTypes[0][1]],
+    ["small", trunkSmallBody(trunkInput), "application/json"],
+  ] as const;
+  let created = await pbxRequest("Trunks", { method: "POST", body: attempts[0][1], contentType: attempts[0][2] });
   let trunkId = idFromPbx(created.body, created.location);
-  const failures = [`${trunkContentTypes[0][0]}: ${created.message}`];
-  for (const [label, contentType] of trunkContentTypes.slice(1)) {
+  const failures = [`${attempts[0][0]}: ${created.message}`];
+  for (const [label, body, contentType] of attempts.slice(1)) {
     if (created.ok && trunkId) break;
     if (created.status !== 400 && created.status !== 415) break;
-    created = await pbxRequest("Trunks", { method: "POST", body: cleaned, contentType });
+    created = await pbxRequest("Trunks", { method: "POST", body, contentType });
     trunkId = idFromPbx(created.body, created.location);
     failures.push(`${label}: ${created.message}`);
   }
-  if (!created.ok || !trunkId) failures.unshift(`omitted ${omittedTrunkFields(trunkDeltaLists(replay)).join(",") || "none"}`);
+  if (!created.ok || !trunkId) failures.unshift(`shape ${trunkShape(service).slice(0, 500)}`);
   if (!seeded.ok) failures.push(`template request: ${seeded.message || "3CX did not return a trunk template."}`);
   if (!created.ok || !trunkId) {
     const note = `VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"} is ready. 3CX did not add the trunk. Add it on the server for ${department?.name || departmentName(line.user_id)}, route inbound ${line.did} to extension ${extension}, and add an outbound rule limited to extensions ${span.from}–${span.to}. ${hideSecret(failures.filter(Boolean).join(" | "), sub.password)}`;

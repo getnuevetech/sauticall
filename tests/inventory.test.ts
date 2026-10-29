@@ -7,7 +7,7 @@ import { didInfoIsAbsent, lookupMayOrder, normalizeRequestedDid, readDids } from
 import { balanceCovers, planFundAmount, readClientBalance, resellerOrderFees } from "../lib/client-funding.ts";
 import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
-import { trunkContentTypes, trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFilledDeltas, trunkGroupBody, trunkPostBody, trunkReplayBody, trunkShape } from "../lib/trunk-body.ts";
+import { trunkContentTypes, trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFilledDeltas, trunkGroupBody, trunkPostBody, trunkReplayBody, trunkServiceBody, trunkShape, trunkSmallBody } from "../lib/trunk-body.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
@@ -444,6 +444,35 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
   assert.equal("PROVIDER_URL" in (cleaned.Messaging as object), false);
   assert.equal((cleaned.Messaging as { Provider: string }).Provider, "voip");
   assert.equal((cleaned.Gateway as { InboundParams: { delta: { Custom: string }[] } }).InboundParams.delta[0].Custom, "");
+  const service = trunkServiceBody({
+    seed: {
+      "@odata.context": "https://pbx.example/xapi/v1/$metadata#Trunks/$entity",
+      "@odata.type": "#Pbx.Trunk",
+      AuthPassword: { "@odata.type": "#Pbx.ConcealedPassword", Value: "" },
+      DidNumbers: { "@odata.context": "https://pbx.example/xapi/v1/$metadata#Collection(String)" },
+    },
+    name: "SautiCall 3612267988",
+    number: "3612267988",
+    authId: "line-account",
+    password: "secret",
+    host: "houston1.voip.ms",
+    template: "GenericSIPTrunk.pv.xml",
+  });
+  assert.equal(service["@odata.context"], "https://pbx.example/xapi/v1/$metadata#Trunks/$entity");
+  assert.deepEqual((service.DidNumbers as { delta: string[]; "@odata.context": string }).delta, ["3612267988"]);
+  assert.match(String((service.DidNumbers as { "@odata.context": string })["@odata.context"]), /Collection\(String\)/);
+  assert.equal((service.AuthPassword as { Value: string })["Value"], "secret");
+  const small = trunkSmallBody({
+    name: "SautiCall 3612267988",
+    number: "3612267988",
+    authId: "line-account",
+    password: "secret",
+    host: "houston1.voip.ms",
+    template: "GenericSIPTrunk.pv.xml",
+  });
+  assert.deepEqual(small.DidNumbers, ["3612267988"]);
+  assert.equal(Array.isArray((small.Gateway as { Codecs: string[] }).Codecs), true);
+  assert.equal(JSON.stringify(small).split("secret").length - 1, 1);
   assert.equal(trunkContentTypes[0][1].includes("charset"), false);
   assert.match(trunkContentTypes[0][1], /odata\.metadata=minimal/);
   assert.match(trunkContentTypes[0][1], /odata\.streaming=true/);
