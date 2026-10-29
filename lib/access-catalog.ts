@@ -119,7 +119,6 @@ export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
     title: "Customers",
     links: [
       { label: "Customer accounts", href: "/admin/customers", permission: "users.customers" },
-      { label: "Number requests", href: "/admin/requests", permission: "inbox.requests" },
       { label: "Failed requests", href: "/admin/failures", permission: ["inbox.requests", "settings.phone", "settings.lines", "settings.payments"] },
       { label: "Contact messages", href: "/admin/messages", permission: "inbox.messages" },
     ],
@@ -127,9 +126,9 @@ export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
   {
     title: "Phone operations",
     links: [
-      { label: "Extensions and groups", href: "/admin/phone", permission: "settings.phone" },
-      { label: "Lines and trunks", href: "/admin/lines", permission: "settings.lines" },
-      { label: "Trunks", href: "/admin/trunks", permission: "settings.lines" },
+      { label: "Number requests", href: "/admin/requests", permission: "inbox.requests" },
+      { label: "Extensions & groups", href: "/admin/phone", permission: "settings.phone" },
+      { label: "Lines & trunks", href: "/admin/lines", permission: "settings.lines" },
     ],
   },
   {

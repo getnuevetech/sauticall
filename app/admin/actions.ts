@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/access";
+import { companyMatches } from "@/lib/phone-ops";
 import { permissionForDocument } from "@/lib/access-catalog";
 import { audit, getDb, writeDoc } from "@/lib/db";
 import { normalizePlans } from "@/lib/plan-features";
@@ -288,25 +289,34 @@ export async function saveExtensionPlan(formData: FormData): Promise<{ ok: true;
   };
 }
 
+function ownedCompany(formData: FormData, ownerId: number, back: string) {
+  const company = Number(formData.get("company"));
+  if (!companyMatches(ownerId, company)) redirect(`${back}?error=${encodeURIComponent("That record is not in the selected company.")}`);
+  return company;
+}
+
 export async function removePersonRecord(formData: FormData) {
   const user = await staff("settings.phone");
   const id = Number(formData.get("id"));
-  const row = getDb().prepare("SELECT number, first_name, last_name, email FROM pbx_extensions WHERE id = ?").get(id) as { number: string; first_name: string; last_name: string; email: string } | undefined;
+  const row = getDb().prepare("SELECT user_id, number, first_name, last_name, email FROM pbx_extensions WHERE id = ?").get(id) as { user_id: number; number: string; first_name: string; last_name: string; email: string } | undefined;
+  const company = ownedCompany(formData, row?.user_id || 0, "/admin/phone");
   const { removeExtension } = await import("@/lib/pbx");
   const result = await removeExtension(id);
   audit(user.email, "pbx.person.remove", row && result.ok ? `${row.number} ${row.first_name} ${row.last_name} ${row.email}` : `${id}:${result.ok ? "ok" : "failed"}`);
-  if (!result.ok) redirect(`/admin/phone?error=${encodeURIComponent(result.message)}`);
-  redirect("/admin/phone?saved=removed");
+  if (!result.ok) redirect(`/admin/phone/${company}?tab=extensions&ext=${id}&error=${encodeURIComponent(result.message)}`);
+  redirect(`/admin/phone/${company}?tab=extensions&ext=${id}&saved=removed`);
 }
 
 export async function provisionPerson(formData: FormData) {
   const user = await staff("settings.phone");
   const id = Number(formData.get("id"));
+  const row = getDb().prepare("SELECT user_id FROM pbx_extensions WHERE id = ?").get(id) as { user_id: number } | undefined;
+  const company = ownedCompany(formData, row?.user_id || 0, "/admin/phone");
   const { provisionExtension } = await import("@/lib/pbx");
   const result = await provisionExtension(id);
   audit(user.email, "pbx.provision", `${id}:${result.ok ? "ok" : "failed"}`);
-  if (!result.ok) redirect(`/admin/phone?error=${encodeURIComponent(result.detail || result.message)}`);
-  redirect("/admin/phone");
+  if (!result.ok) redirect(`/admin/phone/${company}?tab=extensions&ext=${id}&error=${encodeURIComponent(result.detail || result.message)}`);
+  redirect(`/admin/phone/${company}?tab=extensions&ext=${id}`);
 }
 
 export async function syncMinutes() {
@@ -321,62 +331,85 @@ export async function syncMinutes() {
 export async function retryTrunk(formData: FormData) {
   const user = await staff("settings.lines");
   const id = Number(formData.get("id"));
+  const row = getDb().prepare("SELECT user_id FROM phone_lines WHERE id = ?").get(id) as { user_id: number } | undefined;
+  ownedCompany(formData, row?.user_id || 0, "/admin/lines");
   const { attachTrunk } = await import("@/lib/lines");
   const result = await attachTrunk(id);
   audit(user.email, "trunk.retry", `${id}:${result.ok ? "ok" : "failed"}`);
-  if (!result.ok) redirect(`/admin/trunks?error=${encodeURIComponent(result.message)}`);
-  redirect("/admin/trunks");
+  if (!result.ok) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent(result.message)}`);
+  redirect(`/admin/lines?line=${id}`);
+}
+
+export async function revealSip(company: number, which: "user" | "pass") {
+  const user = await staff("settings.lines");
+  if (!companyMatches(company, company)) return { ok: false as const, message: "That company was not found." };
+  const row = getDb().prepare("SELECT account, username, password FROM voip_subaccounts WHERE user_id = ?").get(company) as { account: string; username: string; password: string } | undefined;
+  if (!row) return { ok: false as const, message: "No SIP account is saved for this company." };
+  audit(user.email, which === "pass" ? "sip.reveal.password" : "sip.reveal.user", String(company));
+  return { ok: true as const, value: which === "pass" ? row.password : row.account || row.username };
 }
 
 export async function sendEmergencyAddress(formData: FormData) {
   const user = await staff("settings.lines");
   const id = Number(formData.get("id"));
+  const row = getDb().prepare("SELECT user_id FROM phone_lines WHERE id = ?").get(id) as { user_id: number } | undefined;
+  ownedCompany(formData, row?.user_id || 0, "/admin/lines");
   const { sendEmergency } = await import("@/lib/e911");
   const result = await sendEmergency(id);
   audit(user.email, "e911.send", `${id}:${result.ok ? "ok" : "failed"}`);
-  if (!result.ok) redirect(`/admin/lines?error=${encodeURIComponent(result.message)}`);
-  redirect("/admin/lines");
+  if (!result.ok) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent(result.message)}`);
+  redirect(`/admin/lines?line=${id}`);
 }
 
 export async function completeEmergency(formData: FormData) {
   const user = await staff("settings.lines");
   const id = Number(formData.get("id"));
+  const owner = getDb().prepare("SELECT user_id FROM phone_lines WHERE id = ?").get(id) as { user_id: number } | undefined;
+  ownedCompany(formData, owner?.user_id || 0, "/admin/lines");
   const { markEmergencyDone } = await import("@/lib/e911");
   const result = markEmergencyDone(id, String(formData.get("note") || ""));
   audit(user.email, "e911.done", String(id));
-  if (!result.ok) redirect(`/admin/lines?error=${encodeURIComponent(result.message)}`);
-  redirect("/admin/lines");
+  if (!result.ok) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent(result.message)}`);
+  redirect(`/admin/lines?line=${id}`);
 }
 
 export async function completeTrunk(formData: FormData) {
   const user = await staff("settings.lines");
   const id = Number(formData.get("id"));
+  const owner = getDb().prepare("SELECT user_id FROM phone_lines WHERE id = ?").get(id) as { user_id: number } | undefined;
+  ownedCompany(formData, owner?.user_id || 0, "/admin/lines");
   const note = String(formData.get("note") || "");
   const { markTrunkDone } = await import("@/lib/lines");
   const result = markTrunkDone(id, note);
   audit(user.email, "trunk.done", String(id));
-  if (!result.ok) redirect(`/admin/trunks?error=${encodeURIComponent(result.message)}`);
-  redirect("/admin/trunks");
+  if (!result.ok) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent(result.message)}`);
+  redirect(`/admin/lines?line=${id}&saved=recorded`);
 }
 
 export async function retryGroup(formData: FormData) {
   const user = await staff("settings.phone");
   const id = Number(formData.get("id"));
+  const owner = getDb().prepare("SELECT user_id, kind FROM call_groups WHERE id = ?").get(id) as { user_id: number; kind: string } | undefined;
+  const company = ownedCompany(formData, owner?.user_id || 0, "/admin/phone");
   const { provisionCallGroup } = await import("@/lib/call-groups");
   const result = await provisionCallGroup(id);
   audit(user.email, "pbx.group", `${id}:${result.ok ? "ok" : "failed"}`);
-  if (!result.ok) redirect(`/admin/phone?error=${encodeURIComponent(result.message)}`);
-  redirect("/admin/phone");
+  const tab = owner?.kind === "queue" ? "queues" : "groups";
+  if (!result.ok) redirect(`/admin/phone/${company}?tab=${tab}&group=${id}&error=${encodeURIComponent(result.message)}`);
+  redirect(`/admin/phone/${company}?tab=${tab}&group=${id}`);
 }
 
 export async function completeGroup(formData: FormData) {
   const user = await staff("settings.phone");
   const id = Number(formData.get("id"));
+  const owner = getDb().prepare("SELECT user_id, kind FROM call_groups WHERE id = ?").get(id) as { user_id: number; kind: string } | undefined;
+  const company = ownedCompany(formData, owner?.user_id || 0, "/admin/phone");
   const { markGroupDone } = await import("@/lib/call-groups");
   const result = await markGroupDone(id, String(formData.get("note") || ""));
   audit(user.email, "pbx.group.done", String(id));
-  if (!result.ok) redirect(`/admin/phone?error=${encodeURIComponent(result.message)}`);
-  redirect("/admin/phone");
+  const tab = owner?.kind === "queue" ? "queues" : "groups";
+  if (!result.ok) redirect(`/admin/phone/${company}?tab=${tab}&group=${id}&error=${encodeURIComponent(result.message)}`);
+  redirect(`/admin/phone/${company}?tab=${tab}&group=${id}&saved=recorded`);
 }
 
 export async function saveLineVariables(formData: FormData) {
