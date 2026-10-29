@@ -120,7 +120,6 @@ export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
     links: [
       { label: "Customer accounts", href: "/admin/customers", permission: "users.customers" },
       { label: "Failed requests", href: "/admin/failures", permission: ["inbox.requests", "settings.phone", "settings.lines", "settings.payments"] },
-      { label: "Contact messages", href: "/admin/messages", permission: "inbox.messages" },
     ],
   },
   {
@@ -135,7 +134,7 @@ export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
     title: "Catalog & billing",
     links: [
       { label: "Plans", href: "/admin/content/plans", permission: "content.plans" },
-      { label: "Call minute bundles", href: "/admin/content/minute_bundles", permission: "content.bundles" },
+      { label: "Minute bundles", href: "/admin/content/minute_bundles", permission: "content.bundles" },
     ],
   },
   {
@@ -161,7 +160,8 @@ export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
   {
     title: "Support desk",
     links: [
-      { label: "Ticket desk", href: "/admin/tickets", permission: ["tickets.view", "tickets.view_all", "tickets.reply"] },
+      { label: "Contact messages", href: "/admin/messages", permission: "inbox.messages" },
+      { label: "Tickets", href: "/admin/tickets", permission: ["tickets.view", "tickets.view_all", "tickets.reply"] },
       { label: "Queues and email", href: "/admin/tickets/settings", permission: "tickets.manage" },
     ],
   },

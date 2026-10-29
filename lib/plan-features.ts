@@ -1,17 +1,17 @@
 import type { Plan } from "./types";
 
 export const PLAN_FEATURES = [
-  { key: "numbers", group: "Phone", label: "Business numbers", detail: "The customer can request a new number." },
-  { key: "porting", group: "Phone", label: "Number transfer", detail: "The customer can bring an existing number." },
-  { key: "softphone", group: "Phone", label: "Softphones", detail: "The account includes the mobile and desktop phone apps." },
-  { key: "desk_phones", group: "Phone", label: "Desk phones", detail: "The account includes office phone setup." },
-  { key: "voicemail", group: "Phone", label: "Voicemail and forwarding", detail: "The account includes voicemail and call forwarding." },
-  { key: "business_hours", group: "Phone", label: "Business hours", detail: "The customer can set open and closed hours." },
-  { key: "ring_groups", group: "Phone", label: "Ring groups", detail: "The customer can ring several people together." },
-  { key: "queues", group: "Phone", label: "Call queues", detail: "The customer can hold callers in a queue." },
-  { key: "ai", group: "AI", label: "AI receptionist", detail: "The account includes the AI receptionist." },
-  { key: "ai_any_language", group: "AI", label: "AI in any language", detail: "The AI understands callers in any language. This also includes the AI receptionist." },
-  { key: "reporting", group: "Team", label: "Call reporting", detail: "The account includes call reporting." },
+  { key: "numbers", group: "Phone", label: "Business numbers", detail: "Local and national business numbers." },
+  { key: "porting", group: "Phone", label: "Number transfer", detail: "Port existing numbers to SautiCall." },
+  { key: "softphone", group: "Phone", label: "Softphones", detail: "Use SautiCall softphones on desktop and mobile." },
+  { key: "desk_phones", group: "Phone", label: "Desk phones", detail: "Use supported desk phones." },
+  { key: "voicemail", group: "Phone", label: "Voicemail and forwarding", detail: "Voicemail with email delivery and call forwarding." },
+  { key: "business_hours", group: "Phone", label: "Business hours", detail: "Set business hours and after-hours handling." },
+  { key: "ring_groups", group: "Phone", label: "Ring groups", detail: "Ring multiple team members." },
+  { key: "queues", group: "Phone", label: "Call queues", detail: "Queue incoming calls with configurable settings." },
+  { key: "ai", group: "AI", label: "AI receptionist", detail: "AI answers calls and handles common requests." },
+  { key: "ai_any_language", group: "AI", label: "Multilingual AI", detail: "Support for multiple languages." },
+  { key: "reporting", group: "Reporting", label: "Call reporting", detail: "Detailed call logs and analytics." },
 ] as const;
 
 export type FeatureKey = (typeof PLAN_FEATURES)[number]["key"];

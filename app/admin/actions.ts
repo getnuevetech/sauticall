@@ -49,6 +49,32 @@ export async function savePlans(json: string) {
   redirect("/admin/content/plans?saved=1");
 }
 
+export async function saveBundles(json: string) {
+  const user = await staff("content.bundles");
+  let incoming: unknown[];
+  try {
+    const value = JSON.parse(json) as unknown;
+    if (!Array.isArray(value)) throw new Error("bad");
+    incoming = value;
+  } catch {
+    redirect("/admin/content/minute_bundles?error=Those%20bundles%20could%20not%20be%20read.");
+  }
+  const row = getDb().prepare("SELECT json FROM documents WHERE key = 'minute_bundles'").get() as { json: string } | undefined;
+  const { applyBundleEdits, normalizeBundle } = await import("@/lib/catalog");
+  let stored: unknown[] = [];
+  try {
+    const parsed = JSON.parse(row?.json || "[]") as unknown;
+    stored = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    stored = [];
+  }
+  const result = applyBundleEdits(stored.map((item) => normalizeBundle(item as { name?: string; minutes?: number; price?: number; enabled?: boolean })), incoming as { name?: string; minutes?: number; price?: number; enabled?: boolean }[]);
+  if (!result.ok) redirect(`/admin/content/minute_bundles?error=${encodeURIComponent(result.message)}`);
+  writeDoc("minute_bundles", result.bundles, user.email);
+  revalidatePath("/", "layout");
+  redirect("/admin/content/minute_bundles?saved=1");
+}
+
 export async function saveGateway(formData: FormData) {
   const user = await staff("settings.payments");
   const id = Number(formData.get("id") || 0);
@@ -317,6 +343,18 @@ export async function provisionPerson(formData: FormData) {
   audit(user.email, "pbx.provision", `${id}:${result.ok ? "ok" : "failed"}`);
   if (!result.ok) redirect(`/admin/phone/${company}?tab=extensions&ext=${id}&error=${encodeURIComponent(result.detail || result.message)}`);
   redirect(`/admin/phone/${company}?tab=extensions&ext=${id}`);
+}
+
+export async function resendPersonEmail(formData: FormData) {
+  const user = await staff("settings.phone");
+  const id = Number(formData.get("id"));
+  const row = getDb().prepare("SELECT user_id, status, xapi_id FROM pbx_extensions WHERE id = ?").get(id) as { user_id: number; status: string; xapi_id: number } | undefined;
+  const company = ownedCompany(formData, row?.user_id || 0, "/admin/phone");
+  const { resendSetupEmail } = await import("@/lib/pbx");
+  const result = await resendSetupEmail(id);
+  audit(user.email, "pbx.setup-email", `${id}:${result.ok ? "ok" : "failed"}`);
+  if (!result.ok) redirect(`/admin/phone/${company}?tab=extensions&ext=${id}&error=${encodeURIComponent(result.message)}`);
+  redirect(`/admin/phone/${company}?tab=extensions&ext=${id}&saved=email`);
 }
 
 export async function syncMinutes() {

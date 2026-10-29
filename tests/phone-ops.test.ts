@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { firstListedId } from "../lib/pbx-id.ts";
-import { companyMatches, formatDid, lineStatusLabel, maskCredential, setupLabel, setupStatus, trunkStep } from "../lib/phone-ops-view.ts";
+import { companyMatches, formatDid, lineStatusLabel, maskCredential, setupEmailState, setupLabel, setupStatus, trunkStep } from "../lib/phone-ops-view.ts";
 
 test("company actions only match the selected company", () => {
   assert.equal(companyMatches(4, 4), true);
@@ -22,6 +22,16 @@ test("setup status separates saved records from provisioning", () => {
   assert.equal(trunkStep({ hasAccount: true, trunkId: 0, status: "trunk_waiting" }).trunk, "Failed");
   assert.equal(trunkStep({ hasAccount: true, trunkId: 9, status: "trunk_done" }).routing, "Not verified");
   assert.equal(lineStatusLabel("trunk_done"), "Recorded manually");
+});
+
+test("a failed setup email stays separate from extension provisioning", () => {
+  const failed = setupEmailState("Extension 511 is on the phone system. The SautiCall setup email failed: The mail server took too long to accept the connection.");
+  assert.equal(failed.label, "Delivery failed");
+  assert.match(failed.cause, /took too long/);
+  assert.equal(setupEmailState("Extension 510 is on the phone system. SautiCall sent the setup email.").label, "Sent");
+  assert.equal(setupEmailState("Extension 510 is on the phone system.", "A setup email was sent to this address.").label, "Sent");
+  assert.equal(setupEmailState("The SautiCall setup email failed: timeout", "A setup email was sent to this address.").label, "Delivery failed");
+  assert.equal(setupEmailState("").label, "Not sent");
 });
 
 test("phone numbers and existing phone-system ids are read without assuming one trunk", () => {

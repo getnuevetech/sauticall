@@ -18,6 +18,7 @@ function active(path: string, href: string) {
 
 function crumb(path: string, groups: Group[]) {
   if (path === "/admin") return ["Overview"];
+  if (path.startsWith("/admin/content/plans/edit")) return ["Catalog & billing", "Plans", "Edit plan"];
   if (path.startsWith("/admin/content/")) {
     const key = path.slice("/admin/content/".length).split("/")[0];
     const catalog = key === "plans" || key === "minute_bundles";
@@ -57,8 +58,10 @@ export function AdminFrame({
     <div className={`admin-portal${open ? " nav-open" : ""}`}>
       <aside className="ap-side">
         <Link className="ap-brand" href="/admin" onClick={() => setOpen(false)}>
-          <span>SautiCall</span>
-          <small>Admin portal</small>
+          <span className="ap-logo" aria-hidden="true">
+            <svg viewBox="0 0 32 32" width="32" height="32"><path d="M6 18c2.2-6 3.2-6 4.4 0s2.2 6 4.4 0 2.2-6 4.4 0 2.2 6 4.4 0" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" /></svg>
+          </span>
+          <span>SautiCall<small>Admin portal</small></span>
         </Link>
         <nav className="ap-nav" aria-label="Admin">
           <Link href="/admin" data-current={path === "/admin" ? "true" : undefined} onClick={() => setOpen(false)}>Overview</Link>

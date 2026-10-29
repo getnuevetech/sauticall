@@ -75,6 +75,21 @@ async function keepExtensionWelcomeOff() {
   return `The phone system may still email new extensions (${updated.message}).`;
 }
 
+export async function resendSetupEmail(id: number) {
+  const row = getDb().prepare("SELECT * FROM pbx_extensions WHERE id = ?").get(id) as ExtensionRow | undefined;
+  if (!row) return { ok: false, message: "That person was not found." };
+  if (row.status !== "created" || !row.xapi_id) return { ok: false, message: "The setup email can be sent after this extension is on the phone system." };
+  const welcome = await deliverWelcome({ xapiId: row.xapi_id, firstName: row.first_name, number: row.number, email: row.email });
+  const detail = `Extension ${row.number} is on the phone system. ${welcome.detail}`.slice(0, 1200);
+  getDb().prepare("UPDATE pbx_extensions SET welcome_note = ?, last_message = ? WHERE id = ? AND status = 'created' AND xapi_id = ?").run(welcome.note, detail, id, row.xapi_id);
+  if (/SautiCall sent the setup email/i.test(welcome.detail)) return { ok: true, message: "The setup email was sent." };
+  if (/setup email failed|could not be sent|Outgoing email is not set up/i.test(welcome.detail)) {
+    const { recordFailure } = await import("./failure-log");
+    recordFailure({ area: "email", userId: row.user_id, subject: row.email, detail: welcome.detail });
+  }
+  return { ok: false, message: welcome.detail };
+}
+
 async function deliverWelcome(person: { xapiId: number; firstName: string; number: string; email: string }) {
   const sent = await pbxRequest(`Users(${person.xapiId})/Pbx.SendWelcomeEmail`, { method: "POST", body: {} });
   const phone = sent.ok ? "The phone system sent the welcome email." : `The phone system did not send the welcome email (${sent.message}).`;
