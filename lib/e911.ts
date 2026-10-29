@@ -1,68 +1,11 @@
 import { callVoipms } from "./carriers";
 import { customerMessage } from "./customer-message";
 import { flagOn, getDb } from "./db";
-import { regionAllowed } from "./places";
+import { emergencyCarrierParams, parseEmergency, type EmergencyAddress } from "./e911-address";
 
-export type EmergencyAddress = {
-  full_name: string;
-  street_number: string;
-  street_name: string;
-  address_type: string;
-  address_number: string;
-  city: string;
-  state: string;
-  country: "US" | "CA";
-  zip: string;
-  language: "EN" | "FR";
-};
-
-export const unitTypes = [
-  { value: "", label: "House or street address only" },
-  { value: "APT", label: "Apartment" },
-  { value: "STE", label: "Suite" },
-  { value: "FL", label: "Floor" },
-  { value: "UNIT", label: "Unit" },
-  { value: "RM", label: "Room" },
-  { value: "BLDG", label: "Building" },
-];
+export { emergencyCarrierParams, formatAddress, parseEmergency, unitTypes, type EmergencyAddress } from "./e911-address";
 
 type AddressRow = EmergencyAddress & { user_id: number };
-
-export function parseEmergency(input: Record<string, string>): { ok: true; address: EmergencyAddress } | { ok: false; message: string } {
-  const country = input.country === "CA" ? "CA" : input.country === "US" ? "US" : "";
-  const zipRaw = (input.zip || "").trim().toUpperCase();
-  const zip = country === "CA" ? zipRaw.replace(/\s+/g, "") : zipRaw.replace(/[^0-9]/g, "");
-  const address: EmergencyAddress = {
-    full_name: (input.full_name || "").trim().slice(0, 80),
-    street_number: (input.street_number || "").replace(/\D/g, "").slice(0, 10),
-    street_name: (input.street_name || "").trim().slice(0, 80),
-    address_type: unitTypes.some((item) => item.value === input.address_type) ? input.address_type : "",
-    address_number: (input.address_number || "").replace(/\D/g, "").slice(0, 10),
-    city: (input.city || "").trim().slice(0, 80),
-    state: (input.state || "").trim().toUpperCase().slice(0, 2),
-    country: country === "CA" ? "CA" : "US",
-    zip,
-    language: input.language === "FR" ? "FR" : "EN",
-  };
-  if (!address.full_name) return { ok: false, message: "Enter the name emergency services should ask for." };
-  if (!address.street_number) return { ok: false, message: "Enter the street number, using digits such as 1200." };
-  if (!address.street_name) return { ok: false, message: "Enter the street name." };
-  if (!address.city) return { ok: false, message: "Choose a city." };
-  if (!country) return { ok: false, message: "Choose the United States or Canada." };
-  if (!regionAllowed(country, address.state)) return { ok: false, message: "Choose a state or province." };
-  if (country === "US" && !/^\d{5}(\d{4})?$/.test(address.zip)) return { ok: false, message: "Enter a 5-digit ZIP code." };
-  if (country === "CA" && !/^[A-Z]\d[A-Z]\d[A-Z]\d$/.test(address.zip)) return { ok: false, message: "Enter a Canadian postal code." };
-  if (input.address_number && !address.address_number) return { ok: false, message: "The apartment or suite number should be digits." };
-  if (address.address_number && !address.address_type) return { ok: false, message: "Choose apartment, suite, floor, unit, room, or building." };
-  return { ok: true, address };
-}
-
-export function formatAddress(address: EmergencyAddress) {
-  const unit = address.address_type && address.address_number ? ` ${address.address_type} ${address.address_number}` : "";
-  const zipText = typeof address.zip === "string" ? address.zip : "";
-  const zip = address.country === "CA" ? `${zipText.slice(0, 3)} ${zipText.slice(3)}`.trim() : zipText;
-  return `${address.full_name || ""}, ${address.street_number || ""} ${address.street_name || ""}${unit}, ${address.city || ""}, ${address.state || ""} ${zip}`.replace(/\s+,/g, ",").trim();
-}
 
 export function getEmergency(userId: number): EmergencyAddress | null {
   const row = getDb().prepare("SELECT * FROM emergency_addresses WHERE user_id = ?").get(userId) as AddressRow | undefined;
@@ -90,23 +33,6 @@ export function saveEmergency(userId: number, address: EmergencyAddress) {
        address_type = excluded.address_type, address_number = excluded.address_number, city = excluded.city,
        state = excluded.state, country = excluded.country, zip = excluded.zip, language = excluded.language, updated_at = excluded.updated_at`,
   ).run(userId, address.full_name, address.street_number, address.street_name, address.address_type, address.address_number, address.city, address.state, address.country, address.zip, address.language, new Date().toISOString());
-}
-
-function carrierParams(address: EmergencyAddress, did: string, update: boolean) {
-  const params: Record<string, string> = {
-    did,
-    full_name: address.full_name,
-    street_number: address.street_number,
-    street_name: address.street_name,
-    city: address.city,
-    state: address.state,
-    country: address.country,
-    address_type: address.address_type,
-    address_number: address.address_number,
-  };
-  params[update ? "zip_code" : "zip"] = address.zip;
-  if (address.country === "CA") params.language = address.language;
-  return params;
 }
 
 function plainStatus(status: string) {
@@ -155,7 +81,7 @@ export async function sendEmergency(lineId: number) {
     return { ok: !changed, message };
   }
   const did = didForCarrier(line.did);
-  const checked = await callVoipms("e911Validate", carrierParams(address, did, false));
+  const checked = await callVoipms("e911Validate", emergencyCarrierParams(address, did));
   if (!checked.ok) {
     const detail = `${plainStatus(checked.status)} ${checked.message}`.trim();
     console.error(`[sauticall] e911 ${detail}`);
@@ -165,8 +91,8 @@ export async function sendEmergency(lineId: number) {
     return { ok: false, message: customerMessage(plainStatus(checked.status), "The emergency address was saved. The team will finish sending it.") };
   }
   const update = line.e911_status === "sent" || line.e911_status === "done";
-  let result = await callVoipms(update ? "e911Update" : "e911Provision", carrierParams(address, did, update));
-  if (!result.ok && update) result = await callVoipms("e911Provision", carrierParams(address, did, false));
+  let result = await callVoipms(update ? "e911Update" : "e911Provision", emergencyCarrierParams(address, did));
+  if (!result.ok && update) result = await callVoipms("e911Provision", emergencyCarrierParams(address, did));
   const detail = result.ok ? "Emergency address sent to the phone company." : `${plainStatus(result.status)} ${result.message}`.trim();
   if (!result.ok) {
     console.error(`[sauticall] e911 ${detail}`);
