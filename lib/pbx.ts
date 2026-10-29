@@ -499,7 +499,16 @@ function route(number: string, to: "Extension" | "VoiceMail" | "RingGroup" | "Qu
   return { IsPromptEnabled: false, Route: { External: "", Number: number, To: to } };
 }
 
+function aiExtension(userId: number) {
+  const row = getDb().prepare(
+    "SELECT number FROM ai_receptionists WHERE user_id = ? AND enabled = 1 AND xapi_id != 0 AND status = 'created' AND number != ''",
+  ).get(userId) as { number: string } | undefined;
+  return row?.number || "";
+}
+
 function daytimeDestination(userId: number) {
+  const receptionist = aiExtension(userId);
+  if (receptionist) return { number: receptionist, to: "Extension" as const };
   const group = getDb()
     .prepare("SELECT kind, number FROM call_groups WHERE user_id = ? AND answers = 1 AND status IN ('created', 'manual') ORDER BY id DESC LIMIT 1")
     .get(userId) as { kind: string; number: string } | undefined;
@@ -509,7 +518,8 @@ function daytimeDestination(userId: number) {
   return { number: first.number, to: "Extension" as const };
 }
 
-function daytimeLabel(to: string, number: string) {
+function daytimeLabel(userId: number, to: string, number: string) {
+  if (aiExtension(userId) === number) return "the AI receptionist";
   if (to === "Queue") return `queue ${number}`;
   if (to === "RingGroup") return `ring group ${number}`;
   return number;
@@ -528,7 +538,7 @@ async function routeDepartment(department: Department) {
       HolidaysRoute: route(destination.number, "VoiceMail"),
     },
   });
-  const label = daytimeLabel(destination.to, destination.number);
+  const label = daytimeLabel(department.user_id, destination.to, destination.number);
   getDb().prepare("UPDATE pbx_departments SET last_message = ? WHERE user_id = ?").run(result.ok ? `Calls go to ${label} during the day and voicemail after hours.` : result.message, department.user_id);
   return result;
 }
@@ -538,6 +548,7 @@ function savedNumbers() {
   return [
     ...(database.prepare("SELECT number FROM pbx_extensions WHERE status != 'removed'").all() as { number: string }[]),
     ...(database.prepare("SELECT number FROM call_groups").all() as { number: string }[]),
+    ...(database.prepare("SELECT number FROM ai_receptionists WHERE number != ''").all() as { number: string }[]),
   ].map((item) => item.number);
 }
 
