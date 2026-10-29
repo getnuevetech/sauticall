@@ -171,6 +171,44 @@ export function trunkSmallBody(input: {
   };
 }
 
+const READ_ONLY = new Set(["ConfigurationIssue", "Groups", "IsOnline", "RoutingRules"]);
+
+export function trunkReadyBody(input: {
+  seed: Record<string, unknown> | null;
+  name: string;
+  number: string;
+  authId: string;
+  password: string;
+  host: string;
+  template?: string;
+}) {
+  const number = digits(input.number);
+  const body = normalizeTrunk(input.seed ? structuredClone(input.seed) : {}) as Record<string, unknown>;
+  body["@odata.type"] = "#Pbx.Trunk";
+  body.Name = input.name;
+  if (number) body.ExternalNumber = number;
+  body.AuthID = input.authId;
+  if ("AuthUser" in body) body.AuthUser = input.authId;
+  if (body.UseSeparateAuthId === true) body.SeparateAuthId = input.authId;
+  body.AuthPassword = { "@odata.type": "#Pbx.ConcealedPassword", Value: input.password };
+  body.EnableInboundCalls = body.EnableInboundCalls !== false;
+  body.EnableOutboundCalls = body.EnableOutboundCalls !== false;
+  const gateway = body.Gateway && typeof body.Gateway === "object" && !Array.isArray(body.Gateway)
+    ? body.Gateway as Record<string, unknown>
+    : {};
+  body.Gateway = gateway;
+  gateway["@odata.type"] = "#Pbx.Gateway";
+  if (input.host) gateway.Host = input.host;
+  if (!gateway.Port) gateway.Port = 5060;
+  if (!gateway.TemplateFilename && input.template) gateway.TemplateFilename = input.template;
+  body.DidNumbers = { "@odata.type": "#Collection(String)", delta: number ? [number] : [] };
+  return dropEmptyDeltas(body) as Record<string, unknown>;
+}
+
+export function trunkArrayBody(body: Record<string, unknown>) {
+  return unwrapDeltas(structuredClone(body)) as Record<string, unknown>;
+}
+
 export function trunkReplayBody(input: {
   seed: Record<string, unknown> | null;
   name: string;
@@ -389,8 +427,53 @@ function isCollection(record: Record<string, unknown>) {
 
 function collectionItems(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
-  if (value && typeof value === "object" && Array.isArray((value as { delta?: unknown }).delta)) return (value as { delta: unknown[] }).delta;
+  if (!value || typeof value !== "object") return [];
+  const record = value as { delta?: unknown; value?: unknown };
+  if (Array.isArray(record.delta)) return record.delta;
+  if (Array.isArray(record.value)) return record.value;
   return [];
+}
+
+function normalizeTrunk(value: unknown, key = ""): unknown {
+  if (Array.isArray(value)) return collectionRecord(key, value.map((item) => normalizeTrunk(item, "")));
+  if (value === null || value === undefined || typeof value !== "object") {
+    if (typeof value === "string" && value.trim() === "" && BLANK_KEYS.has(key)) return undefined;
+    if ((key === "ExternalNumber" || key === "OutboundCallerID" || key === "E164CountryCode") && typeof value === "string") {
+      const next = digits(value);
+      return next || undefined;
+    }
+    return value;
+  }
+  const record = value as Record<string, unknown>;
+  if (isCollection(record) || COLLECTION_TYPES[key]) return collectionRecord(key, collectionItems(record).map((item) => normalizeTrunk(item, "")));
+  const next: Record<string, unknown> = {};
+  for (const [childKey, child] of Object.entries(record)) {
+    if ((childKey.startsWith("@") && childKey !== "@odata.type") || READ_ONLY.has(childKey)) continue;
+    if (child === null || child === undefined) continue;
+    const copied = normalizeTrunk(child, childKey);
+    if (copied !== undefined) next[childKey] = copied;
+  }
+  return next;
+}
+
+function collectionRecord(key: string, items: unknown[]) {
+  const type = COLLECTION_TYPES[key] || "#Collection(String)";
+  const itemType = GATEWAY_ITEM_TYPES[key] || TRUNK_ITEM_TYPES[key] || "";
+  const delta = itemType ? tagItems(items, itemType) : items;
+  return { "@odata.type": type, delta };
+}
+
+function unwrapDeltas(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(unwrapDeltas);
+  if (!value || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.delta)) return record.delta.map(unwrapDeltas);
+  const next: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(record)) {
+    if (key.startsWith("@") && key !== "@odata.type") continue;
+    next[key] = unwrapDeltas(child);
+  }
+  return next;
 }
 
 function text(value: unknown) {

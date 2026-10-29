@@ -8,7 +8,7 @@ import { enforceUser } from "./minutes";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "./outbound-rule";
 import { extensionRange, paidPlan, readExtensionPlan } from "./pbx";
 import { firstListedId, idFromPbx } from "./pbx-id";
-import { mentionsDelta, trunkContentTypes, trunkGroupBody, trunkReplayBody, trunkServiceBody, trunkShape, trunkSmallBody, wrapCollections } from "./trunk-body";
+import { mentionsDelta, trunkArrayBody, trunkGroupBody, trunkReadyBody, trunkShape, trunkSmallBody, wrapCollections } from "./trunk-body";
 import { acceptedDepartmentName } from "./pbx-user";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
@@ -128,11 +128,10 @@ export async function attachTrunk(lineId: number) {
     host: sub.sip_host || "",
     template,
   };
-  const service = trunkServiceBody(trunkInput);
-  const replay = trunkReplayBody(trunkInput);
+  const ready = trunkReadyBody(trunkInput);
   const attempts = [
-    ["service", service, "application/json"],
-    ["replay", replay, trunkContentTypes[0][1]],
+    ["ready", ready, "application/json"],
+    ["arrays", trunkArrayBody(ready), "application/json"],
     ["small", trunkSmallBody(trunkInput), "application/json"],
   ] as const;
   let created = trunkId
@@ -147,7 +146,7 @@ export async function attachTrunk(lineId: number) {
     trunkId = idFromPbx(created.body, created.location);
     failures.push(`${label}: ${created.message}`);
   }
-  if (!created.ok || !trunkId) failures.unshift(`shape ${trunkShape(service).slice(0, 500)}`);
+  if (!created.ok || !trunkId) failures.unshift(`shape ${trunkShape(ready).slice(0, 700)}`);
   if (!seeded.ok) failures.push(`template request: ${seeded.message || "3CX did not return a trunk template."}`);
   if (!created.ok || !trunkId) {
     const note = `VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"} is ready. 3CX did not add the trunk. Add it on the server for ${department?.name || departmentName(line.user_id)}, route inbound ${line.did} to extension ${extension}, and add an outbound rule limited to extensions ${span.from}–${span.to}. ${hideSecret(failures.filter(Boolean).join(" | "), sub.password)}`;
