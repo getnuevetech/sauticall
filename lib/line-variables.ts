@@ -90,6 +90,55 @@ export function resolveVariable(variable: Pick<LineVariable, "adminValue" | "aud
   return admin;
 }
 
+export function lineOverride(base: string, override: string) {
+  return override.trim() === "" ? base : override;
+}
+
+export function audienceLabel(audience: Audience) {
+  if (audience === "both") return "Both · team value wins";
+  if (audience === "customer") return "Customer";
+  return "Team only";
+}
+
+export function variableValueLabel(variable: Pick<LineVariable, "key" | "kind" | "adminValue">) {
+  const value = variable.adminValue.trim();
+  if (variable.key === "lock_international") {
+    if (value === "1") return "On";
+    if (value === "0") return "Off";
+    if (!value) return "Not set";
+  }
+  if (!value) return "Not set";
+  if (variable.kind === "days") return `${value} ${value === "1" ? "day" : "days"}`;
+  return value;
+}
+
+export function precedenceNote(variable: Pick<LineVariable, "key" | "audience">) {
+  const billing = variable.key === "billing_days";
+  const fallback = billing ? "A blank value uses the 30-day billing fallback." : "If it is not set, the phone-connection default is used.";
+  if (variable.audience === "both") return `When a team value is set, it takes priority over a customer value. If it is not set, the customer value is used. ${fallback}`;
+  if (variable.audience === "customer") return `A customer value is used when they set one. Otherwise the team value is used. ${fallback}`;
+  return `Only the team can set this. ${fallback}`;
+}
+
+export function variableScope(key: string) {
+  if (key === "billing_days") return "Used for the next billing date when a line account is created. Saving it does not change an account that already exists.";
+  return "Sent when a new line account is created. Saving it does not change a line account that already exists.";
+}
+
+export function variableField(key: string) {
+  if (key === "billing_days") return "reseller_nextbilling";
+  return key;
+}
+
+export function variableUpdates(current: { key: string; adminValue: string; audience: string }[], fields: Record<string, string | undefined>) {
+  return current.flatMap((item) => {
+    const value = fields[`value_${item.key}`];
+    const audience = fields[`audience_${item.key}`];
+    if (value == null && audience == null) return [];
+    return [{ key: item.key, adminValue: value ?? item.adminValue, audience: audience ?? item.audience }];
+  });
+}
+
 export function customerCanEdit(variable: Pick<LineVariable, "adminValue" | "audience">) {
   if (variable.audience === "customer") return true;
   return variable.audience === "both" && !variable.adminValue.trim();

@@ -20,8 +20,8 @@ export const PERMISSIONS: Permission[] = [
   { key: "settings.theme", group: "Website", label: "Colors and font", description: "Change colors, font, and the logo address." },
   { key: "inbox.media", group: "Website", label: "Images", description: "Upload pictures for the site." },
   { key: "blog.manage", group: "Website", label: "FAQ articles", description: "Write, publish, and unpublish FAQ articles." },
-  { key: "settings.payments", group: "Integrations", label: "Payment APIs", description: "Add and check Stripe, PayPal, and Square." },
-  { key: "settings.connections", group: "Integrations", label: "Phone connections", description: "Save VoIP.ms and 3CX credentials." },
+  { key: "settings.payments", group: "Integrations", label: "Payments", description: "Add and check Stripe, PayPal, and Square." },
+  { key: "settings.connections", group: "Integrations", label: "System connections", description: "Save VoIP.ms and 3CX credentials." },
   { key: "settings.flags", group: "Integrations", label: "Live switches", description: "Turn live ordering, provisioning, and other customer features on or off." },
   { key: "settings.phone", group: "Phone", label: "Extensions and groups", description: "Choose where extension numbers start. How many a customer can add is set on each plan." },
   { key: "settings.lines", group: "Phone", label: "Lines and trunks", description: "See purchased numbers, trunks, emergency addresses, and call-minute limits." },
@@ -140,9 +140,9 @@ export const ADMIN_NAV: { title: string; links: AdminLink[] }[] = [
   {
     title: "Integrations",
     links: [
-      { label: "Phone connections", href: "/admin/connections", permission: "settings.connections" },
+      { label: "System connections", href: "/admin/connections", permission: "settings.connections" },
+      { label: "Payments", href: "/admin/gateways", permission: "settings.payments" },
       { label: "Line variables", href: "/admin/variables", permission: "settings.connections" },
-      { label: "Payment APIs", href: "/admin/gateways", permission: "settings.payments" },
     ],
   },
   {

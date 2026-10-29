@@ -2,7 +2,7 @@ import { callVoipms, getConnection, VOIPMS_READ_MS, VOIPMS_WRITE_MS } from "./ca
 import { getDb } from "./db";
 import { DEFAULT_LINE_CODECS, lineCodecs } from "./line-codecs";
 import { planPaidAt, resolvedLineValue } from "./line-variable-store";
-import { nextBillingDate } from "./line-variables";
+import { lineOverride, nextBillingDate } from "./line-variables";
 import { chooseResellerPackage } from "./reseller-package";
 import { readOutboundCalls, type CdrCall } from "./minute-math";
 import { appPassword } from "./pbx";
@@ -48,8 +48,8 @@ function settingsFromConnection(userId = 0): Settings {
   if (!userId) return settings;
   for (const key of ["device_type", "lock_international", "international_route", "music_on_hold", "allowed_codecs", "dtmf_mode", "nat"]) {
     const value = resolvedLineValue(userId, key);
-    if (!value) continue;
-    settings[key] = key === "allowed_codecs" ? lineCodecs(value) : value;
+    if (value.trim() === "") continue;
+    settings[key] = key === "allowed_codecs" ? lineCodecs(lineOverride(settings[key] || "", value)) : lineOverride(settings[key] || "", value);
   }
   return settings;
 }
