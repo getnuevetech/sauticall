@@ -357,10 +357,10 @@ export function saveTopic(id: number, name: string, groupId: number, enabled: bo
   if (!label || !group) return { ok: false, message: "A topic needs a name and a group." };
   if (id) {
     getDb().prepare("UPDATE ticket_topics SET name = ?, group_id = ?, enabled = ? WHERE id = ?").run(label, group.id, enabled ? 1 : 0, id);
-    return { ok: true };
+    return { ok: true, id };
   }
-  getDb().prepare("INSERT INTO ticket_topics (name, group_id, enabled) VALUES (?, ?, ?)").run(label, group.id, enabled ? 1 : 0);
-  return { ok: true };
+  const info = getDb().prepare("INSERT INTO ticket_topics (name, group_id, enabled) VALUES (?, ?, ?)").run(label, group.id, enabled ? 1 : 0);
+  return { ok: true, id: Number(info.lastInsertRowid) };
 }
 
 export function saveMail(input: { host: string; port: number; user: string; pass: string; from: string; secure: boolean }) {

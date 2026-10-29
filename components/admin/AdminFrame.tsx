@@ -57,8 +57,8 @@ export function AdminFrame({
     <div className={`admin-portal${open ? " nav-open" : ""}`}>
       <aside className="ap-side">
         <Link className="ap-brand" href="/admin" onClick={() => setOpen(false)}>
-          <span>SautiCall</span>
-          <small>Admin portal</small>
+          <span className="ap-logo" aria-hidden="true"><i /><i /><i /></span>
+          <span>SautiCall<small>Admin portal</small></span>
         </Link>
         <nav className="ap-nav" aria-label="Admin">
           <Link href="/admin" data-current={path === "/admin" ? "true" : undefined} onClick={() => setOpen(false)}>Overview</Link>
