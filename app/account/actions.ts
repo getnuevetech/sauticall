@@ -85,6 +85,8 @@ export async function register(_previous: FormState, formData: FormData) {
       .run(user.id, JSON.stringify({ plan: planName, prompt: setup }), now);
   }
   await createSession(user.id, false);
+  const id = user.id;
+  finishAfterResponse(() => import("@/lib/voip-client").then(({ ensureVoipClient }) => ensureVoipClient(id)));
   const { requestOrigin } = await import("@/lib/payments");
   const { sendAccountEmail } = await import("@/lib/account-verify");
   const origin = await requestOrigin();

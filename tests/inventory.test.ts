@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clientEmail, clientPhone, clientPlace, personName, readVoipClientId } from "../lib/client-profile.ts";
+import { accountClientProfile, clientEmail, clientPhone, clientPlace, personName, readVoipClientId } from "../lib/client-profile.ts";
 import { customerMessage, customerRequestStatus } from "../lib/customer-message.ts";
 import { didMatches, parseDigitSearch } from "../lib/did-search.ts";
 import { didInfoIsAbsent, lookupMayOrder, normalizeRequestedDid, readDids } from "../lib/did-list.ts";
@@ -84,6 +84,18 @@ test("a VoIP.ms client stays tied to the SautiCall customer", () => {
   assert.equal(customer.address, "15211 Park Row");
   assert.equal(customer.phone, "2025550199");
   assert.equal(clientPlace({ customer: { phone: "2025550199" }, fallback: { phone: "7135550100" } }).phone, "2025550199");
+  const signup = accountClientProfile({
+    name: "Ada Customer",
+    phone: "+1 202 555 0199",
+    address: { country: "US", state: "TX", city: "Houston", address: "15211 Park Row", zip: "77084" },
+  });
+  assert.equal(signup.ok, true);
+  if (signup.ok) {
+    assert.equal(signup.profile.first, "Ada");
+    assert.equal(signup.profile.phone, "2025550199");
+    assert.equal(signup.profile.address, "15211 Park Row");
+  }
+  assert.equal(accountClientProfile({ name: "Ada", phone: "" }).ok, false);
   assert.equal(readVoipClientId({ client: 561115 }), "561115");
   assert.equal(readVoipClientId({ clients: [{ client: 42, email: "a@b.c" }] }), "42");
 });
