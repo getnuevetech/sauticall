@@ -41,6 +41,29 @@ export function clientPlace(input: {
   };
 }
 
+export function accountClientProfile(input: {
+  name: string;
+  phone: string;
+  address?: { country?: string; state?: string; city?: string; address?: string; zip?: string } | null;
+  fallback?: { country?: string; state?: string; city?: string; address?: string; zip?: string; phone?: string };
+}) {
+  const phone = clientPhone(input.phone);
+  if (!phone) return { ok: false as const, message: "Add a mobile number before the client account can be created." };
+  const address = input.address;
+  const place = clientPlace({
+    customer: {
+      country: address?.country,
+      state: address?.state,
+      city: address?.city,
+      address: address?.address,
+      zip: address?.zip,
+      phone,
+    },
+    fallback: input.fallback,
+  });
+  return { ok: true as const, profile: { ...personName(input.name), ...place } };
+}
+
 export function personName(full: string) {
   const parts = full.trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return { first: "SautiCall", last: "Customer" };
