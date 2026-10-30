@@ -390,6 +390,8 @@ function migrate(database: Database.Database) {
   if (!userCols.has("phone_verified_at")) database.exec("ALTER TABLE users ADD COLUMN phone_verified_at TEXT NOT NULL DEFAULT ''");
   if (!userCols.has("email_verified_at")) database.exec("ALTER TABLE users ADD COLUMN email_verified_at TEXT NOT NULL DEFAULT ''");
   if (!userCols.has("terms_accepted_at")) database.exec("ALTER TABLE users ADD COLUMN terms_accepted_at TEXT NOT NULL DEFAULT ''");
+  if (!userCols.has("customer_code")) database.exec("ALTER TABLE users ADD COLUMN customer_code TEXT NOT NULL DEFAULT ''");
+  database.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_customer_code ON users(customer_code) WHERE customer_code != ''");
   database.exec(`
     CREATE TABLE IF NOT EXISTS verification_challenges (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./design.css";
 import "./public.css";
 import { ClickAck } from "@/components/site/ClickAck";
+import { scheduleOutstandingClients } from "@/lib/voip-client";
 import { loadSite } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  scheduleOutstandingClients();
   return (
     <html lang="en">
       <body>

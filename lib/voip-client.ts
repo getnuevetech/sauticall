@@ -1,6 +1,9 @@
 import crypto from "crypto";
-import { planFundAmount, readClientBalance } from "./client-funding";
+import { fundNeedsRetry, fundRetryDetail, planFundAmount, readClientBalance } from "./client-funding";
+import { recordFailure, updateFailure } from "./failure-log";
+import { finishAfterResponse } from "./later";
 import { accountClientProfile, clientEmail, readVoipClientId } from "./client-profile";
+import { ensureCustomerCode } from "./customer-code-store";
 import { callVoipms, getConnection, VOIPMS_WRITE_MS } from "./carriers";
 import { flagOn, getDb, readDoc } from "./db";
 import type { Plan } from "./types";
@@ -52,7 +55,8 @@ function profileFor(userId: number) {
   if (!built.ok) return built;
   const place = built.profile;
   if (!regionAllowed(place.country, place.state)) place.state = place.country === "CA" ? "ON" : "TX";
-  const email = clientEmail(userId, user.email, config.client_email_domain || "");
+  const email = clientEmail(ensureCustomerCode(userId), user.email);
+  if (!email) return { ok: false as const, message: "This customer has no customer ID yet, so VoIP.ms was not given an email. The customer's email is not sent to VoIP.ms." };
   return { ok: true as const, profile: { ...place, email } };
 }
 
@@ -118,9 +122,10 @@ export async function ensureVoipClient(userId: number, refresh = false): Promise
   const existing = getVoipClient(userId);
   if (existing?.client_id && !refresh) return { ok: true, clientId: existing.client_id };
   const connection = getConnection("voipms");
+  const mailbox = clientEmail(ensureCustomerCode(userId), "");
   if (!connection.enabled || !connection.secret || !connection.public.api_username) {
     const message = "VoIP.ms is not connected, so a client account was not created.";
-    if (!existing?.client_id) saveClient({ userId, clientId: "", email: "", password: "", message });
+    if (!existing?.client_id) saveClient({ userId, clientId: "", email: mailbox, password: "", message });
     return { ok: false, message };
   }
   const built = profileFor(userId);
@@ -220,6 +225,43 @@ export async function fundPaidPlan(userId: number, planName: string) {
   const message = `Client ${client.clientId} has a $${amount.toFixed(2)} balance for ${plan}.`;
   note(userId, message);
   return { ok: true as const, message };
+}
+
+export async function fundPaidPlanWithRetry(userId: number, planName: string) {
+  const first = await fundPaidPlan(userId, planName).catch((error: unknown) => ({
+    ok: false as const,
+    message: error instanceof Error ? error.message : "The plan balance was not added to the VoIP.ms client.",
+  }));
+  if (first.ok) return first;
+  if (!fundNeedsRetry(first.message)) {
+    recordFailure({ area: "client", userId, subject: planName, detail: `${first.message} An administrator has to fix this.` });
+    return first;
+  }
+  const failureId = recordFailure({ area: "client", userId, subject: planName, detail: first.message });
+  const second = await fundPaidPlan(userId, planName).catch((error: unknown) => ({
+    ok: false as const,
+    message: error instanceof Error ? error.message : "The plan balance was not added to the VoIP.ms client.",
+  }));
+  const detail = fundRetryDetail(first.message, second.ok, second.message);
+  updateFailure(failureId, detail);
+  return second.ok ? { ok: true as const, message: detail } : { ok: false as const, message: detail };
+}
+
+export async function ensureOutstandingClients() {
+  const rows = getDb().prepare(
+    `SELECT u.id FROM users u
+     LEFT JOIN voip_clients c ON c.user_id = u.id
+     WHERE u.role = 'customer' AND (c.user_id IS NULL OR c.client_id = '')`,
+  ).all() as { id: number }[];
+  for (const row of rows) await ensureVoipClient(row.id);
+}
+
+let clientSweepStarted = false;
+
+export function scheduleOutstandingClients() {
+  if (clientSweepStarted) return;
+  clientSweepStarted = true;
+  finishAfterResponse(() => ensureOutstandingClients());
 }
 
 export async function provisionCustomer(userId: number) {

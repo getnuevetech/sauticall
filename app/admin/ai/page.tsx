@@ -3,6 +3,7 @@ import { AiSectionNav } from "@/components/admin/AiSectionNav";
 import { requirePermission } from "@/lib/access";
 import { AI_ENGINE_KINDS, AI_FUNCTIONS, featureReady } from "@/lib/ai-system";
 import { enabledSwitchCodes, listAiAssignments, listAiEngines, listAiSwitches } from "@/lib/ai-store";
+import { flagOn } from "@/lib/db";
 import { removeAiEngine, saveAiAssignmentForm, saveAiEngineForm, saveAiSwitchForm } from "./actions";
 
 const KIND_LABEL: Record<string, string> = { tts: "Text to voice", stt: "Speech to text", llm: "Language model" };
@@ -29,6 +30,7 @@ export default async function AiSystemPage({ searchParams }: { searchParams: Pro
         <h1>AI System</h1>
         <AiSectionNav current="system" />
         <p>Turn services on or off, register each model, and choose which model does each job. Settings apply after you save.</p>
+        <p>Outbound tests use the customer's 3CX extension and trunk. {flagOn("pbx.live_trunk") ? "Adding that trunk is on." : "Adding that trunk is off."} {flagOn("pbx.voipms_backup") ? "VoIP.ms backup is on and uses the customer's client after a confirmed trunk failure." : "VoIP.ms backup is off. Only an administrator can turn it on in Platform controls."} Nothing on this page places a call.</p>
         {notice ? <p className="form-feedback">{notice}</p> : null}
         {query.error ? <p className="ops-alert">{query.error}</p> : null}
         <form action={saveAiSwitchForm} className="ops-card">

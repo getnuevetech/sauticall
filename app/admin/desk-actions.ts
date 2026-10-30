@@ -152,8 +152,8 @@ export async function fundPaidClient(formData: FormData) {
   const path = accountPath(id, "customers");
   const paid = getDb().prepare("SELECT plan_name FROM payment_attempts WHERE user_id = ? AND status = 'paid' AND product_kind != 'bundle' AND plan_name != '' ORDER BY id DESC LIMIT 1").get(id) as { plan_name: string } | undefined;
   if (!paid) back(path, "This customer has no confirmed plan payment.");
-  const { fundPaidPlan } = await import("@/lib/voip-client");
-  const result = await fundPaidPlan(id, paid.plan_name);
+  const { fundPaidPlanWithRetry } = await import("@/lib/voip-client");
+  const result = await fundPaidPlanWithRetry(id, paid.plan_name);
   audit(actor.email, "voip.fund", `${id}:${result.ok ? "ok" : "failed"}`);
   if (!result.ok) back(path, result.message);
   redirect(`${path}?saved=${encodeURIComponent(result.message)}`);

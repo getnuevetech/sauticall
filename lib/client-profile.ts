@@ -1,3 +1,5 @@
+import { clientMailbox } from "./customer-code.ts";
+
 export type ClientPlace = {
   address: string;
   city: string;
@@ -71,10 +73,11 @@ export function personName(full: string) {
   return { first: parts[0].slice(0, 40), last: parts.slice(1).join(" ").slice(0, 40) };
 }
 
-export function clientEmail(userId: number, email: string, domain: string) {
-  const host = domain.trim().toLowerCase().replace(/^@/, "");
-  if (/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host)) return `customer-${userId}@${host}`;
-  return email.trim().toLowerCase();
+export function clientEmail(code: string, personalEmail: string) {
+  const mailbox = clientMailbox(code);
+  if (!mailbox) return "";
+  if (personalEmail && mailbox.toLowerCase() === personalEmail.trim().toLowerCase()) return "";
+  return mailbox;
 }
 
 export function readVoipClientId(body: unknown) {
