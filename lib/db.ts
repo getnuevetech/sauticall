@@ -505,6 +505,56 @@ function migrate(database: Database.Database) {
       storage_name TEXT NOT NULL UNIQUE,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS ai_notify_policy (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      repeats INTEGER NOT NULL DEFAULT 1,
+      promo_enabled INTEGER NOT NULL DEFAULT 0,
+      window_start TEXT NOT NULL DEFAULT '',
+      window_end TEXT NOT NULL DEFAULT '',
+      time_zone TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS ai_notify_purposes (
+      code TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      promotional INTEGER NOT NULL DEFAULT 0,
+      enabled INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS ai_suppressions (
+      user_id INTEGER NOT NULL,
+      e164 TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, e164)
+    );
+    CREATE TABLE IF NOT EXISTS ai_campaigns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      purpose_code TEXT NOT NULL,
+      business_name TEXT NOT NULL,
+      caller_id TEXT NOT NULL,
+      clip_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ai_recipients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      person_name TEXT NOT NULL DEFAULT '',
+      e164 TEXT NOT NULL,
+      consent TEXT NOT NULL DEFAULT '',
+      outcome TEXT NOT NULL DEFAULT 'pending',
+      phase TEXT NOT NULL DEFAULT 'idle',
+      repeats_left INTEGER NOT NULL DEFAULT 0,
+      content_played INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ai_listen_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      recipient_id INTEGER NOT NULL,
+      event TEXT NOT NULL,
+      outcome TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `);
   const insertSwitch = database.prepare("INSERT INTO ai_switches (code, enabled, updated_at) VALUES (?, 0, '') ON CONFLICT(code) DO NOTHING");
   for (const item of AI_SWITCHES) insertSwitch.run(item.code);
@@ -512,6 +562,7 @@ function migrate(database: Database.Database) {
   database.prepare("INSERT INTO ai_agreements (feature_code, version, title, body, digest, updated_at) VALUES ('notifications', 1, ?, ?, ?, '') ON CONFLICT(feature_code, version) DO NOTHING")
     .run(draft.title, draft.body, agreementDigest(draft.title, draft.body));
   database.prepare("INSERT INTO ai_audio_policy (id, max_seconds, max_bytes, retention_days, preview_enabled) VALUES (1, 60, 2000000, 365, 0) ON CONFLICT(id) DO NOTHING").run();
+  database.prepare("INSERT INTO ai_notify_policy (id, repeats, promo_enabled, window_start, window_end, time_zone) VALUES (1, 1, 0, '', '', '') ON CONFLICT(id) DO NOTHING").run();
   const extensionCols = new Set((database.prepare("PRAGMA table_info(pbx_extensions)").all() as { name: string }[]).map((column) => column.name));
   if (!extensionCols.has("former_number")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN former_number TEXT NOT NULL DEFAULT ''");
   if (!extensionCols.has("removed_at")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN removed_at TEXT NOT NULL DEFAULT ''");
