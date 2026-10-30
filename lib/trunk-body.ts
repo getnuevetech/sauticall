@@ -108,6 +108,66 @@ export function mentionsDelta(message: string) {
   return /delta/i.test(message);
 }
 
+export function trunkPlainBody(input: {
+  seed: Record<string, unknown> | null;
+  name: string;
+  number: string;
+  authId: string;
+  password: string;
+  host: string;
+  template?: string;
+}) {
+  const number = digits(input.number);
+  const body = sanitizeTrunk(toPlainArrays(input.seed ? structuredClone(input.seed) : {}), "") as Record<string, unknown>;
+  for (const key of OMITTED) delete body[key];
+  body.Name = input.name;
+  if (number) body.ExternalNumber = number;
+  body.AuthID = input.authId;
+  if ("AuthUser" in body) body.AuthUser = input.authId;
+  body.AuthPassword = { Value: input.password };
+  const gateway = body.Gateway && typeof body.Gateway === "object" && !Array.isArray(body.Gateway)
+    ? body.Gateway as Record<string, unknown>
+    : {};
+  body.Gateway = gateway;
+  if (input.host) gateway.Host = input.host;
+  if (!gateway.Port) gateway.Port = 5060;
+  if (!gateway.Name) gateway.Name = "VoIP.ms";
+  if (!gateway.TemplateFilename && input.template) gateway.TemplateFilename = input.template;
+  if (number) body.DidNumbers = [number];
+  return body;
+}
+
+export function trunkClientBody(input: {
+  seed: Record<string, unknown> | null;
+  name: string;
+  number: string;
+  authId: string;
+  password: string;
+  host: string;
+  template?: string;
+}) {
+  const number = digits(input.number);
+  const body = input.seed ? structuredClone(input.seed) : {
+    "@odata.type": "#Pbx.Trunk",
+    Gateway: { "@odata.type": "#Pbx.Gateway", Name: "VoIP.ms", Port: 5060, TemplateFilename: input.template || "GenericSIPTrunk.pv.xml" },
+  };
+  body.Name = input.name;
+  if (number) body.ExternalNumber = number;
+  body.AuthID = input.authId;
+  if ("AuthUser" in body) body.AuthUser = input.authId;
+  body.AuthPassword = { Value: input.password };
+  const gateway = body.Gateway && typeof body.Gateway === "object" && !Array.isArray(body.Gateway)
+    ? body.Gateway as Record<string, unknown>
+    : {};
+  body.Gateway = gateway;
+  if (input.host) gateway.Host = input.host;
+  if (!gateway.Port) gateway.Port = 5060;
+  if (!gateway.Name) gateway.Name = "VoIP.ms";
+  if (!gateway.TemplateFilename && input.template) gateway.TemplateFilename = input.template;
+  if (number) placeDid(body, number);
+  return promoteCollections(body) as Record<string, unknown>;
+}
+
 export function trunkServiceBody(input: {
   seed: Record<string, unknown> | null;
   name: string;
@@ -248,7 +308,7 @@ export function trunkLeanBody(ready: Record<string, unknown>) {
 
 export function trunkFailureText(failures: string[], shape: string) {
   const errors = failures.filter(Boolean).map((item) => item.replace(/\s+/g, " ").trim().slice(0, 220)).join(" | ");
-  return `${errors} | shape ${shape.slice(0, 180)}`;
+  return `${errors} | shape ${shape.slice(0, 420)}`;
 }
 
 export function trunkArrayBody(body: Record<string, unknown>) {
@@ -328,6 +388,7 @@ const BLANK_KEYS = new Set([
 export const trunkContentTypes = [
   ["odata", "application/json;odata.metadata=minimal;odata.streaming=true;IEEE754Compatible=false"],
   ["minimal", "application/json;odata.metadata=minimal"],
+  ["charset", "application/json;odata.metadata=minimal;odata.streaming=true;IEEE754Compatible=false;charset=utf-8"],
 ] as const;
 
 export function trunkPostBody(body: Record<string, unknown>) {
@@ -470,6 +531,58 @@ function present(value: unknown) {
 function isCollection(record: Record<string, unknown>) {
   if ("delta" in record) return true;
   return /Collection\(/i.test(`${text(record["@odata.type"])} ${text(record["@odata.context"])}`);
+}
+
+function toPlainArrays(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(toPlainArrays);
+  if (!value || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  if (needsDelta(record) || Array.isArray(record.delta)) return collectionItems(record).map(toPlainArrays);
+  const next: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(record)) {
+    if (key.startsWith("@") || key.includes("@odata.")) continue;
+    const copied = toPlainArrays(child);
+    if (copied !== undefined) next[key] = copied;
+  }
+  return next;
+}
+
+function promoteCollections(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(promoteCollections);
+  if (!value || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  if (needsDelta(record)) {
+    const items = collectionItems(record).map(promoteCollections);
+    const type = collectionType(record);
+    const next: Record<string, unknown> = {};
+    if (type) next["@odata.type"] = type;
+    next.delta = items;
+    return next;
+  }
+  const next: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(record)) {
+    if (key !== "@odata.type" && (key.startsWith("@") || key.includes("@odata."))) continue;
+    const copied = promoteCollections(child);
+    if (Array.isArray(copied) && COLLECTION_TYPES[key]) {
+      next[key] = { "@odata.type": COLLECTION_TYPES[key], delta: copied };
+      continue;
+    }
+    if (copied !== undefined) next[key] = copied;
+  }
+  return next;
+}
+
+function needsDelta(record: Record<string, unknown>) {
+  const type = `${text(record["@odata.type"])} ${text(record["@odata.context"])}`;
+  if (/Collection\(/i.test(type)) return true;
+  return Array.isArray(record.value) && ("@odata.context" in record || "@odata.type" in record);
+}
+
+function collectionType(record: Record<string, unknown>) {
+  const explicit = text(record["@odata.type"]);
+  if (/Collection\(/i.test(explicit)) return explicit.startsWith("#") ? explicit : `#${explicit}`;
+  const match = text(record["@odata.context"]).match(/#(Collection\([^)]+\))/);
+  return match ? `#${match[1]}` : "";
 }
 
 function collectionItems(value: unknown): unknown[] {

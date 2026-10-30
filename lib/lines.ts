@@ -8,7 +8,7 @@ import { enforceUser } from "./minutes";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "./outbound-rule";
 import { extensionRange, paidPlan, readExtensionPlan } from "./pbx";
 import { firstListedId, idFromPbx } from "./pbx-id";
-import { mentionsDelta, trunkArrayBody, trunkFailureText, trunkGroupBody, trunkLeanBody, trunkReadyBody, trunkShape, wrapCollections } from "./trunk-body";
+import { mentionsDelta, trunkClientBody, trunkContentTypes, trunkFailureText, trunkGroupBody, trunkLeanBody, trunkPlainBody, trunkReadyBody, trunkShape, wrapCollections } from "./trunk-body";
 import { acceptedDepartmentName } from "./pbx-user";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
@@ -46,6 +46,18 @@ function openTask(lineId: number, userId: number, did: string, note: string) {
   getDb().prepare("UPDATE phone_lines SET status = 'trunk_waiting', last_message = ? WHERE id = ?").run(note.slice(0, 2000), lineId);
 }
 
+function trunkAccept(contentType: string) {
+  if (!contentType.includes("odata.")) return undefined;
+  return { accept: trunkContentTypes[0][1] };
+}
+
+async function pbxWrite(path: string, init: { method?: string; body?: unknown }) {
+  const charset = trunkContentTypes[2][1];
+  const first = await pbxRequest(path, { ...init, contentType: charset, headers: trunkAccept(charset) });
+  if (first.ok || (first.status !== 415 && !(first.status === 400 && mentionsDelta(first.message || "")))) return first;
+  return pbxRequest(path, init);
+}
+
 function extensionSpan(userId: number) {
   const department = getDb().prepare("SELECT number_from, number_to FROM pbx_departments WHERE user_id = ?").get(userId) as { number_from: string; number_to: string } | undefined;
   if (department && /^\d+$/.test(department.number_from) && /^\d+$/.test(department.number_to)) return { from: department.number_from, to: department.number_to };
@@ -56,12 +68,12 @@ function extensionSpan(userId: number) {
 async function addOutboundRule(input: { name: string; trunkId: number; callerId: string; from: string; to: string }) {
   const listed = await pbxRequest("OutboundRules?$select=Priority&$top=100");
   const ruleBody = outboundRuleBody({ ...input, priority: nextOutboundPriority(listed.body) });
-  let created = await pbxRequest("OutboundRules", {
+  let created = await pbxWrite("OutboundRules", {
     method: "POST",
     body: ruleBody,
   });
   if (!created.ok && mentionsDelta(created.message || "")) {
-    created = await pbxRequest("OutboundRules", {
+    created = await pbxWrite("OutboundRules", {
       method: "POST",
       body: wrapCollections(ruleBody, ["Routes", "DNRanges"]),
     });
@@ -130,26 +142,32 @@ export async function attachTrunk(lineId: number) {
   };
   const ready = trunkReadyBody(trunkInput);
   const lean = trunkLeanBody(ready);
+  const plain = trunkPlainBody(trunkInput);
+  const client = trunkClientBody(trunkInput);
+  const charset = trunkContentTypes[2][1];
+  const odata = trunkContentTypes[0][1];
   const attempts = [
-    ["lean", lean, "application/json"],
-    ["arrays", trunkArrayBody(lean), "application/json"],
-    ["template", ready, "application/json"],
+    ["plain", plain, charset],
+    ["plain-json", plain, "application/json"],
+    ["client", client, charset],
+    ["lean", lean, charset],
+    ["template", ready, odata],
   ] as const;
   let created = trunkId
     ? { ok: true, status: 200, message: "An existing trunk was found and was not created again.", body: null, location: "" }
-    : await pbxRequest("Trunks", { method: "POST", body: attempts[0][1], contentType: attempts[0][2] });
+    : await pbxRequest("Trunks", { method: "POST", body: attempts[0][1], contentType: attempts[0][2], headers: trunkAccept(attempts[0][2]) });
   if (!trunkId) trunkId = idFromPbx(created.body, created.location);
   const failures = trunkId && created.status === 200 && created.body == null ? [] : [`${attempts[0][0]}: ${created.message}`];
   for (const [label, body, contentType] of attempts.slice(1)) {
     if (created.ok && trunkId) break;
     if (created.status !== 400 && created.status !== 415) break;
-    created = await pbxRequest("Trunks", { method: "POST", body, contentType });
+    created = await pbxRequest("Trunks", { method: "POST", body, contentType, headers: trunkAccept(contentType) });
     trunkId = idFromPbx(created.body, created.location);
     failures.push(`${label}: ${created.message}`);
   }
   if (!seeded.ok) failures.push(`template request: ${seeded.message || "3CX did not return a trunk template."}`);
   if (!created.ok || !trunkId) {
-    const detail = trunkFailureText(failures, trunkShape(lean));
+    const detail = trunkFailureText(failures, trunkShape(plain));
     const note = `VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"} is ready. 3CX did not add the trunk. Add it on the server for ${department?.name || departmentName(line.user_id)}, route inbound ${line.did} to extension ${extension}, and add an outbound rule limited to extensions ${span.from}–${span.to}. ${hideSecret(detail, sub.password)}`;
     openTask(line.id, line.user_id, line.did, note);
     recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
@@ -158,16 +176,16 @@ export async function attachTrunk(lineId: number) {
   let departmentNote = "";
   if (department?.xapi_id) {
     const group = trunkGroupBody(department.xapi_id);
-    let grouped = await pbxRequest(`Trunks(${trunkId})`, { method: "PATCH", body: group });
+    let grouped = await pbxWrite(`Trunks(${trunkId})`, { method: "PATCH", body: group });
     if (!grouped.ok && grouped.status === 400) {
-      grouped = await pbxRequest(`Trunks(${trunkId})`, {
+      grouped = await pbxWrite(`Trunks(${trunkId})`, {
         method: "PATCH",
         body: { Groups: { "@odata.type": "#Collection(Pbx.UserGroup)", delta: group.Groups } },
       });
     }
     if (!grouped.ok) departmentNote = ` The trunk is not limited to ${department.name} yet.`;
   }
-  let rule = await pbxRequest("InboundRules", {
+  let rule = await pbxWrite("InboundRules", {
     method: "POST",
     body: {
       Name: `SautiCall ${line.did}`,
