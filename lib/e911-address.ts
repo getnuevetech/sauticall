@@ -52,6 +52,11 @@ export function parseEmergency(input: Record<string, string>): { ok: true; addre
   return { ok: true, address };
 }
 
+export function addressReady(address: Pick<EmergencyAddress, "street_number" | "street_name" | "city" | "state" | "country" | "zip"> | null) {
+  if (!address) return false;
+  return Boolean(address.street_number && address.street_name && address.city && address.state && (address.country === "US" || address.country === "CA") && address.zip);
+}
+
 export function formatAddress(address: EmergencyAddress) {
   const unit = address.address_type && address.address_number ? ` ${address.address_type} ${address.address_number}` : "";
   const zipText = typeof address.zip === "string" ? address.zip : "";

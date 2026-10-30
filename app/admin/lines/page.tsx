@@ -124,7 +124,7 @@ export default async function LinesPage({ searchParams }: { searchParams: Promis
           </div>
           <form action={syncMinutes}><button className="btn btn-secondary" type="submit">Read minutes</button></form>
         </div>
-        <p className="ops-muted">{reading ? "Reading call minutes is on." : "Reading call minutes is off."} {trunks ? "Adding trunks from here is on." : "Adding trunks from here is off, so a retry records the waiting step."}</p>
+        <p className="ops-muted">{reading ? "Reading call minutes is on." : "Reading call minutes is off."} {trunks ? "Adding a 3CX trunk from here is on. A retry uses the customer's SIP account and does not place a call." : "Adding trunks from here is off, so a retry records the waiting step."} {flagOn("pbx.voipms_backup") ? "VoIP.ms backup is on for a confirmed trunk failure, and it uses that customer's client." : "VoIP.ms backup is off. Only an administrator can turn it on in Platform controls."}</p>
         {params.error ? <p className="form-feedback">{params.error}</p> : null}
         {params.saved === "recorded" ? <p className="form-feedback">The note was recorded. Registration was not verified.</p> : null}
         {params.saved === "1" ? <p className="form-feedback">Call minutes were updated.</p> : null}

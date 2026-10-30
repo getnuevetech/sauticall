@@ -153,7 +153,7 @@ export async function saveConnection(formData: FormData) {
   const user = await staff("settings.connections");
   const provider = String(formData.get("provider") || "");
   if (provider !== "voipms" && provider !== "3cx") redirect("/admin/connections");
-  const { saveConnection: persist } = await import("@/lib/carriers");
+  const { getConnection, saveConnection: persist } = await import("@/lib/carriers");
   const enabled = formData.get("enabled") === "on";
   const secret = String(formData.get("secret") || "");
   if (provider === "voipms") {
@@ -172,7 +172,7 @@ export async function saveConnection(formData: FormData) {
       allowed_codecs: (await import("@/lib/line-codecs")).lineCodecs(String(formData.get("allowed_codecs") || "")),
       dtmf_mode: String(formData.get("dtmf_mode") || "auto").trim() || "auto",
       nat: String(formData.get("nat") || "yes").trim() || "yes",
-      client_email_domain: String(formData.get("client_email_domain") || "").trim().toLowerCase().replace(/^@/, ""),
+      client_email_domain: String(getConnection("voipms").public.client_email_domain || ""),
       client_phone: String(formData.get("client_phone") || "").replace(/\D/g, "").slice(0, 10),
       client_address: String(formData.get("client_address") || "").trim().slice(0, 80),
       client_city: String(formData.get("client_city") || "").trim().slice(0, 80),
@@ -190,6 +190,14 @@ export async function saveConnection(formData: FormData) {
   }
   audit(user.email, "connection.save", provider);
   redirect(`/admin/connections?provider=${provider}&saved=1`);
+}
+
+export async function savePlacesKey(formData: FormData) {
+  const user = await staff("settings.connections");
+  const { savePlacesKey: persist } = await import("@/lib/google-places");
+  persist(formData.get("enabled") === "on", String(formData.get("secret") || ""));
+  audit(user.email, "connection.save", "google");
+  redirect("/admin/connections?provider=voipms&saved=places");
 }
 
 export async function testConnection(formData: FormData) {

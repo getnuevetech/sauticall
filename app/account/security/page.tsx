@@ -11,6 +11,7 @@ import { extensionSetup } from "@/lib/account-display";
 import { customerMessage } from "@/lib/customer-message";
 import { getDb } from "@/lib/db";
 import { formatAddress, getEmergency } from "@/lib/e911";
+import { placesConfigured } from "@/lib/google-places";
 import { redirect } from "next/navigation";
 import crypto from "crypto";
 import { base32Encode } from "@/lib/auth";
@@ -37,7 +38,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
       : params.saved === "department"
         ? "Company name saved."
         : params.saved === "address"
-          ? "Address saved. It is being sent with this account."
+          ? "Address saved. It is sent to the VoIP.ms client for this account."
           : "";
   return (
     <SettingsHome
@@ -71,6 +72,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
         country: address?.country || "US",
         zip: address?.zip || "",
       }}
+      lookup={placesConfigured()}
     >
       {!user.mfa_secret ? (
         <div>

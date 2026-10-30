@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { saveConnection, testConnection } from "../actions";
+import { saveConnection, savePlacesKey, testConnection } from "../actions";
 import { PlaceSelects } from "@/components/account/PlaceSelects";
 import { SecretField } from "@/components/admin/SecretField";
 import { requirePermission } from "@/lib/access";
@@ -48,12 +48,19 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
         <p className="ops-kicker">Integrations / System connections</p>
         <h1>System connections</h1>
         <p>Configure provider access and inspect connection checks.</p>
-        {query.saved ? <p className="form-feedback">Connection saved. No number was bought and no trunk was added.</p> : null}
+        {query.saved ? <p className="form-feedback">{query.saved === "places" ? "Google address lookup saved. No address was sent." : "Connection saved. No number was bought and no trunk was added."}</p> : null}
         <div className="ops-pick">
           <ProviderCard id="voipms" name="VoIP.ms" detail="SIP trunking, DIDs and SMS" current={provider === "voipms"} />
           <ProviderCard id="3cx" name="3CX" detail="PBX and trunk management" current={provider === "3cx"} />
         </div>
-        <p className="ops-muted"><Link href="/admin/flags">Operational permissions are in Platform controls.</Link> Searching, buying, porting, and funding stay on those switches.</p>
+        <p className="ops-muted"><Link href="/admin/flags">Operational permissions are in Platform controls.</Link> Searching, buying, porting, funding, and the VoIP.ms backup stay on those switches. The backup is off until an administrator turns it on.</p>
+        <form action={savePlacesKey} className="ops-card">
+          <h2>Google addresses</h2>
+          <p>Customers confirm a complete address from Google. The key stays on this server. Leave the key blank to keep the one already saved.</p>
+          <label className="check-option"><input type="checkbox" name="enabled" defaultChecked={getConnection("google").enabled === 1} /> Use Google address lookup</label>
+          <SecretField name="secret" label="Google Places key" stored={getConnection("google").hasSecret} />
+          <button className="btn btn-secondary" type="submit">Save Google address lookup</button>
+        </form>
       </div>
       <aside className="ops-drawer">
         <div className="ops-drawer-head">
@@ -102,8 +109,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
                   <p className="ops-muted">VoIP.ms accepts ulaw, g729, gsm, or all. Other names are left out before a line account is created.</p>
                   <label>DTMF <input name="dtmf_mode" defaultValue={config.dtmf_mode || "auto"} /></label>
                   <label>NAT <input name="nat" defaultValue={config.nat || "yes"} /></label>
-                  <label>Client email domain <input name="client_email_domain" defaultValue={config.client_email_domain || ""} autoComplete="off" placeholder="clients.example.com" /></label>
-                  <p className="ops-muted">Required before a client can be created. VoIP.ms is given customer-id@this domain. The customer's own email is not sent to VoIP.ms.</p>
+                  <p className="ops-muted">Each customer gets an ID such as I-0000001 or B-0000001. VoIP.ms is given that ID at sauticall.com. The customer's own email is not sent.</p>
                   <label>Client phone <input name="client_phone" defaultValue={config.client_phone || ""} autoComplete="off" /></label>
                   <label>Street <input name="client_address" defaultValue={config.client_address || ""} autoComplete="off" /></label>
                   <PlaceSelects countryLabel="Country" regionLabel="State or province" cityLabel="City" countryName="client_country" regionName="client_state" cityName="client_city" countryDefault={config.client_country || "US"} regionDefault={config.client_state || ""} cityDefault={config.client_city || ""} />

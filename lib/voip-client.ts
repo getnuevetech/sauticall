@@ -3,6 +3,7 @@ import { fundNeedsRetry, fundRetryDetail, planFundAmount, readClientBalance } fr
 import { recordFailure, updateFailure } from "./failure-log";
 import { finishAfterResponse } from "./later";
 import { accountClientProfile, clientEmail, readVoipClientId } from "./client-profile";
+import { ensureCustomerCode } from "./customer-code-store";
 import { callVoipms, getConnection, VOIPMS_WRITE_MS } from "./carriers";
 import { flagOn, getDb, readDoc } from "./db";
 import type { Plan } from "./types";
@@ -54,8 +55,8 @@ function profileFor(userId: number) {
   if (!built.ok) return built;
   const place = built.profile;
   if (!regionAllowed(place.country, place.state)) place.state = place.country === "CA" ? "ON" : "TX";
-  const email = clientEmail(userId, user.email, config.client_email_domain || "");
-  if (!email) return { ok: false as const, message: "Set a client email domain on the VoIP.ms connection. The customer's email is not sent to VoIP.ms." };
+  const email = clientEmail(ensureCustomerCode(userId), user.email);
+  if (!email) return { ok: false as const, message: "This customer has no customer ID yet, so VoIP.ms was not given an email. The customer's email is not sent to VoIP.ms." };
   return { ok: true as const, profile: { ...place, email } };
 }
 
@@ -121,9 +122,10 @@ export async function ensureVoipClient(userId: number, refresh = false): Promise
   const existing = getVoipClient(userId);
   if (existing?.client_id && !refresh) return { ok: true, clientId: existing.client_id };
   const connection = getConnection("voipms");
+  const mailbox = clientEmail(ensureCustomerCode(userId), "");
   if (!connection.enabled || !connection.secret || !connection.public.api_username) {
     const message = "VoIP.ms is not connected, so a client account was not created.";
-    if (!existing?.client_id) saveClient({ userId, clientId: "", email: "", password: "", message });
+    if (!existing?.client_id) saveClient({ userId, clientId: "", email: mailbox, password: "", message });
     return { ok: false, message };
   }
   const built = profileFor(userId);

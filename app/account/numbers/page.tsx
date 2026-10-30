@@ -6,6 +6,7 @@ import { planAllows } from "@/lib/plan-features";
 import { inventoryReady } from "@/lib/carriers";
 import { customerLineStatus, customerNumberStatus } from "@/lib/number-order";
 import { formatAddress, getEmergency, type EmergencyAddress } from "@/lib/e911";
+import { placesConfigured } from "@/lib/google-places";
 import { customerMessage } from "@/lib/customer-message";
 import { loadSite } from "@/lib/site";
 
@@ -63,6 +64,7 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
         country: address?.country || "US",
         zip: address?.zip || "",
       }}
+      lookup={placesConfigured()}
       owned={lines.map((line) => ({ did: line.did, status: customerLineStatus(line.status), detail: line.status === "not_on_carrier" ? "" : E911[line.e911_status] || "In progress" }))}
       requests={rows.map((row) => {
         let payload: { did?: string; detail?: string; emergency?: EmergencyAddress } = {};

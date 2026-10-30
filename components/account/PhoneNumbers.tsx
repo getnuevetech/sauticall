@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { saveEmergencyAddress, saveNumber } from "@/app/account/actions";
+import { AddressEditor } from "./AddressEditor";
 import { formatPhone, monthlyPrice } from "@/lib/account-display";
 import { Icon } from "@/components/Icon";
 import { PlaceSelects } from "./PlaceSelects";
@@ -30,16 +31,6 @@ const MATCHES = [
   { id: "suffix", label: "Ends with" },
 ] as const;
 
-const UNITS = [
-  { value: "", label: "Unit type" },
-  { value: "APT", label: "Apartment" },
-  { value: "STE", label: "Suite" },
-  { value: "FL", label: "Floor" },
-  { value: "UNIT", label: "Unit" },
-  { value: "RM", label: "Room" },
-  { value: "BLDG", label: "Building" },
-];
-
 function placeLabel(value: string) {
   return value.toLowerCase().replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
@@ -58,6 +49,7 @@ export function PhoneNumbers({
   hasAddress,
   addressLine,
   defaults,
+  lookup,
   owned,
   requests,
   notice,
@@ -70,6 +62,7 @@ export function PhoneNumbers({
   hasAddress: boolean;
   addressLine: string;
   defaults: AddressDefaults;
+  lookup: boolean;
   owned: Owned[];
   requests: Requested[];
   notice: string;
@@ -354,40 +347,24 @@ export function PhoneNumbers({
 
       {addressOpen ? (
         <div className="num-modal-scrim" onClick={() => setAddressOpen(false)}>
-          <form className="num-modal" action={saveEmergencyAddress} onClick={(event) => event.stopPropagation()}>
-            <div className="num-modal-head">
-              <div>
-                <h2>Emergency address</h2>
-                <p>Physical location for emergency services.</p>
+          <AddressEditor
+            className="num-modal"
+            action={saveEmergencyAddress}
+            next=""
+            defaults={defaults}
+            lookup={lookup}
+            submitLabel="Save address"
+            onClick={(event) => event.stopPropagation()}
+            header={(
+              <div className="num-modal-head">
+                <div>
+                  <h2>Emergency address</h2>
+                  <p>Physical location for emergency services. Saving updates the VoIP.ms client address.</p>
+                </div>
+                <button type="button" aria-label="Close" onClick={() => setAddressOpen(false)}>×</button>
               </div>
-              <button type="button" aria-label="Close" onClick={() => setAddressOpen(false)}>×</button>
-            </div>
-            <label>Contact name <input name="full_name" defaultValue={defaults.full_name} placeholder="Contact name" required /></label>
-            <div className="num-modal-grid">
-              <label>Street number <input name="street_number" defaultValue={defaults.street_number} placeholder="e.g. 123" required /></label>
-              <label>Street name <input name="street_name" defaultValue={defaults.street_name} placeholder="e.g. Main St" required /></label>
-            </div>
-            <label>Unit (optional)
-              <span className="num-unit">
-                <select name="address_type" defaultValue={defaults.address_type}>{UNITS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
-                <input name="address_number" defaultValue={defaults.address_number} placeholder="e.g. Suite 200" />
-              </span>
-            </label>
-            <div className="num-modal-places">
-              <PlaceSelects
-                countryLabel="Country"
-                regionLabel="State"
-                cityLabel="City"
-                countryDefault={defaults.country || "US"}
-                regionDefault={defaults.state}
-                cityDefault={defaults.city}
-              />
-              <label>ZIP code <input name="zip" defaultValue={defaults.zip} placeholder="e.g. 19720" required /></label>
-            </div>
-            <input type="hidden" name="language" value="EN" />
-            <button className="ws-btn primary" type="submit">Save address</button>
-            <p>Registration status appears after submission.</p>
-          </form>
+            )}
+          />
         </div>
       ) : null}
     </div>

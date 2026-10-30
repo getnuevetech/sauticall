@@ -4,14 +4,18 @@ import { fundPaidClient, provisionVoipClient, saveCustomerUser } from "../../des
 import { userCan } from "@/lib/access";
 import { requirePermission } from "@/lib/access";
 import { formatWhen } from "@/lib/format-when";
+import { clientMailbox } from "@/lib/customer-code";
+import { ensureCustomerCode } from "@/lib/customer-code-store";
 import { flagOn, getDb } from "@/lib/db";
+import { bestTrunk, outboundChoice } from "@/lib/outbound-path";
+import { addressReady, getEmergency } from "@/lib/e911";
 import { paidPlan } from "@/lib/pbx";
 
 export default async function CustomerPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; saved?: string }> }) {
   const actor = await requirePermission("users.customers");
   const { id } = await params;
   const query = await searchParams;
-  const person = getDb().prepare("SELECT id, name, email, phone, email_verified_at, phone_verified_at, disabled, mfa_required, created_at FROM users WHERE id = ? AND role = 'customer'").get(Number(id)) as {
+  const person = getDb().prepare("SELECT id, name, email, phone, email_verified_at, phone_verified_at, disabled, mfa_required, created_at, customer_code FROM users WHERE id = ? AND role = 'customer'").get(Number(id)) as {
     id: number;
     name: string;
     email: string;
@@ -21,11 +25,18 @@ export default async function CustomerPage({ params, searchParams }: { params: P
     disabled: number;
     mfa_required: number;
     created_at: string;
+    customer_code: string;
   } | undefined;
   if (!person) notFound();
   const plan = paidPlan(person.id);
-  const lines = getDb().prepare("SELECT did, status, e911_status FROM phone_lines WHERE user_id = ? ORDER BY id").all(person.id) as { did: string; status: string; e911_status: string }[];
+  const code = ensureCustomerCode(person.id);
+  const lines = getDb().prepare("SELECT did, status, trunk_id, e911_status FROM phone_lines WHERE user_id = ? ORDER BY id").all(person.id) as { did: string; status: string; trunk_id: number; e911_status: string }[];
   const voipClient = getDb().prepare("SELECT client_id, email, last_message, funded_cents, funded_plan FROM voip_clients WHERE user_id = ?").get(person.id) as { client_id: string; email: string; last_message: string; funded_cents: number; funded_plan: string } | undefined;
+  const route = outboundChoice({
+    trunk: bestTrunk(lines.map((line) => ({ status: line.status, trunkId: line.trunk_id }))),
+    backupEnabled: flagOn("pbx.voipms_backup"),
+    customerClient: Boolean(voipClient?.client_id),
+  });
   const lineAccount = getDb().prepare("SELECT account FROM voip_subaccounts WHERE user_id = ?").get(person.id) as { account: string } | undefined;
   const openTrunks = (getDb().prepare("SELECT COUNT(*) AS n FROM trunk_tasks WHERE user_id = ? AND status = 'open'").get(person.id) as { n: number }).n;
   const funding = flagOn("billing.fund_client");
@@ -36,7 +47,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
     <>
       <span className="eyebrow">Customers</span>
       <h2>{person.name}</h2>
-      <p><Link href="/admin/customers">All customers</Link> · Joined {formatWhen(person.created_at)} · {plan ? plan.name : "No paid plan"}</p>
+      <p><Link href="/admin/customers">All customers</Link> · Joined {formatWhen(person.created_at)} · {plan ? plan.name : "No paid plan"} · {code || person.customer_code || "No customer ID yet"}</p>
       {query.error ? <p className="form-feedback">{query.error}</p> : null}
       {query.saved ? <p className="form-feedback">{query.saved}</p> : null}
       <form className="contact-form" action={saveCustomerUser}>
@@ -56,6 +67,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
           <h3>Account confirmation</h3>
           <p>Email {person.email_verified_at ? `confirmed ${formatWhen(person.email_verified_at)}` : "not confirmed yet"}.</p>
           <p>Mobile {person.phone || "not saved"}{person.phone_verified_at ? `, confirmed ${formatWhen(person.phone_verified_at)}` : person.phone ? ", not confirmed yet" : ""}.</p>
+          <p>Address {addressReady(getEmergency(person.id)) ? "updated" : "not updated yet"}.</p>
           {latestSms ? <p>Last text {latestSms.status} {formatWhen(latestSms.created_at)}{latestSms.detail ? `: ${latestSms.detail}` : "."}</p> : null}
         </section>
         <section className="desk-card">
@@ -70,7 +82,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
           {voipClient?.email ? <p>{voipClient.email}</p> : null}
           {voipClient?.funded_cents ? <p>Phone-company balance ${voipClient.funded_cents / 100} for {voipClient.funded_plan}.</p> : <p>{funding ? "No phone-company balance yet. It is added after a plan payment is confirmed, using the amount on that plan." : "Funding client accounts is turned off. Signup still creates the client."}</p>}
           {voipClient?.last_message ? <p>{voipClient.last_message}</p> : null}
-          <p>Every customer account starts a VoIP.ms client. VoIP.ms is given an address on the client email domain, not the customer's inbox. Their numbers are bought onto the line account linked to this client.</p>
+          <p>Every customer account starts a VoIP.ms client. VoIP.ms is given {clientMailbox(code) || "the customer ID at sauticall.com"}, not the customer's inbox. Their numbers are bought onto the line account linked to this client.</p>
           <form action={provisionVoipClient}><input type="hidden" name="id" value={person.id} /><button className="btn btn-secondary" type="submit">{voipClient?.client_id ? "Refresh the VoIP.ms client" : "Create the VoIP.ms client"}</button></form>
           {funding && plan && !voipClient?.funded_cents ? (
             <form action={fundPaidClient}><input type="hidden" name="id" value={person.id} /><button className="btn btn-secondary" type="submit">Add the plan balance</button></form>
@@ -79,6 +91,8 @@ export default async function CustomerPage({ params, searchParams }: { params: P
         <section className="desk-card">
           <h3>3CX trunk</h3>
           <p>{openTrunks ? `${openTrunks} trunk${openTrunks === 1 ? "" : "s"} still need to be finished on 3CX.` : "No 3CX trunk is waiting for this customer."}</p>
+          <p>{route.reason}</p>
+          <p>{flagOn("pbx.voipms_backup") ? "VoIP.ms backup is on. It uses this customer's client only after 3CX confirms the trunk failed." : "VoIP.ms backup is off. Only an administrator can turn it on in Platform controls."}</p>
           <p><Link href={`/admin/lines?company=${person.id}`}>Open this customer's lines and trunks</Link></p>
         </section>
         <section className="desk-card">

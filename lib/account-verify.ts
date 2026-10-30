@@ -1,4 +1,5 @@
 import { confirmationMail } from "./confirmation-mail";
+import { addressReady, getEmergency } from "./e911";
 import { flagOn, getDb } from "./db";
 import { recordFailure } from "./failure-log";
 import { sendSms, smsReady } from "./sms";
@@ -45,6 +46,7 @@ export function verificationStatus(userId: number) {
     phone: row?.phone || "",
     emailVerified: Boolean(row?.email_verified_at),
     phoneVerified: Boolean(row?.phone_verified_at),
+    addressSaved: addressReady(row ? getEmergency(userId) : null),
     smsReady: smsReady(),
   };
 }
