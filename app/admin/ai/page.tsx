@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AiSectionNav } from "@/components/admin/AiSectionNav";
 import { requirePermission } from "@/lib/access";
 import { AI_ENGINE_KINDS, AI_FUNCTIONS, featureReady } from "@/lib/ai-system";
 import { enabledSwitchCodes, listAiAssignments, listAiEngines, listAiSwitches } from "@/lib/ai-store";
@@ -26,6 +27,7 @@ export default async function AiSystemPage({ searchParams }: { searchParams: Pro
       <div>
         <p className="ops-kicker">AI System</p>
         <h1>AI System</h1>
+        <AiSectionNav current="system" />
         <p>Turn services on or off, register each model, and choose which model does each job. Settings apply after you save.</p>
         {notice ? <p className="form-feedback">{notice}</p> : null}
         {query.error ? <p className="ops-alert">{query.error}</p> : null}

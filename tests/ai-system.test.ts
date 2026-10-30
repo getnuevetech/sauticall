@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { customerAiState, featureReady, validateAssignment, validateEngine, type AiEngineRecord } from "../lib/ai-system.ts";
+import { acceptanceComplete, activationState, customerAiState, featureReady, validateAssignment, validateEngine, type AiEngineRecord } from "../lib/ai-system.ts";
 
 const voice: AiEngineRecord = { id: 1, name: "Voice", kind: "tts", model: "sauticall-voice-1", endpoint: "https://voice.internal.example", secretRef: "vault:voice", enabled: true };
 const outbound: AiEngineRecord = { id: 2, name: "Outbound", kind: "llm", model: "sauticall-outbound-1", endpoint: "https://outbound.internal.example", secretRef: "vault:outbound", enabled: true };
@@ -10,6 +10,31 @@ test("the master switch closes every service", () => {
   assert.equal(featureReady(open, "notifications"), false);
   assert.equal(featureReady(new Set(["master", "notifications"]), "notifications"), true);
   assert.equal(featureReady(new Set(["master"]), "receptionist"), false);
+});
+
+test("notifications stay off until terms, a grant, and the customer's own switch", () => {
+  const base = { globalOn: true, planIncludes: true, publishedVersion: 1, acceptedVersion: 0, grant: "none" as const, customerEnabled: false, reviewRequired: true };
+  assert.equal(activationState(base).code, "pending_terms");
+  assert.equal(activationState({ ...base, acceptedVersion: 1 }).code, "ready_to_request");
+  assert.equal(activationState({ ...base, acceptedVersion: 1, grant: "requested" }).code, "pending_review");
+  assert.equal(activationState({ ...base, acceptedVersion: 1, grant: "granted" }).label, "Off. You can turn it on.");
+  assert.equal(activationState({ ...base, acceptedVersion: 1, grant: "granted", customerEnabled: true }).code, "active");
+  assert.equal(activationState({ ...base, acceptedVersion: 1, grant: "suspended", customerEnabled: true }).code, "suspended");
+  assert.equal(activationState({ ...base, publishedVersion: 2, acceptedVersion: 1, grant: "granted", customerEnabled: true }).code, "pending_terms");
+  assert.equal(acceptanceComplete(["authority", "permission", "identity", "optout"]), false);
+  assert.equal(acceptanceComplete(["authority", "permission", "identity", "optout", "charges"]), true);
+});
+
+test("a receptionist without a separate agreement can be on when the plan includes it", () => {
+  assert.equal(activationState({
+    globalOn: true,
+    planIncludes: true,
+    publishedVersion: 0,
+    acceptedVersion: 0,
+    grant: "none",
+    customerEnabled: true,
+    reviewRequired: false,
+  }).code, "active");
 });
 
 test("a customer sees the admin switch before the plan", () => {

@@ -1,4 +1,4 @@
-import { AI_SWITCHES, validateAssignment, validateEngine, type AiEngineDraft, type AiEngineRecord } from "./ai-system";
+import { AI_SWITCHES, DRAFT_NOTIFICATION_AGREEMENT, acceptanceComplete, nextAgreementVersion, validateAssignment, validateEngine, type AiEngineDraft, type AiEngineRecord, type AiGrant } from "./ai-system";
 import { audit, getDb } from "./db";
 
 export function listAiSwitches() {
@@ -83,6 +83,87 @@ export function saveAiAssignment(functionCode: string, engineId: number, actor: 
 export function clearAiAssignment(functionCode: string, actor: string) {
   getDb().prepare("DELETE FROM ai_assignments WHERE function_code = ?").run(functionCode);
   audit(actor, "ai.assignment", `${functionCode}:cleared`);
+}
+
+export function currentAgreement(featureCode: string) {
+  return getDb().prepare("SELECT feature_code, version, title, body, digest FROM ai_agreements WHERE feature_code = ? ORDER BY version DESC LIMIT 1").get(featureCode) as {
+    feature_code: string;
+    version: number;
+    title: string;
+    body: string;
+    digest: string;
+  } | undefined;
+}
+
+export function publishAgreement(featureCode: string, title: string, body: string, actor: string) {
+  const cleanTitle = title.trim().slice(0, 120);
+  const cleanBody = body.trim().slice(0, 8000);
+  if (!cleanTitle || !cleanBody) return { ok: false as const, message: "Enter a title and the agreement text." };
+  const current = currentAgreement(featureCode);
+  const next = nextAgreementVersion(current ? { version: current.version, digest: current.digest } : null, cleanTitle, cleanBody);
+  if (!next.changed) return { ok: true as const, version: next.version };
+  getDb().prepare("INSERT INTO ai_agreements (feature_code, version, title, body, digest, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(featureCode, next.version, cleanTitle, cleanBody, next.digest, new Date().toISOString());
+  audit(actor, "ai.agreement", `${featureCode}:${next.version}`);
+  return { ok: true as const, version: next.version };
+}
+
+export function acceptedVersion(userId: number, featureCode: string) {
+  const row = getDb().prepare("SELECT version FROM ai_acceptances WHERE user_id = ? AND feature_code = ? ORDER BY version DESC, id DESC LIMIT 1").get(userId, featureCode) as { version: number } | undefined;
+  return row?.version || 0;
+}
+
+export function entitlementFor(userId: number, featureCode: string) {
+  const row = getDb().prepare("SELECT admin_grant, customer_enabled FROM ai_entitlements WHERE user_id = ? AND feature_code = ?").get(userId, featureCode) as { admin_grant: string; customer_enabled: number } | undefined;
+  const grant: AiGrant = row?.admin_grant === "requested" || row?.admin_grant === "granted" || row?.admin_grant === "suspended" ? row.admin_grant : "none";
+  const customerEnabled = row ? row.customer_enabled === 1 : featureCode !== "notifications";
+  return { grant, customerEnabled };
+}
+
+export function acceptAgreement(userId: number, featureCode: string, codes: string[], ipHash: string) {
+  const agreement = currentAgreement(featureCode);
+  if (!agreement) return { ok: false as const, message: "An administrator has not published terms for this service." };
+  if (featureCode === "notifications" && !acceptanceComplete(codes)) return { ok: false as const, message: "Check each acknowledgment. None are selected for you." };
+  if (featureCode !== "notifications" && !codes.includes("accept")) return { ok: false as const, message: "Check the acknowledgment before continuing." };
+  const before = acceptedVersion(userId, featureCode);
+  const current = entitlementFor(userId, featureCode);
+  getDb().prepare("INSERT INTO ai_acceptances (user_id, feature_code, version, acks, digest, accepted_at, ip_hash) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .run(userId, featureCode, agreement.version, JSON.stringify(codes), agreement.digest, new Date().toISOString(), ipHash);
+  const grant = featureCode === "notifications" && before > 0 && before < agreement.version && current.grant === "granted" ? "requested" : current.grant;
+  saveEntitlement(userId, featureCode, grant, current.customerEnabled, "terms accepted");
+  audit(`user:${userId}`, "ai.accept", `${featureCode}:${agreement.version}`);
+  return { ok: true as const };
+}
+
+function saveEntitlement(userId: number, featureCode: string, grant: AiGrant, customerEnabled: boolean, reason: string) {
+  getDb().prepare(
+    `INSERT INTO ai_entitlements (user_id, feature_code, admin_grant, customer_enabled, reason, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, feature_code) DO UPDATE SET admin_grant = excluded.admin_grant, customer_enabled = excluded.customer_enabled, reason = excluded.reason, updated_at = excluded.updated_at`,
+  ).run(userId, featureCode, grant, customerEnabled ? 1 : 0, reason.slice(0, 200), new Date().toISOString());
+}
+
+export function requestActivation(userId: number, featureCode: string) {
+  const current = entitlementFor(userId, featureCode);
+  if (current.grant === "suspended") return { ok: false as const, message: "SautiCall has suspended this service." };
+  saveEntitlement(userId, featureCode, "requested", false, "customer requested");
+  audit(`user:${userId}`, "ai.request", featureCode);
+  return { ok: true as const };
+}
+
+export function setCustomerEnabled(userId: number, featureCode: string, enabled: boolean) {
+  const current = entitlementFor(userId, featureCode);
+  if (current.grant === "suspended") return { ok: false as const, message: "SautiCall has suspended this service." };
+  if (featureCode === "notifications" && current.grant !== "granted") return { ok: false as const, message: "This service is waiting for review." };
+  saveEntitlement(userId, featureCode, current.grant, enabled, enabled ? "customer on" : "customer off");
+  audit(`user:${userId}`, "ai.customer", `${featureCode}:${enabled ? "on" : "off"}`);
+  return { ok: true as const };
+}
+
+export function setAdminGrant(userId: number, featureCode: string, grant: AiGrant, actor: string, reason: string) {
+  const current = entitlementFor(userId, featureCode);
+  saveEntitlement(userId, featureCode, grant, grant === "granted" ? current.customerEnabled : false, reason || grant);
+  audit(actor, "ai.grant", `${userId}:${featureCode}:${grant}`);
 }
 
 export function deleteAiEngine(id: number, actor: string) {
