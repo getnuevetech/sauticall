@@ -3,6 +3,7 @@ import { addRecipientForm, practiceForm, saveCampaignForm } from "./actions";
 import { guardAccount } from "@/lib/guard";
 import { choiceLine, outcomeLabel, practiceAllowed } from "@/lib/ai-notify";
 import { listCampaigns, listPurposes, listRecipients, notificationsActive, recipientBlockers } from "@/lib/ai-notify-store";
+import { customerRoute } from "@/lib/ai-route-store";
 import { listClips } from "@/lib/ai-audio-store";
 
 export default async function AccountNotificationsPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string; outcome?: string }> }) {
@@ -13,6 +14,7 @@ export default async function AccountNotificationsPage({ searchParams }: { searc
   const clips = listClips(user.id).filter((clip) => clip.status === "ready");
   const campaigns = listCampaigns(user.id);
   const recipients = listRecipients(user.id);
+  const route = customerRoute(user.id);
   const notice = query.saved === "campaign" ? "Notification saved. No call was placed."
     : query.saved === "person" ? "Person added. No call was placed."
       : query.saved === "practice" ? "Practice result saved. No call was placed."
@@ -21,8 +23,12 @@ export default async function AccountNotificationsPage({ searchParams }: { searc
     <div className="workspace-page">
       <header className="workspace-page-head">
         <h1>Notifications</h1>
-        <p>Prepare who would hear a kept message. Press 1 plays it, press 2 declines it, and press 9 stops future notifications. Silence is not a yes. Nothing here places a call. <Link className="text-link" href="/account/ai">AI services</Link></p>
+        <p>Prepare who would hear a kept message. Press 1 plays it, press 2 declines it, and press 9 stops future notifications. Silence is not a yes. Outbound would use your 3CX extension and trunk, and a VoIP.ms backup would use your client account. Nothing here places a call. <Link className="text-link" href="/account/ai">AI services</Link></p>
       </header>
+      <article className="contact-form" id="route">
+        <h3>Outbound route</h3>
+        {route.lines.map((line) => <p key={line.name}><strong>{line.name === "idle" ? "Idle" : line.state === "ready" ? "Ready" : line.state === "withheld" ? "Closed" : line.state === "unknown" ? "Unconfirmed" : "Needs attention"}.</strong> {line.text}</p>)}
+      </article>
       {notice ? <p className="form-feedback">{notice}</p> : null}
       {query.error ? <p className="form-feedback">{query.error}</p> : null}
       {!active ? <p>Turn on Automated notifications before preparing one. <Link className="text-link" href="/account/ai">Review AI services</Link></p> : null}
