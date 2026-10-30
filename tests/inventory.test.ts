@@ -7,7 +7,7 @@ import { didInfoIsAbsent, lookupMayOrder, normalizeRequestedDid, readDids } from
 import { balanceCovers, planFundAmount, readClientBalance, resellerOrderFees } from "../lib/client-funding.ts";
 import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
-import { trunkArrayBody, trunkContentTypes, trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFailureText, trunkFilledDeltas, trunkGroupBody, trunkLeanBody, trunkPostBody, trunkReadyBody, trunkReplayBody, trunkServiceBody, trunkShape, trunkSmallBody } from "../lib/trunk-body.ts";
+import { trunkArrayBody, trunkClientBody, trunkContentTypes, trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFailureText, trunkFilledDeltas, trunkGroupBody, trunkLeanBody, trunkPlainBody, trunkPostBody, trunkReadyBody, trunkReplayBody, trunkServiceBody, trunkShape, trunkSmallBody } from "../lib/trunk-body.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
@@ -490,6 +490,8 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
   assert.match(trunkContentTypes[0][1], /odata\.streaming=true/);
   assert.match(trunkContentTypes[0][1], /IEEE754Compatible=false/);
   assert.equal(trunkContentTypes[1][1].includes("charset"), false);
+  assert.match(trunkContentTypes[2][1], /charset=utf-8/);
+  assert.match(trunkContentTypes[2][1], /odata\.metadata=minimal/);
   assert.equal(outboundScopeVerdict({ DNRanges: { delta: [{ From: "510", To: "510" }] } }, "510", "510"), "scoped");
   const ready = trunkReadyBody({
     seed: {
@@ -557,6 +559,91 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
   assert.equal((lean.Gateway as { Host: string; InboundParams: { delta: { Custom: string }[] } }).Host, "houston1.voip.ms");
   assert.equal((lean.Gateway as { InboundParams: { delta: { Custom: string }[] } }).InboundParams.delta[0].Custom, "$CalledNum");
   assert.deepEqual((trunkArrayBody(lean).DidNumbers as string[]), ["13345397005"]);
+  const posted = trunkClientBody({
+    seed: {
+      "@odata.context": "https://pbx.example/xapi/v1/$metadata#Trunks/$entity",
+      "@odata.type": "#Pbx.Trunk",
+      DidNumbers: { "@odata.context": "https://pbx.example/xapi/v1/$metadata#Collection(String)", value: [] },
+      Gateway: {
+        "@odata.type": "#Pbx.Gateway",
+        Name: "Generic",
+        Port: 5060,
+        InboundParams: {
+          "@odata.context": "https://pbx.example/xapi/v1/$metadata#Collection(Pbx.GatewayParameterBinding)",
+          value: [{ ParamId: 9, Custom: "$CalledNum" }],
+        },
+        OutboundParams: { "@odata.context": "https://pbx.example/xapi/v1/$metadata#Collection(Pbx.GatewayParameterBinding)" },
+        Codecs: ["PCMU", "PCMA"],
+      },
+    },
+    name: "SautiCall 3345397005",
+    number: "3345397005",
+    authId: "577137_sc0002",
+    password: "secret",
+    host: "houston1.voip.ms",
+    template: "GenericSIPTrunk.pv.xml",
+  });
+  assert.equal("@odata.context" in posted, false);
+  assert.equal(posted.ExternalNumber, "3345397005");
+  assert.deepEqual(posted.AuthPassword, { Value: "secret" });
+  assert.deepEqual(posted.DidNumbers, { "@odata.type": "#Collection(String)", delta: ["3345397005"] });
+  const postedGateway = posted.Gateway as {
+    Host: string;
+    InboundParams: { "@odata.type": string; delta: { Custom: string }[] };
+    OutboundParams: { "@odata.type": string; delta: unknown[] };
+    Codecs: { "@odata.type": string; delta: string[] };
+  };
+  assert.equal(postedGateway.Host, "houston1.voip.ms");
+  assert.equal(postedGateway.InboundParams["@odata.type"], "#Collection(Pbx.GatewayParameterBinding)");
+  assert.equal(postedGateway.InboundParams.delta[0].Custom, "$CalledNum");
+  assert.deepEqual(postedGateway.OutboundParams.delta, []);
+  assert.deepEqual(postedGateway.Codecs.delta, ["PCMU", "PCMA"]);
+  assert.equal(JSON.stringify(posted).includes("@odata.context"), false);
+  assert.equal(JSON.stringify(posted).split("secret").length - 1, 1);
+  const plain = trunkPlainBody({
+    seed: {
+      "@odata.context": "https://pbx.example/xapi/v1/$metadata#Trunks/$entity",
+      "@odata.type": "#Pbx.Trunk",
+      IsOnline: false,
+      Groups: [{ GroupId: 4 }],
+      DidNumbers: { "@odata.context": "https://pbx.example/xapi/v1/$metadata#Collection(String)", value: [] },
+      Gateway: {
+        "@odata.type": "#Pbx.Gateway",
+        Name: "Generic",
+        Port: 5060,
+        InboundParams: {
+          "@odata.context": "https://pbx.example/xapi/v1/$metadata#Collection(Pbx.GatewayParameterBinding)",
+          value: [{ ParamId: 9, Custom: "$CalledNum" }],
+        },
+        OutboundParams: { "@odata.context": "https://pbx.example/xapi/v1/$metadata#Collection(Pbx.GatewayParameterBinding)" },
+        Codecs: ["PCMU", "PCMA"],
+      },
+    },
+    name: "SautiCall 3345397005",
+    number: "3345397005",
+    authId: "577137_sc0002",
+    password: "secret",
+    host: "houston1.voip.ms",
+    template: "GenericSIPTrunk.pv.xml",
+  });
+  assert.equal(JSON.stringify(plain).includes("@odata"), false);
+  assert.equal(JSON.stringify(plain).includes("delta"), false);
+  assert.equal("Groups" in plain, false);
+  assert.equal("IsOnline" in plain, false);
+  assert.equal(plain.ExternalNumber, "3345397005");
+  assert.deepEqual(plain.DidNumbers, ["3345397005"]);
+  assert.deepEqual(plain.AuthPassword, { Value: "secret" });
+  const plainGateway = plain.Gateway as {
+    Host: string;
+    InboundParams: { ParamId: number; Custom: string }[];
+    OutboundParams: unknown[];
+    Codecs: string[];
+  };
+  assert.equal(plainGateway.Host, "houston1.voip.ms");
+  assert.deepEqual(plainGateway.InboundParams, [{ ParamId: 9, Custom: "$CalledNum" }]);
+  assert.deepEqual(plainGateway.OutboundParams, []);
+  assert.deepEqual(plainGateway.Codecs, ["PCMU", "PCMA"]);
+  assert.equal(JSON.stringify(plain).split("secret").length - 1, 1);
   const failure = trunkFailureText(["lean: 3CX returned 400: The input was not valid. delta: The delta field is required."], trunkShape(lean));
   assert.match(failure, /^lean: 3CX returned 400/);
   assert.match(failure, /DidNumbers:delta\(1\)/);
