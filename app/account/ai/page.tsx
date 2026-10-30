@@ -21,7 +21,7 @@ export default async function AccountAiPage({ searchParams }: { searchParams: Pr
     <div className="workspace-page">
       <header className="workspace-page-head">
         <h1>AI services</h1>
-        <p>Turn on only a service your plan includes, after the current terms and an administrator's grant where one is required. Nothing here places a call. <Link className="text-link" href="/account/ai/audio">Store a message</Link> <Link className="text-link" href="/account/ai/notifications">Prepare a notification</Link></p>
+        <p>Turn on only a service your plan includes, after the current terms and an administrator's grant where one is required. Nothing here places a call. <Link className="text-link" href="/account/ai/audio">Store a message</Link> <Link className="text-link" href="/account/ai/notifications">Prepare a notification</Link> <Link className="text-link" href="/account/ai/notifications#route">Outbound route</Link></p>
       </header>
       {notice ? <p className="form-feedback">{notice}</p> : null}
       {query.error ? <p className="form-feedback">{query.error}</p> : null}

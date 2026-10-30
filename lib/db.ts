@@ -555,6 +555,22 @@ function migrate(database: Database.Database) {
       outcome TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS ai_outbound_routes (
+      user_id INTEGER PRIMARY KEY,
+      extension_number TEXT NOT NULL DEFAULT '',
+      trunk_id INTEGER NOT NULL DEFAULT 0,
+      caller_id TEXT NOT NULL DEFAULT '',
+      scope TEXT NOT NULL DEFAULT '',
+      primary_status TEXT NOT NULL DEFAULT '',
+      backup_status TEXT NOT NULL DEFAULT '',
+      client_account TEXT NOT NULL DEFAULT '',
+      client_id TEXT NOT NULL DEFAULT '',
+      sip_host TEXT NOT NULL DEFAULT '',
+      idle INTEGER NOT NULL DEFAULT 1 CHECK (idle = 1),
+      place_call INTEGER NOT NULL DEFAULT 0 CHECK (place_call = 0),
+      detail TEXT NOT NULL DEFAULT '',
+      checked_at TEXT NOT NULL DEFAULT ''
+    );
   `);
   const insertSwitch = database.prepare("INSERT INTO ai_switches (code, enabled, updated_at) VALUES (?, 0, '') ON CONFLICT(code) DO NOTHING");
   for (const item of AI_SWITCHES) insertSwitch.run(item.code);
