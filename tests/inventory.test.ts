@@ -4,7 +4,7 @@ import { accountClientProfile, clientEmail, clientPhone, clientPlace, personName
 import { customerMessage, customerRequestStatus } from "../lib/customer-message.ts";
 import { didMatches, parseDigitSearch } from "../lib/did-search.ts";
 import { didInfoIsAbsent, lookupMayOrder, normalizeRequestedDid, readDids } from "../lib/did-list.ts";
-import { balanceCovers, planFundAmount, readClientBalance, resellerOrderFees } from "../lib/client-funding.ts";
+import { balanceCovers, fundNeedsRetry, fundRetryDetail, planFundAmount, readClientBalance, resellerOrderFees } from "../lib/client-funding.ts";
 import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
 import { trunkArrayBody, trunkContentTypes, trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFailureText, trunkFilledDeltas, trunkGroupBody, trunkLeanBody, trunkPostBody, trunkReadyBody, trunkReplayBody, trunkServiceBody, trunkShape, trunkSmallBody } from "../lib/trunk-body.ts";
@@ -75,7 +75,8 @@ test("a number search can target the whole number, its start, or its end", () =>
 test("a VoIP.ms client stays tied to the SautiCall customer", () => {
   assert.deepEqual(personName("Ada Customer"), { first: "Ada", last: "Customer" });
   assert.equal(clientEmail(12, "ada@example.com", "clients.example.com"), "customer-12@clients.example.com");
-  assert.equal(clientEmail(12, "ada@example.com", ""), "ada@example.com");
+  assert.equal(clientEmail(12, "ada@example.com", "clients.example.com").includes("ada@example.com"), false);
+  assert.equal(clientEmail(12, "ada@example.com", ""), "");
   assert.equal(clientPlace({}).state, "TX");
   assert.equal(clientPlace({}).phone, "7135550100");
   assert.equal(clientPlace({ emergency: { country: "US", state: "TX", city: "HOUSTON", address: "1200 Main", zip: "77002" } }).city, "HOUSTON");
@@ -319,6 +320,10 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
   assert.equal(planFundAmount(0), 0);
   assert.equal(planFundAmount(-3), 0);
   assert.equal(planFundAmount("nope"), 0);
+  assert.equal(fundNeedsRetry("VoIP.ms did not add the $10.00 Small Business balance (missing_balance)."), true);
+  assert.equal(fundNeedsRetry("Funding client accounts is turned off."), false);
+  assert.equal(fundRetryDetail("VoIP.ms did not add the balance.", true, "Client 42 has a $10.00 balance for Small Business.").startsWith("Retry successful."), true);
+  assert.match(fundRetryDetail("VoIP.ms did not add the balance.", false, "not_configured"), /administrator has to fix this/);
   assert.equal(readClientBalance({ balance: "12.50" }), 12.5);
   assert.equal(readClientBalance({ status: "success", balance: { current_balance: "8.0588", spent_total: "1.9012" } }), 8.0588);
   assert.equal(readClientBalance({ balance: { spent_total: "1" } }), null);

@@ -102,7 +102,8 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
                   <p className="ops-muted">VoIP.ms accepts ulaw, g729, gsm, or all. Other names are left out before a line account is created.</p>
                   <label>DTMF <input name="dtmf_mode" defaultValue={config.dtmf_mode || "auto"} /></label>
                   <label>NAT <input name="nat" defaultValue={config.nat || "yes"} /></label>
-                  <label>Client email domain <input name="client_email_domain" defaultValue={config.client_email_domain || ""} autoComplete="off" /></label>
+                  <label>Client email domain <input name="client_email_domain" defaultValue={config.client_email_domain || ""} autoComplete="off" placeholder="clients.example.com" /></label>
+                  <p className="ops-muted">Required before a client can be created. VoIP.ms is given customer-id@this domain. The customer's own email is not sent to VoIP.ms.</p>
                   <label>Client phone <input name="client_phone" defaultValue={config.client_phone || ""} autoComplete="off" /></label>
                   <label>Street <input name="client_address" defaultValue={config.client_address || ""} autoComplete="off" /></label>
                   <PlaceSelects countryLabel="Country" regionLabel="State or province" cityLabel="City" countryName="client_country" regionName="client_state" cityName="client_city" countryDefault={config.client_country || "US"} regionDefault={config.client_state || ""} cityDefault={config.client_city || ""} />

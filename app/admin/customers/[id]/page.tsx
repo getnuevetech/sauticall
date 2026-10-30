@@ -70,7 +70,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
           {voipClient?.email ? <p>{voipClient.email}</p> : null}
           {voipClient?.funded_cents ? <p>Phone-company balance ${voipClient.funded_cents / 100} for {voipClient.funded_plan}.</p> : <p>{funding ? "No phone-company balance yet. It is added after a plan payment is confirmed, using the amount on that plan." : "Funding client accounts is turned off. Signup still creates the client."}</p>}
           {voipClient?.last_message ? <p>{voipClient.last_message}</p> : null}
-          <p>This client is created when the customer signs up. Customers do not see it. Their numbers are bought onto the line account linked to this client.</p>
+          <p>Every customer account starts a VoIP.ms client. VoIP.ms is given an address on the client email domain, not the customer's inbox. Their numbers are bought onto the line account linked to this client.</p>
           <form action={provisionVoipClient}><input type="hidden" name="id" value={person.id} /><button className="btn btn-secondary" type="submit">{voipClient?.client_id ? "Refresh the VoIP.ms client" : "Create the VoIP.ms client"}</button></form>
           {funding && plan && !voipClient?.funded_cents ? (
             <form action={fundPaidClient}><input type="hidden" name="id" value={person.id} /><button className="btn btn-secondary" type="submit">Add the plan balance</button></form>

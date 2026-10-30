@@ -222,15 +222,8 @@ async function markPaid(id: number) {
   const attempt = attemptById(id);
   if (attempt?.user_id) await enforceUser(attempt.user_id);
   if (attempt?.user_id && attempt.product_kind !== "bundle" && attempt.plan_name) {
-    const { fundPaidPlan } = await import("./voip-client");
-    const funded = await fundPaidPlan(attempt.user_id, attempt.plan_name).catch((error: unknown) => ({
-      ok: false as const,
-      message: error instanceof Error ? error.message : "The plan balance was not added to the VoIP.ms client.",
-    }));
-    if (!funded.ok) {
-      const { recordFailure } = await import("./failure-log");
-      recordFailure({ area: "client", userId: attempt.user_id, subject: attempt.plan_name, detail: funded.message });
-    }
+    const { fundPaidPlanWithRetry } = await import("./voip-client");
+    await fundPaidPlanWithRetry(attempt.user_id, attempt.plan_name);
   }
 }
 
