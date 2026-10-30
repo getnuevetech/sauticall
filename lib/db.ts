@@ -393,6 +393,34 @@ function migrate(database: Database.Database) {
   if (!userCols.has("customer_code")) database.exec("ALTER TABLE users ADD COLUMN customer_code TEXT NOT NULL DEFAULT ''");
   database.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_customer_code ON users(customer_code) WHERE customer_code != ''");
   database.exec(`
+    CREATE TABLE IF NOT EXISTS recording_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      provider TEXT NOT NULL DEFAULT 'off',
+      bucket TEXT NOT NULL DEFAULT '',
+      region TEXT NOT NULL DEFAULT '',
+      prefix TEXT NOT NULL DEFAULT 'recordings',
+      aws_access_key TEXT NOT NULL DEFAULT '',
+      aws_secret TEXT NOT NULL DEFAULT '',
+      google_email TEXT NOT NULL DEFAULT '',
+      google_key TEXT NOT NULL DEFAULT '',
+      retention_days INTEGER NOT NULL DEFAULT 365
+    );
+    INSERT INTO recording_settings (id) VALUES (1) ON CONFLICT(id) DO NOTHING;
+    CREATE TABLE IF NOT EXISTS recordings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL DEFAULT 0,
+      customer_code TEXT NOT NULL DEFAULT '',
+      kind TEXT NOT NULL DEFAULT 'message',
+      object_key TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      bucket TEXT NOT NULL,
+      status TEXT NOT NULL,
+      detail TEXT NOT NULL DEFAULT '',
+      byte_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+  `);
+  database.exec(`
     CREATE TABLE IF NOT EXISTS verification_challenges (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,

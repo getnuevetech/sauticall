@@ -58,6 +58,11 @@ function accountPath(id: number, kind: "team" | "customers") {
   return id ? `/admin/${kind}/${id}` : `/admin/${kind}`;
 }
 
+function customerTab(formData: FormData) {
+  const tab = String(formData.get("tab") || "overview");
+  return ["overview", "profile", "billing", "phone", "support", "activity", "security"].includes(tab) ? tab : "overview";
+}
+
 export async function saveAdminUser(formData: FormData) {
   const actor = await requirePermission("access.manage");
   const id = Number(formData.get("id") || 0);
@@ -116,13 +121,14 @@ export async function saveCustomerUser(formData: FormData) {
   const password = String(formData.get("password") || "");
   const disabled = formData.get("disabled") === "on" ? 1 : 0;
   const mfaRequired = formData.get("mfa_required") === "on" ? 1 : 0;
+  const tab = customerTab(formData);
   if (!id) back("/admin/customers", "That customer was not found.");
-  if (!name || !email.includes("@")) back(path, "Name and email are required.");
-  if (password && password.length < 10) back(path, "Use a password of at least 10 characters.");
+  if (!name || !email.includes("@")) back(`${path}?tab=${tab}`, "Name and email are required.");
+  if (password && password.length < 10) back(`${path}?tab=${tab}`, "Use a password of at least 10 characters.");
   const target = getDb().prepare("SELECT id, role FROM users WHERE id = ?").get(id) as { id: number; role: string } | undefined;
   if (!target || target.role !== "customer") back("/admin/customers", "That customer was not found.");
   const clash = getDb().prepare("SELECT id FROM users WHERE email = ? AND id != ?").get(email, id);
-  if (clash) back(path, "That email is already in use.");
+  if (clash) back(`${path}?tab=${tab}`, "That email is already in use.");
   if (password) {
     getDb().prepare("UPDATE users SET name = ?, email = ?, password_hash = ?, disabled = ?, mfa_required = ? WHERE id = ? AND role = 'customer'").run(name, email, hashPassword(password), disabled, mfaRequired, id);
   } else {
@@ -130,7 +136,7 @@ export async function saveCustomerUser(formData: FormData) {
   }
   if (disabled) getDb().prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
   audit(actor.email, "customer.update", email);
-  redirect(`${path}?saved=Saved.`);
+  redirect(`${path}?saved=Saved.&tab=${customerTab(formData)}`);
 }
 
 export async function provisionVoipClient(formData: FormData) {
@@ -142,8 +148,8 @@ export async function provisionVoipClient(formData: FormData) {
   const { ensureVoipClient } = await import("@/lib/voip-client");
   const result = await ensureVoipClient(id, true);
   audit(actor.email, "voip.client", `${id}:${result.ok ? result.clientId : "failed"}`);
-  if (!result.ok) back(path, result.message);
-  redirect(`${path}?saved=${encodeURIComponent(`VoIP.ms client ${result.clientId} is linked.`)}`);
+  if (!result.ok) back(`${path}?tab=billing`, result.message);
+  redirect(`${path}?tab=billing&saved=${encodeURIComponent(`VoIP.ms client ${result.clientId} is linked.`)}`);
 }
 
 export async function fundPaidClient(formData: FormData) {
@@ -151,12 +157,12 @@ export async function fundPaidClient(formData: FormData) {
   const id = Number(formData.get("id") || 0);
   const path = accountPath(id, "customers");
   const paid = getDb().prepare("SELECT plan_name FROM payment_attempts WHERE user_id = ? AND status = 'paid' AND product_kind != 'bundle' AND plan_name != '' ORDER BY id DESC LIMIT 1").get(id) as { plan_name: string } | undefined;
-  if (!paid) back(path, "This customer has no confirmed plan payment.");
+  if (!paid) back(`${path}?tab=billing`, "This customer has no confirmed plan payment.");
   const { fundPaidPlanWithRetry } = await import("@/lib/voip-client");
   const result = await fundPaidPlanWithRetry(id, paid.plan_name);
   audit(actor.email, "voip.fund", `${id}:${result.ok ? "ok" : "failed"}`);
-  if (!result.ok) back(path, result.message);
-  redirect(`${path}?saved=${encodeURIComponent(result.message)}`);
+  if (!result.ok) back(`${path}?tab=billing`, result.message);
+  redirect(`${path}?tab=billing&saved=${encodeURIComponent(result.message)}`);
 }
 
 export async function searchTicketCustomers(query: string) {
