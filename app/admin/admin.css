@@ -162,7 +162,10 @@
 .ops-route strong,.ops-route span,.ops-route small{display:block}
 .ops-route small,.ops-card p{color:#667085}
 .ops-card{background:#fff;border:1px solid #e4e7ec;border-radius:16px;padding:16px}
-.ops > div > .ops-card + .ops-card{margin-top:14px}
+.ops > div > .ops-card + .ops-card,.ops > div > .ops-card + .ops-table-wrap,.ops > div > .ops-table-wrap + .ops-card{margin-top:14px}
+.ops-card label.audio-check,.ops-stack label.audio-check{display:flex;align-items:flex-start;gap:8px;font-weight:650}
+.ops-card label.audio-check input,.ops-stack label.audio-check input{width:auto;margin-top:3px}
+.ops-card audio{width:100%;margin:6px 0 12px}
 .ops-pick{display:grid;gap:10px}
 .ops-provider{display:grid;grid-template-columns:auto 1fr auto auto;gap:4px 12px;align-items:center;text-decoration:none;color:inherit}
 .ops-provider strong,.ops-provider small{display:block}

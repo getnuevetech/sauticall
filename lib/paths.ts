@@ -7,3 +7,7 @@ export function dataDir() {
 export function uploadDir() {
   return process.env.SAUTICALL_UPLOAD_DIR || path.join(process.cwd(), "public", "uploads");
 }
+
+export function audioDir() {
+  return process.env.SAUTICALL_AUDIO_DIR || path.join(dataDir(), "ai-audio");
+}

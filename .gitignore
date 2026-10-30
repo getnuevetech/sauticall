@@ -2,6 +2,7 @@ node_modules
 .next
 data/*.sqlite
 data/*.sqlite-*
+data/ai-audio/
 public/uploads/*
 !public/uploads/.gitkeep
 tsconfig.tsbuildinfo

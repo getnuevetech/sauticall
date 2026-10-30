@@ -1,10 +1,11 @@
 import Link from "next/link";
 
-export function AiSectionNav({ current }: { current: "system" | "terms" | "access" }) {
+export function AiSectionNav({ current }: { current: "system" | "terms" | "access" | "audio" }) {
   const links = [
     ["system", "/admin/ai", "Engines"],
     ["terms", "/admin/ai/terms", "Agreements"],
     ["access", "/admin/ai/access", "Customer access"],
+    ["audio", "/admin/ai/audio", "Audio"],
   ] as const;
   return (
     <nav className="ops-tabs">

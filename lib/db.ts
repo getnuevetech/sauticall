@@ -474,12 +474,44 @@ function migrate(database: Database.Database) {
       updated_at TEXT NOT NULL DEFAULT '',
       PRIMARY KEY (user_id, feature_code)
     );
+    CREATE TABLE IF NOT EXISTS ai_audio_policy (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      max_seconds INTEGER NOT NULL,
+      max_bytes INTEGER NOT NULL,
+      retention_days INTEGER NOT NULL,
+      preview_enabled INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS ai_voices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      voice_key TEXT NOT NULL,
+      engine_id INTEGER,
+      rights_ok INTEGER NOT NULL DEFAULT 0,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS ai_clips (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      script TEXT NOT NULL DEFAULT '',
+      voice_id INTEGER,
+      source TEXT NOT NULL,
+      status TEXT NOT NULL,
+      digest TEXT NOT NULL,
+      mime TEXT NOT NULL,
+      byte_count INTEGER NOT NULL,
+      duration_ms INTEGER NOT NULL,
+      storage_name TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL
+    );
   `);
   const insertSwitch = database.prepare("INSERT INTO ai_switches (code, enabled, updated_at) VALUES (?, 0, '') ON CONFLICT(code) DO NOTHING");
   for (const item of AI_SWITCHES) insertSwitch.run(item.code);
   const draft = DRAFT_NOTIFICATION_AGREEMENT;
   database.prepare("INSERT INTO ai_agreements (feature_code, version, title, body, digest, updated_at) VALUES ('notifications', 1, ?, ?, ?, '') ON CONFLICT(feature_code, version) DO NOTHING")
     .run(draft.title, draft.body, agreementDigest(draft.title, draft.body));
+  database.prepare("INSERT INTO ai_audio_policy (id, max_seconds, max_bytes, retention_days, preview_enabled) VALUES (1, 60, 2000000, 365, 0) ON CONFLICT(id) DO NOTHING").run();
   const extensionCols = new Set((database.prepare("PRAGMA table_info(pbx_extensions)").all() as { name: string }[]).map((column) => column.name));
   if (!extensionCols.has("former_number")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN former_number TEXT NOT NULL DEFAULT ''");
   if (!extensionCols.has("removed_at")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN removed_at TEXT NOT NULL DEFAULT ''");
