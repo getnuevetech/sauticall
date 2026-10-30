@@ -3,7 +3,7 @@ import { customerMessage } from "./customer-message";
 import { flagOn, getDb } from "./db";
 import { emergencyCarrierParams, parseEmergency, type EmergencyAddress } from "./e911-address";
 
-export { emergencyCarrierParams, formatAddress, parseEmergency, unitTypes, type EmergencyAddress } from "./e911-address";
+export { addressReady, emergencyCarrierParams, formatAddress, parseEmergency, unitTypes, type EmergencyAddress } from "./e911-address";
 
 type AddressRow = EmergencyAddress & { user_id: number };
 

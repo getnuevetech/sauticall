@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export function SecretField({ name, label, stored, hint }: { name: string; label: string; stored: boolean; hint?: string }) {
+export function SecretField({ name, label, stored, hint, multiline = false }: { name: string; label: string; stored: boolean; hint?: string; multiline?: boolean }) {
   const [open, setOpen] = useState(!stored);
   if (!open) {
     return (
@@ -17,7 +17,7 @@ export function SecretField({ name, label, stored, hint }: { name: string; label
   }
   return (
     <label>{label}
-      <input name={name} type="password" placeholder={stored ? "Leave blank to keep the saved secret" : hint || ""} autoComplete="new-password" />
+      {multiline ? <textarea name={name} rows={6} placeholder={stored ? "Leave blank to keep the saved secret" : hint || ""} autoComplete="off" /> : <input name={name} type="password" placeholder={stored ? "Leave blank to keep the saved secret" : hint || ""} autoComplete="new-password" />}
     </label>
   );
 }

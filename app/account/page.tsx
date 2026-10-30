@@ -3,6 +3,7 @@ import { guardAccount } from "@/lib/guard";
 import { getDb } from "@/lib/db";
 import { accountUsage } from "@/lib/account-usage";
 import { personFirstName, relativeWhen } from "@/lib/account-display";
+import { verificationStatus } from "@/lib/account-verify";
 import { planAllows } from "@/lib/plan-features";
 import { Icon } from "@/components/Icon";
 
@@ -33,6 +34,8 @@ export default async function AccountHome() {
   const next = steps.find((step) => !step.done);
   const created = getDb().prepare("SELECT created_at FROM users WHERE id = ?").get(user.id) as { created_at: string } | undefined;
   const requests = getDb().prepare("SELECT kind, status, created_at FROM account_requests WHERE user_id = ? ORDER BY id DESC LIMIT 4").all(user.id) as { kind: string; status: string; created_at: string }[];
+  const check = verificationStatus(user.id);
+  const missing = [check.emailVerified ? "" : "email", check.phoneVerified ? "" : "mobile number", check.addressSaved ? "" : "address"].filter(Boolean);
   const activity: Activity[] = [
     { title: "Account created", detail: "Your workspace is ready to set up.", at: created?.created_at || "" },
     ...requests.map((request) => ({ title: request.kind === "number" ? "Number request" : request.kind === "port" ? "Number transfer" : "Request saved", detail: request.status, at: request.created_at })),
@@ -45,6 +48,7 @@ export default async function AccountHome() {
         {doneCount < steps.length ? <span className="ws-pill progress"><i /> Setup in progress</span> : <span className="ws-pill live">Ready</span>}
       </div>
       <p>{doneCount < steps.length ? "Let's get your business ready for its first call." : "Your business phone is ready for calls."}</p>
+      {missing.length ? <p>Confirm your {missing.join(", ")}. <Link href="/account/verify">Finish account confirmation</Link></p> : null}
       {next ? (
         <section className="ws-hero">
           <div>

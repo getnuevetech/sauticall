@@ -1,3 +1,12 @@
+export function fundNeedsRetry(message: string) {
+  return !/turned off|no phone-company balance set/i.test(message);
+}
+
+export function fundRetryDetail(reason: string, retryOk: boolean, retryMessage: string) {
+  if (retryOk) return `Retry successful. ${retryMessage}`;
+  return `${reason} Retry did not add the balance (${retryMessage}). An administrator has to fix this.`;
+}
+
 export function planFundAmount(credit: unknown) {
   const amount = Number(credit);
   if (!Number.isFinite(amount) || amount <= 0) return 0;

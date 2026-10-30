@@ -158,7 +158,7 @@ export function CallsVoicemail({
         <div className="cv-mail">
           <section className="num-card">
             <h2>Voicemail</h2>
-            <p>Messages stay in the phone app. SautiCall keeps the mailbox for each person and does not store a copy of each recording.</p>
+            <p>Messages stay in the phone app until an administrator turns on Amazon S3 or Google Cloud Storage under Recorded messages. SautiCall then keeps a copy in that bucket.</p>
             {mailboxes.length === 0 ? <p>Add a person on the phone system. Their mailbox is created with the extension.</p> : (
               <label>Mailbox
                 <select value={mailbox?.id || ""} onChange={(event) => setMailboxId(Number(event.target.value))}>

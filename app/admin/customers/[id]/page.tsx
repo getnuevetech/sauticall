@@ -1,94 +1,223 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { fundPaidClient, provisionVoipClient, saveCustomerUser } from "../../desk-actions";
-import { userCan } from "@/lib/access";
-import { requirePermission } from "@/lib/access";
-import { formatWhen } from "@/lib/format-when";
+import { CopyButton } from "@/components/admin/CopyButton";
+import { userCan, requirePermission } from "@/lib/access";
+import { customerRoute } from "@/lib/ai-route-store";
+import { clientMailbox } from "@/lib/customer-code";
+import { customerSnapshot } from "@/lib/customer-desk";
 import { flagOn, getDb } from "@/lib/db";
-import { paidPlan } from "@/lib/pbx";
+import { ago } from "@/lib/failure-desk";
+import { formatDay, formatWhen } from "@/lib/format-when";
+import { bestTrunk, outboundChoice } from "@/lib/outbound-path";
+import { formatDid } from "@/lib/phone-ops-view";
+import { recordingPublic } from "@/lib/recording-store";
 
-export default async function CustomerPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; saved?: string }> }) {
+const TABS = [
+  ["overview", "Overview"],
+  ["profile", "Profile"],
+  ["billing", "Billing"],
+  ["phone", "Phone system"],
+  ["support", "Support"],
+  ["activity", "Activity"],
+  ["security", "Security"],
+] as const;
+
+export default async function CustomerPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; saved?: string; tab?: string }> }) {
   const actor = await requirePermission("users.customers");
   const { id } = await params;
   const query = await searchParams;
-  const person = getDb().prepare("SELECT id, name, email, phone, email_verified_at, phone_verified_at, disabled, mfa_required, created_at FROM users WHERE id = ? AND role = 'customer'").get(Number(id)) as {
-    id: number;
-    name: string;
-    email: string;
-    phone: string;
-    email_verified_at: string;
-    phone_verified_at: string;
-    disabled: number;
-    mfa_required: number;
-    created_at: string;
-  } | undefined;
-  if (!person) notFound();
-  const plan = paidPlan(person.id);
-  const lines = getDb().prepare("SELECT did, status, e911_status FROM phone_lines WHERE user_id = ? ORDER BY id").all(person.id) as { did: string; status: string; e911_status: string }[];
-  const voipClient = getDb().prepare("SELECT client_id, email, last_message, funded_cents, funded_plan FROM voip_clients WHERE user_id = ?").get(person.id) as { client_id: string; email: string; last_message: string; funded_cents: number; funded_plan: string } | undefined;
-  const lineAccount = getDb().prepare("SELECT account FROM voip_subaccounts WHERE user_id = ?").get(person.id) as { account: string } | undefined;
-  const openTrunks = (getDb().prepare("SELECT COUNT(*) AS n FROM trunk_tasks WHERE user_id = ? AND status = 'open'").get(person.id) as { n: number }).n;
-  const funding = flagOn("billing.fund_client");
-  const people = getDb().prepare("SELECT number, former_number, first_name, last_name, email, status FROM pbx_extensions WHERE user_id = ? ORDER BY id").all(person.id) as { number: string; former_number: string; first_name: string; last_name: string; email: string; status: string }[];
+  const account = customerSnapshot(Number(id));
+  if (!account) notFound();
+  const tab = TABS.some((item) => item[0] === query.tab) ? query.tab || "overview" : "overview";
+  const globalMfa = flagOn("auth.mfa");
+  const route = outboundChoice({
+    trunk: bestTrunk(account.lines.map((line) => ({ status: line.status, trunkId: line.trunk_id }))),
+    backupEnabled: flagOn("pbx.voipms_backup"),
+    customerClient: Boolean(account.client?.client_id),
+  });
+  const checked = customerRoute(account.id);
+  const trunkIssue = account.lines.length > 0 && account.liveTrunks < account.lines.length || account.openTrunks > 0;
+  const issueCount = (account.lines.length - account.liveTrunks) + account.openTrunks;
   const seeTickets = userCan(actor, "tickets.view") || userCan(actor, "tickets.view_all") || userCan(actor, "tickets.reply");
-  const latestSms = getDb().prepare("SELECT status, detail, created_at FROM sms_outbox WHERE user_id = ? ORDER BY id DESC LIMIT 1").get(person.id) as { status: string; detail: string; created_at: string } | undefined;
+  const recordings = recordingPublic();
+  const mailbox = clientMailbox(account.code);
+  const latestSms = getDb().prepare("SELECT status, detail, created_at FROM sms_outbox WHERE user_id = ? ORDER BY id DESC LIMIT 1").get(account.id) as { status: string; detail: string; created_at: string } | undefined;
+  const failures = getDb().prepare("SELECT id, area, subject, detail, created_at FROM failure_log WHERE user_id = ? ORDER BY id DESC LIMIT 8").all(account.id) as { id: number; area: string; subject: string; detail: string; created_at: string }[];
+  const payments = getDb().prepare("SELECT id, amount_cents, currency, status, plan_name, created_at FROM payment_attempts WHERE user_id = ? ORDER BY id DESC LIMIT 5").all(account.id) as { id: number; amount_cents: number; currency: string; status: string; plan_name: string; created_at: string }[];
   return (
-    <>
-      <span className="eyebrow">Customers</span>
-      <h2>{person.name}</h2>
-      <p><Link href="/admin/customers">All customers</Link> · Joined {formatWhen(person.created_at)} · {plan ? plan.name : "No paid plan"}</p>
-      {query.error ? <p className="form-feedback">{query.error}</p> : null}
-      {query.saved ? <p className="form-feedback">{query.saved}</p> : null}
-      <form className="contact-form" action={saveCustomerUser}>
-        <input type="hidden" name="id" value={person.id} />
-        <div className="form-grid">
-          <label>Name <input name="name" defaultValue={person.name} required /></label>
-          <label>Email <input name="email" type="email" defaultValue={person.email} required /></label>
+    <div className="ops ops-single">
+      <div>
+        <div className="acct-head">
+          <div>
+            <div className="acct-title">
+              <h1>{account.company}</h1>
+              <CopyButton value={account.code} label="Copy customer ID" />
+            </div>
+            <p className="acct-meta">Customer ID {account.code} · Joined {formatDay(account.joined)}</p>
+          </div>
+          <Link className="btn btn-secondary" href={`/admin/customers/${account.id}?tab=profile`}>Edit profile</Link>
         </div>
-        <label>New password <input name="password" type="password" minLength={10} placeholder="Leave blank to keep the current password" /></label>
-        <label className="check-option"><input type="checkbox" name="disabled" defaultChecked={Boolean(person.disabled)} /> Turn off sign-in</label>
-        <label className="check-option"><input type="checkbox" name="mfa_required" defaultChecked={Boolean(person.mfa_required)} /> Require an authenticator for this account</label>
-        <p>When this is on, the customer sets up an authenticator. Revealing an app password asks for a code. The switch under What customers can do can require this for every account.</p>
-        <button className="btn btn-primary" type="submit">Save customer</button>
-      </form>
-      <div className="desk">
-        <section className="desk-card">
-          <h3>Account confirmation</h3>
-          <p>Email {person.email_verified_at ? `confirmed ${formatWhen(person.email_verified_at)}` : "not confirmed yet"}.</p>
-          <p>Mobile {person.phone || "not saved"}{person.phone_verified_at ? `, confirmed ${formatWhen(person.phone_verified_at)}` : person.phone ? ", not confirmed yet" : ""}.</p>
-          {latestSms ? <p>Last text {latestSms.status} {formatWhen(latestSms.created_at)}{latestSms.detail ? `: ${latestSms.detail}` : "."}</p> : null}
-        </section>
-        <section className="desk-card">
-          <h3>People on the phone system</h3>
-          {people.length === 0 ? <p>No extensions yet.</p> : (
-            <ul className="desk-lines">{people.map((item) => <li key={`${item.status}-${item.former_number || item.number}`}>{item.status === "removed" && item.former_number ? item.former_number : item.number} · {item.first_name} {item.last_name} · {item.email} · {item.status === "removed" ? "removed, record kept" : item.status}</li>)}</ul>
-          )}
-        </section>
-        <section className="desk-card">
-          <h3>VoIP.ms client</h3>
-          <p>{voipClient?.client_id ? `Client ${voipClient.client_id}` : "No client yet."}{lineAccount?.account ? ` · Line ${lineAccount.account}` : ""}</p>
-          {voipClient?.email ? <p>{voipClient.email}</p> : null}
-          {voipClient?.funded_cents ? <p>Phone-company balance ${voipClient.funded_cents / 100} for {voipClient.funded_plan}.</p> : <p>{funding ? "No phone-company balance yet. It is added after a plan payment is confirmed, using the amount on that plan." : "Funding client accounts is turned off. Signup still creates the client."}</p>}
-          {voipClient?.last_message ? <p>{voipClient.last_message}</p> : null}
-          <p>This client is created when the customer signs up. Customers do not see it. Their numbers are bought onto the line account linked to this client.</p>
-          <form action={provisionVoipClient}><input type="hidden" name="id" value={person.id} /><button className="btn btn-secondary" type="submit">{voipClient?.client_id ? "Refresh the VoIP.ms client" : "Create the VoIP.ms client"}</button></form>
-          {funding && plan && !voipClient?.funded_cents ? (
-            <form action={fundPaidClient}><input type="hidden" name="id" value={person.id} /><button className="btn btn-secondary" type="submit">Add the plan balance</button></form>
-          ) : null}
-        </section>
-        <section className="desk-card">
-          <h3>3CX trunk</h3>
-          <p>{openTrunks ? `${openTrunks} trunk${openTrunks === 1 ? "" : "s"} still need to be finished on 3CX.` : "No 3CX trunk is waiting for this customer."}</p>
-          <p><Link href={`/admin/lines?company=${person.id}`}>Open this customer's lines and trunks</Link></p>
-        </section>
-        <section className="desk-card">
-          <h3>Numbers</h3>
-          {lines.length === 0 ? <p>No purchased numbers.</p> : (
-            <ul className="desk-lines">{lines.map((line) => <li key={line.did}>{line.did} · {line.status} · emergency {line.e911_status}</li>)}</ul>
-          )}
-        </section>
+        {query.error ? <p className="ops-alert">{query.error}</p> : null}
+        {query.saved ? <p className="form-feedback">{query.saved}</p> : null}
+        <nav className="ops-tabs acct-tabs" aria-label="Customer">
+          {TABS.map(([key, label]) => (
+            <Link key={key} href={`/admin/customers/${account.id}?tab=${key}`} data-current={tab === key ? "true" : undefined}>{label}</Link>
+          ))}
+        </nav>
+
+        {tab === "overview" ? (
+          <>
+            <div className="acct-split">
+              <section className="ops-card">
+                <h2>Contact & account</h2>
+                <div className="acct-split" style={{ marginTop: 8 }}>
+                  <dl className="acct-kv">
+                    <dt>Primary contact</dt><dd>{account.contact}</dd>
+                    <dt>Company</dt><dd>{account.company}</dd>
+                    <dt>Email</dt><dd>{account.email}{account.emailVerified ? <span className="ops-verified">Verified</span> : null}</dd>
+                    <dt>Mobile</dt><dd>{account.phoneLabel || "Not provided"}{account.phoneVerified ? <span className="ops-verified">Verified</span> : null}</dd>
+                    <dt>Secondary phone</dt><dd>Not provided</dd>
+                  </dl>
+                  <dl className="acct-kv">
+                    <dt>Contact address</dt>
+                    <dd>{account.addressLines.length ? account.addressLines.map((line) => <span key={line}>{line}<br /></span>) : "Not provided"}</dd>
+                    <dt>Billing address</dt>
+                    <dd>Not provided<br /><Link href={`/admin/customers/${account.id}?tab=billing`}>Open billing</Link></dd>
+                  </dl>
+                </div>
+                <p className="ops-muted">Contact address is separate from per-number emergency addresses.</p>
+              </section>
+              <aside className="ops-card acct-summary">
+                <h2>Account summary</h2>
+                <p><span>Plan</span><strong>{account.plan}</strong></p>
+                <p><span>Sign-in</span><strong>{account.disabled ? "Disabled" : "Enabled"}</strong></p>
+                <p><span>MFA policy</span><strong>Account requirement: {account.mfaRequired ? "On" : "Off"}</strong></p>
+                <p><span>Global policy</span><strong>{globalMfa ? "On" : "Off"}</strong></p>
+                <p><span>Enrollment</span><strong>{account.emailVerified ? "Email confirmed" : "Not confirmed"}</strong></p>
+                <p><Link href={`/admin/customers/${account.id}?tab=security`}>Security settings →</Link></p>
+              </aside>
+            </div>
+            <h2 style={{ marginTop: 18 }}>Services</h2>
+            <div className="acct-services">
+              <article className="acct-service"><span>Business numbers</span><b>{account.numbers}</b><Link href={`/admin/customers/${account.id}?tab=phone`}>View numbers →</Link></article>
+              <article className="acct-service"><span>Extensions</span><b>{account.allowance ? `${account.extensions} of ${account.allowance}` : account.extensions}</b><Link href={`/admin/customers/${account.id}?tab=phone`}>View extensions →</Link></article>
+              <article className="acct-service"><span>Trunks</span><b>{account.lines.length}</b>{trunkIssue ? <span className="ops-badge warn">Needs attention</span> : null}<div><Link href={`/admin/lines?company=${account.id}`}>View trunks →</Link></div></article>
+              <article className="acct-service"><span>Open tickets</span><b>{account.tickets}</b><Link href={`/admin/customers/${account.id}?tab=support`}>View tickets →</Link></article>
+            </div>
+            {trunkIssue ? (
+              <div className="acct-alert">
+                <div>
+                  <strong>{Math.max(issueCount, 1)} provisioning issue{issueCount === 1 ? "" : "s"}</strong>
+                  <p>A trunk is not fully provisioned. This may affect call routing.</p>
+                </div>
+                <Link className="btn btn-secondary" href={`/admin/lines?company=${account.id}`}>View issue</Link>
+              </div>
+            ) : null}
+            <details className="ops-card" open>
+              <summary>Provider mappings</summary>
+              <p className="ops-muted">Provider-specific identifiers for this customer.</p>
+              <div className="acct-chips">
+                <span>VoIP.ms client {account.client?.client_id || "Not linked"}</span>
+                <span>Line account {account.lineAccount || "Not linked"}</span>
+                <span>3CX trunks {account.lines.filter((line) => line.trunk_id > 0).map((line) => line.trunk_id).join(", ") || "None"}</span>
+              </div>
+            </details>
+          </>
+        ) : null}
+
+        {tab === "profile" ? (
+          <section className="ops-card">
+            <h2>Profile</h2>
+            <form className="ops-stack" action={saveCustomerUser}>
+              <input type="hidden" name="id" value={account.id} />
+              <input type="hidden" name="tab" value="profile" />
+              {account.disabled ? <input type="hidden" name="disabled" value="on" /> : null}
+              {account.mfaRequired ? <input type="hidden" name="mfa_required" value="on" /> : null}
+              <label>Name <input name="name" defaultValue={account.contact} required /></label>
+              <label>Email <input name="email" type="email" defaultValue={account.email} required /></label>
+              <label>New password <input name="password" type="password" minLength={10} placeholder="Leave blank to keep the current password" /></label>
+              <p className="ops-muted">Company on the phone system is {account.company}. Mobile is {account.phoneLabel || "not saved"}.</p>
+              <button className="btn btn-primary" type="submit">Save profile</button>
+            </form>
+          </section>
+        ) : null}
+
+        {tab === "billing" ? (
+          <section className="ops-card">
+            <h2>Billing</h2>
+            <p>Plan {account.plan}.</p>
+            {account.client?.funded_cents ? <p>Phone-company balance ${account.client.funded_cents / 100} for {account.client.funded_plan}.</p> : <p>{flagOn("billing.fund_client") ? "No phone-company balance yet. It is added after a plan payment is confirmed." : "Funding client accounts is turned off."}</p>}
+            {payments.length === 0 ? <p>No payments are stored.</p> : (
+              <ul className="desk-lines">{payments.map((payment) => <li key={payment.id}>{payment.plan_name || "Payment"} · ${(payment.amount_cents / 100).toFixed(2)} {payment.currency} · {payment.status} · {formatWhen(payment.created_at)}</li>)}</ul>
+            )}
+            <p>VoIP.ms is given {mailbox || "the customer ID at sauticall.com"}, not this customer's inbox.</p>
+            {account.client?.last_message ? <p>{account.client.last_message}</p> : null}
+            <form action={provisionVoipClient}><input type="hidden" name="id" value={account.id} /><button className="btn btn-secondary" type="submit">{account.client?.client_id ? "Refresh the VoIP.ms client" : "Create the VoIP.ms client"}</button></form>
+            {flagOn("billing.fund_client") && account.plan !== "No paid plan" && !account.client?.funded_cents ? (
+              <form action={fundPaidClient}><input type="hidden" name="id" value={account.id} /><button className="btn btn-secondary" type="submit">Add the plan balance</button></form>
+            ) : null}
+          </section>
+        ) : null}
+
+        {tab === "phone" ? (
+          <section className="ops-card">
+            <h2>Phone system</h2>
+            <p>{route.reason}</p>
+            <p>{flagOn("pbx.voipms_backup") ? "VoIP.ms backup is on. It uses this customer's client only after 3CX confirms the trunk failed. No call is placed from this page." : "VoIP.ms backup is off. Only an administrator can turn it on in Platform controls. No call is placed from this page."}</p>
+            <ul className="ops-steps">
+              {checked.lines.map((line) => <li key={line.name}><span className={line.state === "ready" ? "ok" : line.state === "blocked" ? "bad" : "muted"} /> {line.text}</li>)}
+            </ul>
+            <p className="ops-muted">Primary is this customer's 3CX extension and trunk. Backup is this customer's VoIP.ms client. The check reads numbers already stored here.</p>
+            <h3>Extensions</h3>
+            {account.people.length === 0 ? <p>No extensions yet.</p> : (
+              <ul className="desk-lines">{account.people.map((item) => <li key={`${item.status}-${item.former_number || item.number}`}>{item.status === "removed" && item.former_number ? item.former_number : item.number} · {item.first_name} {item.last_name} · {item.email} · {item.status}</li>)}</ul>
+            )}
+            <h3>Numbers</h3>
+            {account.lines.length === 0 ? <p>No purchased numbers.</p> : (
+              <ul className="desk-lines">{account.lines.map((line) => <li key={line.did}>{formatDid(line.did)} · {line.status}{line.trunk_id ? ` · trunk ${line.trunk_id}` : ""}</li>)}</ul>
+            )}
+            <p><Link href={`/admin/lines?company=${account.id}`}>Open this customer's lines and trunks</Link></p>
+            <p>Recorded messages: {recordings.provider === "off" ? "storage is off." : `${recordings.provider === "aws" ? "Amazon S3" : "Google Cloud Storage"} bucket ${recordings.bucket}.`}</p>
+          </section>
+        ) : null}
+
+        {tab === "support" ? (
+          <section className="ops-card">
+            <h2>Support</h2>
+            <p>{account.tickets} open ticket{account.tickets === 1 ? "" : "s"}.</p>
+            {seeTickets ? <p><Link href={`/admin/tickets?q=${encodeURIComponent(account.email)}`}>Open this customer's tickets</Link></p> : <p>You do not have ticket access.</p>}
+          </section>
+        ) : null}
+
+        {tab === "activity" ? (
+          <section className="ops-card">
+            <h2>Activity</h2>
+            {latestSms ? <p>Last text {latestSms.status} {ago(latestSms.created_at)}{latestSms.detail ? `: ${latestSms.detail}` : "."}</p> : <p>No text message is stored.</p>}
+            {failures.length === 0 ? <p>No failed requests for this customer.</p> : (
+              <ul className="desk-lines">{failures.map((row) => <li key={row.id}><Link href={`/admin/failures?failure=${row.id}`}>{row.area}</Link> · {row.subject} · {ago(row.created_at)}</li>)}</ul>
+            )}
+          </section>
+        ) : null}
+
+        {tab === "security" ? (
+          <section className="ops-card">
+            <h2>Security</h2>
+            <p>Email {account.emailVerified ? "confirmed" : "not confirmed yet"}.</p>
+            <p>Mobile {account.phoneLabel ? `${account.phoneLabel}, ${account.phoneVerified ? "confirmed" : "not confirmed yet"}` : "not saved"}.</p>
+            <p>Global authenticator policy is {globalMfa ? "on for every account" : "off"}.</p>
+            <form className="ops-stack" action={saveCustomerUser}>
+              <input type="hidden" name="id" value={account.id} />
+              <input type="hidden" name="tab" value="security" />
+              <input type="hidden" name="name" value={account.contact} />
+              <input type="hidden" name="email" value={account.email} />
+              <label className="check-option"><input type="checkbox" name="disabled" defaultChecked={account.disabled} /> Turn off sign-in</label>
+              <label className="check-option"><input type="checkbox" name="mfa_required" defaultChecked={account.mfaRequired} /> Require an authenticator for this account</label>
+              <button className="btn btn-primary" type="submit">Save security</button>
+            </form>
+          </section>
+        ) : null}
       </div>
-      {seeTickets ? <p><Link href={`/admin/tickets?q=${encodeURIComponent(person.email)}`}>Open this customer's tickets</Link></p> : null}
-    </>
+    </div>
   );
 }

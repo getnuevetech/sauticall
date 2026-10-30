@@ -86,6 +86,8 @@ export async function register(_previous: FormState, formData: FormData) {
   }
   await createSession(user.id, false);
   const id = user.id;
+  const { ensureCustomerCode } = await import("@/lib/customer-code-store");
+  ensureCustomerCode(id, planName);
   finishAfterResponse(() => import("@/lib/voip-client").then(({ ensureVoipClient }) => ensureVoipClient(id)));
   const { requestOrigin } = await import("@/lib/payments");
   const { sendAccountEmail } = await import("@/lib/account-verify");
@@ -335,7 +337,8 @@ export async function saveEmergencyAddress(formData: FormData) {
     language: String(formData.get("language") || ""),
   });
   const next = String(formData.get("next") || "");
-  if (!parsed.ok) redirect(next === "profile" ? `/account/security?tab=profile&error=${encodeURIComponent(parsed.message)}` : `/account/numbers?error=${encodeURIComponent(parsed.message)}`);
+  const back = next === "verify" ? "/account/verify" : next === "profile" ? "/account/security?tab=profile" : "/account/numbers";
+  if (!parsed.ok) redirect(`${back}${back.includes("?") ? "&" : "?"}error=${encodeURIComponent(parsed.message)}`);
   saveEmergency(user.id, parsed.address);
   const userId = user.id;
   const { finishAfterResponse } = await import("@/lib/later");
@@ -346,7 +349,7 @@ export async function saveEmergencyAddress(formData: FormData) {
     audit(user.email, "e911.save", sent.ok ? "ok" : "needs-person");
   });
   audit(user.email, "e911.save", "saved");
-  redirect(next === "profile" ? "/account/security?tab=profile&saved=address" : "/account/numbers?address=1");
+  redirect(next === "verify" ? "/account/verify?address=ok" : next === "profile" ? "/account/security?tab=profile&saved=address" : "/account/numbers?address=1");
 }
 
 export async function savePort(formData: FormData) {
