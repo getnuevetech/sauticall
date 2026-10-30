@@ -38,6 +38,9 @@
 .num-terms input{width:auto;margin-top:4px}
 .workspace-page{max-width:860px}
 .workspace-page-head{margin-bottom:18px}
+.ai-services{display:grid;gap:14px}
+.ai-services .contact-form .num-terms{display:flex;align-items:flex-start;gap:10px;font-weight:650;color:#344054;font-size:.92rem}
+.ai-services .contact-form .num-terms input{width:auto;margin-top:3px}
 .ws-title-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .ws-pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:.8rem;font-weight:700}
 .ws-pill.progress{background:#e8f8ef;color:#17803d}

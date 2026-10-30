@@ -2,8 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/access";
-import { AI_ENGINE_KINDS, AI_FUNCTIONS, AI_SWITCHES, knownFunction } from "@/lib/ai-system";
-import { clearAiAssignment, deleteAiEngine, saveAiAssignment, saveAiEngine, saveAiSwitches } from "@/lib/ai-store";
+import { AI_ENGINE_KINDS, AI_FUNCTIONS, AI_SWITCHES, knownFunction, knownSwitch, type AiGrant } from "@/lib/ai-system";
+import { clearAiAssignment, deleteAiEngine, publishAgreement, saveAiAssignment, saveAiEngine, saveAiSwitches, setAdminGrant } from "@/lib/ai-store";
 
 function back(query: string): never {
   redirect(`/admin/ai?${query}`);
@@ -39,6 +39,24 @@ export async function removeAiEngine(formData: FormData) {
   const result = deleteAiEngine(id, user.email);
   if (!result.ok) back(`error=${encodeURIComponent(result.message)}&id=${id}`);
   back("saved=removed");
+}
+
+export async function saveAgreementForm(formData: FormData) {
+  const user = await requirePermission("settings.ai");
+  const feature = String(formData.get("feature") || "");
+  if (!knownSwitch(feature) || feature === "master") back("error=Choose%20a%20service");
+  const result = publishAgreement(feature, String(formData.get("title") || ""), String(formData.get("body") || ""), user.email);
+  if (!result.ok) redirect(`/admin/ai/terms?feature=${feature}&error=${encodeURIComponent(result.message)}`);
+  redirect(`/admin/ai/terms?feature=${feature}&saved=${result.version}`);
+}
+
+export async function reviewCustomerAi(formData: FormData) {
+  const user = await requirePermission("settings.ai");
+  const userId = Number(formData.get("user_id") || 0);
+  const decision = String(formData.get("decision") || "");
+  if (!userId || (decision !== "granted" && decision !== "suspended" && decision !== "none")) back("error=Choose%20grant%20or%20suspend");
+  setAdminGrant(userId, "notifications", decision as AiGrant, user.email, decision);
+  redirect("/admin/ai/access?saved=1");
 }
 
 export async function saveAiAssignmentForm(formData: FormData) {

@@ -1,3 +1,5 @@
+import crypto from "crypto";
+
 export const AI_ENGINE_KINDS = ["tts", "stt", "llm"] as const;
 
 export const AI_SWITCHES = [
@@ -68,6 +70,63 @@ export function validateEngine(input: AiEngineDraft): { ok: true; engine: AiEngi
   if (secretRef && !/^[A-Za-z0-9][A-Za-z0-9._-]*[:/][A-Za-z0-9._:/-]+$/.test(secretRef)) return { ok: false, message: "Use a vault name such as vault:ai-voice. Do not paste the secret itself." };
   if (input.enabled && !endpoint) return { ok: false, message: "Add an https address before turning this engine on." };
   return { ok: true, engine: { name, kind: input.kind, model, endpoint, secretRef, enabled: input.enabled } };
+}
+
+export const AI_PLAN_FEATURE: Record<Exclude<AiSwitchCode, "master">, "ai" | "ai_notifications" | "ai_assistant" | "ai_outbound" | "ai_setup"> = {
+  notifications: "ai_notifications",
+  receptionist: "ai",
+  personal_assistant: "ai_assistant",
+  outbound_assistant: "ai_outbound",
+  setup_assistant: "ai_setup",
+};
+
+export const NOTIFICATION_ACKS = [
+  { code: "authority", label: "I am allowed to turn this on for this account." },
+  { code: "permission", label: "I am responsible for having permission from every person this account calls." },
+  { code: "identity", label: "The business name and the message will be truthful." },
+  { code: "optout", label: "I will honor stop requests and remove people who opt out." },
+  { code: "charges", label: "I accept the usage charges and limits on this account." },
+] as const;
+
+export type AiGrant = "none" | "requested" | "granted" | "suspended";
+
+export function agreementDigest(title: string, body: string) {
+  return crypto.createHash("sha256").update(`${title.trim()}\n${body.trim()}`).digest("hex");
+}
+
+export function nextAgreementVersion(current: { version: number; digest: string } | null, title: string, body: string) {
+  const digest = agreementDigest(title, body);
+  if (current && current.digest === digest) return { version: current.version, digest, changed: false };
+  return { version: (current?.version || 0) + 1, digest, changed: true };
+}
+
+export function acceptanceComplete(codes: string[]) {
+  return NOTIFICATION_ACKS.every((item) => codes.includes(item.code));
+}
+
+export const DRAFT_NOTIFICATION_AGREEMENT = {
+  title: "Automated calling agreement",
+  body: "This draft must be replaced after legal review before production calling. Accepting it does not give permission from the people who will be called. You are responsible for calling only people your business is allowed to call, for a truthful business name and message, and for honoring a request to stop. SautiCall can refuse or stop calls. Usage can create charges under the plan on this account.",
+};
+
+export function activationState(input: {
+  globalOn: boolean;
+  planIncludes: boolean;
+  publishedVersion: number;
+  acceptedVersion: number;
+  grant: AiGrant;
+  customerEnabled: boolean;
+  reviewRequired: boolean;
+}) {
+  if (!input.globalOn) return { code: "off_global" as const, label: "Turned off by SautiCall" };
+  if (!input.planIncludes) return { code: "not_in_plan" as const, label: "Not on this plan" };
+  if (input.grant === "suspended") return { code: "suspended" as const, label: "Suspended by SautiCall" };
+  if (input.reviewRequired && input.publishedVersion < 1) return { code: "pending_terms" as const, label: "Terms are not published yet" };
+  if (input.publishedVersion > 0 && input.acceptedVersion < input.publishedVersion) return { code: "pending_terms" as const, label: "Accept the current terms" };
+  if (input.reviewRequired && input.grant === "requested") return { code: "pending_review" as const, label: "Waiting for review" };
+  if (input.reviewRequired && input.grant !== "granted") return { code: "ready_to_request" as const, label: "Ask SautiCall to turn this on" };
+  if (!input.customerEnabled) return { code: "paused" as const, label: "Off. You can turn it on." };
+  return { code: "active" as const, label: "On" };
 }
 
 export function validateAssignment(functionCode: string, engineId: number, engines: AiEngineRecord[]) {

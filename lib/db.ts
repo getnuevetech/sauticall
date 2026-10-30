@@ -4,7 +4,7 @@ import Database from "better-sqlite3";
 import { hashPassword } from "./auth";
 import { upgradeContent } from "./content-upgrade";
 import { seedDesk } from "./desk-seed";
-import { AI_SWITCHES } from "./ai-system";
+import { AI_SWITCHES, DRAFT_NOTIFICATION_AGREEMENT, agreementDigest } from "./ai-system";
 import { defaultExtensionPlan } from "./extension-numbers";
 import { dataDir } from "./paths";
 import {
@@ -446,9 +446,40 @@ function migrate(database: Database.Database) {
       engine_id INTEGER NOT NULL,
       updated_at TEXT NOT NULL DEFAULT ''
     );
+    CREATE TABLE IF NOT EXISTS ai_agreements (
+      feature_code TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      digest TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (feature_code, version)
+    );
+    CREATE TABLE IF NOT EXISTS ai_acceptances (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      feature_code TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      acks TEXT NOT NULL,
+      digest TEXT NOT NULL,
+      accepted_at TEXT NOT NULL,
+      ip_hash TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS ai_entitlements (
+      user_id INTEGER NOT NULL,
+      feature_code TEXT NOT NULL,
+      admin_grant TEXT NOT NULL DEFAULT 'none',
+      customer_enabled INTEGER NOT NULL DEFAULT 0,
+      reason TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (user_id, feature_code)
+    );
   `);
   const insertSwitch = database.prepare("INSERT INTO ai_switches (code, enabled, updated_at) VALUES (?, 0, '') ON CONFLICT(code) DO NOTHING");
   for (const item of AI_SWITCHES) insertSwitch.run(item.code);
+  const draft = DRAFT_NOTIFICATION_AGREEMENT;
+  database.prepare("INSERT INTO ai_agreements (feature_code, version, title, body, digest, updated_at) VALUES ('notifications', 1, ?, ?, ?, '') ON CONFLICT(feature_code, version) DO NOTHING")
+    .run(draft.title, draft.body, agreementDigest(draft.title, draft.body));
   const extensionCols = new Set((database.prepare("PRAGMA table_info(pbx_extensions)").all() as { name: string }[]).map((column) => column.name));
   if (!extensionCols.has("former_number")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN former_number TEXT NOT NULL DEFAULT ''");
   if (!extensionCols.has("removed_at")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN removed_at TEXT NOT NULL DEFAULT ''");

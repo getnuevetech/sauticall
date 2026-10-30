@@ -11,6 +11,10 @@ export const PLAN_FEATURES = [
   { key: "queues", group: "Phone", label: "Call queues", detail: "Queue incoming calls with configurable settings." },
   { key: "ai", group: "AI", label: "AI receptionist", detail: "AI answers calls and handles common requests." },
   { key: "ai_any_language", group: "AI", label: "Multilingual AI", detail: "Support for multiple languages." },
+  { key: "ai_notifications", group: "AI", label: "Automated notifications", detail: "Approved outbound voice notifications with accept, decline, and opt out." },
+  { key: "ai_assistant", group: "AI", label: "Personal assistant", detail: "Screen the owner's calls." },
+  { key: "ai_outbound", group: "AI", label: "Outbound assistant", detail: "Task-limited two-way calls." },
+  { key: "ai_setup", group: "AI", label: "Setup assistant", detail: "Draft a phone-system proposal for review." },
   { key: "reporting", group: "Reporting", label: "Call reporting", detail: "Detailed call logs and analytics." },
 ] as const;
 
