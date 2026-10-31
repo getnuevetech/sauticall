@@ -5,7 +5,7 @@ import { clearOwnMfa, enrollMfa } from "../actions";
 import { authenticatorQr, authenticatorUri } from "@/lib/authenticator";
 import { currentUser } from "@/lib/auth";
 import { accountNeedsMfa } from "@/lib/mfa";
-import { acceptedDepartmentName, DEPARTMENT_NAME_RULES } from "@/lib/pbx-user";
+import { DEPARTMENT_NAME_RULES, shownAccountName } from "@/lib/pbx-user";
 import { extensionCapacity, paidPlan } from "@/lib/pbx";
 import { extensionSetup } from "@/lib/account-display";
 import { customerMessage } from "@/lib/customer-message";
@@ -28,6 +28,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
   const qr = await authenticatorQr(uri);
   const plan = paidPlan(user.id);
   const hours = getDb().prepare("SELECT name FROM pbx_departments WHERE user_id = ?").get(user.id) as { name: string } | undefined;
+  const profile = getDb().prepare("SELECT business_name FROM users WHERE id = ?").get(user.id) as { business_name: string } | undefined;
   const rows = getDb().prepare("SELECT id, number, former_number, first_name, last_name, email, status FROM pbx_extensions WHERE user_id = ? ORDER BY id").all(user.id) as { id: number; number: string; former_number: string; first_name: string; last_name: string; email: string; status: string }[];
   const active = rows.filter((row) => row.status !== "removed");
   const address = getEmergency(user.id);
@@ -45,7 +46,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
       initialTab={params.tab || (required && !user.mfa_secret ? "security" : "overview")}
       name={user.name}
       email={user.email}
-      company={acceptedDepartmentName(hours?.name || "")}
+      company={shownAccountName(hours?.name || "", profile?.business_name || "", user.name)}
       rules={DEPARTMENT_NAME_RULES}
       hasPlan={Boolean(plan)}
       seats={plan ? extensionCapacity(plan) : 0}

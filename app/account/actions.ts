@@ -14,6 +14,7 @@ import { safeCustomerError } from "@/lib/customer-message";
 import { finishAfterResponse } from "@/lib/later";
 import { audit, flagOn, getDb } from "@/lib/db";
 import { accountNeedsMfa, revealBlock } from "@/lib/mfa";
+import { departmentNameIssue, normalizeDepartmentName } from "@/lib/pbx-user";
 
 type FormState = { error: string } | null;
 
@@ -61,6 +62,7 @@ export async function confirmMfa(_previous: FormState, formData: FormData) {
 export async function register(_previous: FormState, formData: FormData) {
   if (!flagOn("auth.signup")) return { error: "New registrations are turned off by an administrator." };
   const name = String(formData.get("name") || "").trim();
+  const business = normalizeDepartmentName(String(formData.get("business") || ""));
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
   const { normalizeMobile } = await import("@/lib/verify-code");
@@ -68,11 +70,15 @@ export async function register(_previous: FormState, formData: FormData) {
   if (!name || !email || password.length < 8) return { error: "Use your name, email, and a password of at least 8 characters." };
   if (!phone) return { error: "Enter a mobile number with the country code, such as +1 202 555 0100." };
   if (formData.get("terms") !== "on") return { error: "Agree to the Terms of Service to create an account." };
+  if (business) {
+    const issue = departmentNameIssue(business);
+    if (issue) return { error: issue };
+  }
   const now = new Date().toISOString();
   try {
     getDb()
-      .prepare("INSERT INTO users (email, name, password_hash, role, mfa_secret, created_at, phone, terms_accepted_at) VALUES (?, ?, ?, 'customer', NULL, ?, ?, ?)")
-      .run(email, name, hashPassword(password), now, phone, now);
+      .prepare("INSERT INTO users (email, name, password_hash, role, mfa_secret, created_at, phone, terms_accepted_at, business_name) VALUES (?, ?, ?, 'customer', NULL, ?, ?, ?, ?)")
+      .run(email, name, hashPassword(password), now, phone, now, business);
   } catch {
     return { error: "An account with that email already exists." };
   }

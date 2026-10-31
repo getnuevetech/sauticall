@@ -63,6 +63,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
             submit={say("registerSubmit")}
             fields={[
               { name: "name", label: say("registerName"), placeholder: say("registerNameHint") },
+              { name: "business", label: say("registerBusiness"), placeholder: say("registerBusinessHint"), optional: true, maxLength: 50 },
               { name: "email", label: say("registerEmail"), type: "email", placeholder: say("registerEmailHint") },
               { name: "phone", label: say("registerPhone"), type: "tel", placeholder: say("registerPhoneHint") },
               { name: "password", label: say("registerPassword"), type: "password", placeholder: say("registerPasswordHint") },

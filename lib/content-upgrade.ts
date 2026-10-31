@@ -301,6 +301,8 @@ export function upgradeContent(database: Database.Database) {
       changed = true;
     }
     if (mergeMissing(account, {
+      registerBusiness: "Business name",
+      registerBusinessHint: "Used as your company name",
       numbersBuy: "Buy this number",
       numbersOrdered: "This number was bought from the phone company.",
       numbersHeld: "The request is saved. Buying is turned off, so it waits until live number ordering is on.",

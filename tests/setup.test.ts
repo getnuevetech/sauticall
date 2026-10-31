@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { selectionAdvice } from "../lib/offerings.ts";
 import { recommendPlan, readSetupNeed } from "../lib/setup-assistant.ts";
+import { accountDepartmentName, accountDisplayName } from "../lib/pbx-user.ts";
 import { planSignupPath } from "../lib/signup.ts";
 import type { Plan } from "../lib/types.ts";
 
@@ -11,6 +12,14 @@ const plans: Plan[] = [
   { name: "Team", price: 79, custom: false, base: false, multilingual: true, includedMinutes: 2000, carrierCredit: 15, seats: 10, priceLabel: "", desc: "", units: "", features: ["numbers", "porting", "queues", "ai", "ai_any_language"], note: "", popular: false, ctaLabel: "", ctaHref: "" },
   { name: "Custom", price: 0, custom: true, base: false, multilingual: true, includedMinutes: 0, carrierCredit: 0, seats: 0, priceLabel: "Custom", desc: "", units: "", features: ["ai"], note: "", popular: false, ctaLabel: "", ctaHref: "/custom" },
 ];
+
+test("a business name becomes the account and department, and a blank one uses the full name", () => {
+  assert.equal(accountDisplayName("Tell Me Its Real", "Ada Lovelace"), "Tell Me Its Real");
+  assert.equal(accountDisplayName("  ", "Ada Lovelace"), "Ada Lovelace");
+  assert.equal(accountDepartmentName("Tell Me Its Real", "Ada Lovelace"), "Tell Me Its Real");
+  assert.equal(accountDepartmentName("", "Ada Lovelace"), "Ada Lovelace");
+  assert.equal(accountDepartmentName("O'Brien", "Ada Lovelace"), "Ada Lovelace");
+});
 
 test("a one-person description stays on the plan without AI", () => {
   assert.equal(readSetupNeed("just me, a business number").people, 1);

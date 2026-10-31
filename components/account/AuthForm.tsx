@@ -15,7 +15,7 @@ export function AuthForm({
 }: {
   action: (previous: FormState, formData: FormData) => Promise<FormState | void>;
   submit: string;
-  fields: { name: string; label: string; type?: string; placeholder?: string }[];
+  fields: { name: string; label: string; type?: string; placeholder?: string; optional?: boolean; maxLength?: number }[];
   extra?: React.ReactNode;
   className?: string;
   submitClassName?: string;
@@ -30,14 +30,14 @@ export function AuthForm({
     <form className={className} action={formAction}>
       {fields.map((field) => (
         <label key={field.name}>
-          {field.label}
+          {field.label}{field.optional ? " (optional)" : ""}
           {field.type === "password" ? (
             <span className="pub-pass">
               <input name={field.name} type={shown[field.name] ? "text" : "password"} placeholder={field.placeholder} autoComplete={submit.startsWith("Create") ? "new-password" : "current-password"} required />
               <button type="button" onClick={() => setShown((current) => ({ ...current, [field.name]: !current[field.name] }))}>{shown[field.name] ? "Hide" : "Show"}</button>
             </span>
           ) : (
-            <input name={field.name} type={field.type || "text"} placeholder={field.placeholder} autoComplete={field.type === "email" ? "username" : field.type === "tel" ? "tel" : undefined} required />
+            <input name={field.name} type={field.type || "text"} placeholder={field.placeholder} autoComplete={field.name === "business" ? "organization" : field.type === "email" ? "username" : field.type === "tel" ? "tel" : field.name === "name" ? "name" : undefined} maxLength={field.maxLength} required={!field.optional} />
           )}
         </label>
       ))}

@@ -6,7 +6,7 @@ import { extensionCapacity, paidPlan } from "@/lib/pbx";
 import { planAllows } from "@/lib/plan-features";
 import { customerMessage } from "@/lib/customer-message";
 import { accountNeedsMfa } from "@/lib/mfa";
-import { DEPARTMENT_NAME_RULES, acceptedDepartmentName } from "@/lib/pbx-user";
+import { DEPARTMENT_NAME_RULES, shownAccountName } from "@/lib/pbx-user";
 import { extensionSetup } from "@/lib/account-display";
 import { systemsForPlan } from "@/lib/ai-account";
 
@@ -23,6 +23,7 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
   const limit = plan ? extensionCapacity(plan) : 0;
   const rows = getDb().prepare("SELECT id, number, former_number, first_name, last_name, email, status, welcome_note, ai_role, ai_name FROM pbx_extensions WHERE user_id = ? ORDER BY number").all(user.id) as Extension[];
   const hours = getDb().prepare("SELECT name, open_time, close_time, last_message FROM pbx_departments WHERE user_id = ?").get(user.id) as { name: string; open_time: string; close_time: string; last_message: string } | undefined;
+  const profile = getDb().prepare("SELECT business_name FROM users WHERE id = ?").get(user.id) as { business_name: string } | undefined;
   const lines = getDb().prepare("SELECT status FROM phone_lines WHERE user_id = ?").all(user.id) as { status: string }[];
   const groups = getDb().prepare("SELECT * FROM call_groups WHERE user_id = ? ORDER BY kind, id").all(user.id) as CallGroup[];
   const saved = params.saved === "department"
@@ -43,7 +44,7 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
   return (
     <PhoneSystem
       initialTab={params.tab || "users"}
-      company={acceptedDepartmentName(hours?.name || "")}
+      company={shownAccountName(hours?.name || "", profile?.business_name || "", user.name)}
       rules={DEPARTMENT_NAME_RULES}
       planName={plan?.name || ""}
       seats={limit}
