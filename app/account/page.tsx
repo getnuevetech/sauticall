@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 import { accountUsage } from "@/lib/account-usage";
 import { personFirstName, relativeWhen } from "@/lib/account-display";
 import { verificationStatus } from "@/lib/account-verify";
-import { planAllows } from "@/lib/plan-features";
+import { systemsForPlan } from "@/lib/ai-account";
 import { Icon } from "@/components/Icon";
 
 type Line = { status: string };
@@ -21,7 +21,8 @@ export default async function AccountHome() {
   const calls = (getDb().prepare("SELECT COUNT(*) AS n FROM cdr_events WHERE user_id = ?").get(user.id) as { n: number }).n;
   const hours = Boolean(getDb().prepare("SELECT user_id FROM pbx_departments WHERE user_id = ?").get(user.id));
   const seats = plan?.seats && plan.seats > 0 ? plan.seats : 0;
-  const aiIncluded = planAllows(plan, "ai");
+  const includedAi = systemsForPlan(plan?.features || []).filter((item) => item.included);
+  const aiIncluded = includedAi.length > 0;
   const activated = numbers > 0;
   const steps = [
     { title: "Create your account", detail: "Your workspace is ready.", href: "/account", done: true, action: "" },
@@ -77,7 +78,7 @@ export default async function AccountHome() {
         <Link className="ws-stat" href="/account/numbers"><span className="ws-ico"><Icon name="phone" size={18} /></span><span><b>{numbers}</b>{numbers === 0 ? "Add your first number" : "Business numbers"}</span></Link>
         <Link className="ws-stat" href="/account/phone"><span className="ws-ico"><Icon name="users" size={18} /></span><span><b>{seats ? `${people} of ${seats}` : String(people)}</b>{people < seats ? "Invite your team" : "Team members"}</span></Link>
         <Link className="ws-stat" href="/account/minutes"><span className="ws-ico"><Icon name="mic" size={18} /></span><span><b>{activated ? `${usage.remaining} left` : `${usage.included.toLocaleString("en-US")} included`}</b>{activated ? "Outbound minutes" : "Available after activation"}</span></Link>
-        <Link className="ws-stat" href="/account/ai"><span className="ws-ico"><Icon name="spark" size={18} /></span><span><b>{aiIncluded ? "Included" : "Not on this plan"}</b>{aiIncluded ? "Set up your assistant" : "AI receptionist"}</span></Link>
+        <Link className="ws-stat" href="/account/ai"><span className="ws-ico"><Icon name="spark" size={18} /></span><span><b>{aiIncluded ? `${includedAi.length} on this plan` : "None on this plan"}</b>{aiIncluded ? includedAi.map((item) => item.label).slice(0, 2).join(", ") : "AI systems"}</span></Link>
       </div>
       <div className="ws-columns">
         <section className="ws-card">

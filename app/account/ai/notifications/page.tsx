@@ -5,10 +5,22 @@ import { choiceLine, outcomeLabel, practiceAllowed } from "@/lib/ai-notify";
 import { listCampaigns, listPurposes, listRecipients, notificationsActive, recipientBlockers } from "@/lib/ai-notify-store";
 import { customerRoute } from "@/lib/ai-route-store";
 import { listClips } from "@/lib/ai-audio-store";
+import { paidPlan } from "@/lib/pbx";
+import { planAllows } from "@/lib/plan-features";
 
 export default async function AccountNotificationsPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string; outcome?: string }> }) {
   const user = await guardAccount();
   const query = await searchParams;
+  if (!planAllows(paidPlan(user.id), "ai_notifications")) {
+    return (
+      <div className="workspace-page">
+        <header className="workspace-page-head">
+          <h1>Notifications</h1>
+          <p>Automated notifications are not included on this plan. <Link className="text-link" href="/account/ai">Back to AI</Link></p>
+        </header>
+      </div>
+    );
+  }
   const active = notificationsActive(user.id);
   const purposes = listPurposes().filter((item) => item.enabled);
   const clips = listClips(user.id).filter((clip) => clip.status === "ready");

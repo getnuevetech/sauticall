@@ -12,12 +12,16 @@ import { formatDay, formatWhen } from "@/lib/format-when";
 import { bestTrunk, outboundChoice } from "@/lib/outbound-path";
 import { formatDid } from "@/lib/phone-ops-view";
 import { recordingPublic } from "@/lib/recording-store";
+import { systemsForPlan } from "@/lib/ai-account";
+import { aiSettingsFor, listAiExtensions } from "@/lib/ai-account-store";
+import { paidPlan } from "@/lib/pbx";
 
 const TABS = [
   ["overview", "Overview"],
   ["profile", "Profile"],
   ["billing", "Billing"],
   ["phone", "Phone system"],
+  ["ai", "AI"],
   ["support", "Support"],
   ["activity", "Activity"],
   ["security", "Security"],
@@ -41,6 +45,9 @@ export default async function CustomerPage({ params, searchParams }: { params: P
   const issueCount = (account.lines.length - account.liveTrunks) + account.openTrunks;
   const seeTickets = userCan(actor, "tickets.view") || userCan(actor, "tickets.view_all") || userCan(actor, "tickets.reply");
   const recordings = recordingPublic();
+  const customerPlan = paidPlan(account.id);
+  const aiSystems = systemsForPlan(customerPlan?.features || []);
+  const aiExtensions = listAiExtensions(account.id);
   const mailbox = clientMailbox(account.code);
   const latestSms = getDb().prepare("SELECT status, detail, created_at FROM sms_outbox WHERE user_id = ? ORDER BY id DESC LIMIT 1").get(account.id) as { status: string; detail: string; created_at: string } | undefined;
   const failures = getDb().prepare("SELECT id, area, subject, detail, created_at FROM failure_log WHERE user_id = ? ORDER BY id DESC LIMIT 8").all(account.id) as { id: number; area: string; subject: string; detail: string; created_at: string }[];
@@ -179,6 +186,29 @@ export default async function CustomerPage({ params, searchParams }: { params: P
             )}
             <p><Link href={`/admin/lines?company=${account.id}`}>Open this customer's lines and trunks</Link></p>
             <p>Recorded messages: {recordings.provider === "off" ? "storage is off." : `${recordings.provider === "aws" ? "Amazon S3" : "Google Cloud Storage"} bucket ${recordings.bucket}.`}</p>
+          </section>
+        ) : null}
+
+        {tab === "ai" ? (
+          <section className="ops-card">
+            <h2>AI for this account</h2>
+            <p>{customerPlan ? `${customerPlan.name} includes ${aiSystems.filter((item) => item.included).length} of ${aiSystems.length} AI systems.` : "This account has no paid plan, so no AI system is included."} Each system is turned on for a plan in Plans. This page does not place a call, and live calls stay off until the phone-system connection is verified.</p>
+            {aiSystems.map((system) => {
+              const settings = aiSettingsFor(account.id, system.code);
+              const assigned = aiExtensions.find((item) => item.ai_role === system.code);
+              return (
+                <article key={system.code}>
+                  <h3>{system.label}</h3>
+                  <p>{system.included ? "Included on this plan." : "Not included on this plan."}</p>
+                  <p>{settings?.display_name ? `Name ${settings.display_name}.` : "No name saved."} {assigned ? `Extension ${assigned.number} is the AI extension.` : "No AI extension is assigned."}</p>
+                  {settings?.greeting ? <p>{settings.greeting}</p> : null}
+                </article>
+              );
+            })}
+            <h3>Extensions</h3>
+            {aiExtensions.length === 0 ? <p>No extensions yet. The customer chooses an AI extension while adding a person.</p> : (
+              <ul className="desk-lines">{aiExtensions.map((item) => <li key={item.id}>{item.number} · {item.first_name} {item.last_name} · {item.ai_role ? `${item.ai_name || "AI"} (${item.ai_role})` : "Ordinary extension"}</li>)}</ul>
+            )}
           </section>
         ) : null}
 
