@@ -26,9 +26,9 @@ export async function saveAiEngineForm(formData: FormData) {
     kind: AI_ENGINE_KINDS.includes(kind as (typeof AI_ENGINE_KINDS)[number]) ? kind : "",
     model: String(formData.get("model") || ""),
     endpoint: String(formData.get("endpoint") || ""),
-    secretRef: String(formData.get("secret_ref") || ""),
+    secretRef: "",
     enabled: formData.get("enabled") === "on",
-  }, user.email);
+  }, String(formData.get("secret") || ""), user.email);
   if (!result.ok) back(`error=${encodeURIComponent(result.message)}${id ? `&id=${id}` : "&new=1"}`);
   back(`saved=engine&id=${result.id}`);
 }

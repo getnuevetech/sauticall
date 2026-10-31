@@ -1,4 +1,4 @@
-import { AI_SWITCHES, DRAFT_NOTIFICATION_AGREEMENT, acceptanceComplete, nextAgreementVersion, validateAssignment, validateEngine, type AiEngineDraft, type AiEngineRecord, type AiGrant } from "./ai-system";
+import { AI_SWITCHES, DRAFT_NOTIFICATION_AGREEMENT, acceptanceComplete, nextAgreementVersion, validateAssignment, validateEngine, validateEngineKey, type AiEngineDraft, type AiEngineRecord, type AiGrant } from "./ai-system";
 import { audit, getDb } from "./db";
 
 export function listAiSwitches() {
@@ -12,13 +12,14 @@ export function enabledSwitchCodes() {
 }
 
 export function listAiEngines(): AiEngineRecord[] {
-  return (getDb().prepare("SELECT id, name, kind, model_name, endpoint, secret_ref, enabled FROM ai_engines ORDER BY name, id").all() as {
+  return (getDb().prepare("SELECT id, name, kind, model_name, endpoint, secret_ref, secret, enabled FROM ai_engines ORDER BY name, id").all() as {
     id: number;
     name: string;
     kind: string;
     model_name: string;
     endpoint: string;
     secret_ref: string;
+    secret: string;
     enabled: number;
   }[]).map((row) => ({
     id: row.id,
@@ -27,8 +28,14 @@ export function listAiEngines(): AiEngineRecord[] {
     model: row.model_name,
     endpoint: row.endpoint,
     secretRef: row.secret_ref,
+    hasSecret: Boolean(row.secret),
     enabled: row.enabled === 1,
   }));
+}
+
+export function readAiEngineSecret(id: number) {
+  const row = getDb().prepare("SELECT secret FROM ai_engines WHERE id = ?").get(id) as { secret: string } | undefined;
+  return row?.secret || "";
 }
 
 export function listAiAssignments() {
@@ -48,22 +55,26 @@ export function saveAiSwitches(codes: string[], actor: string) {
   audit(actor, "ai.switches", [...chosen].sort().join(",") || "all-off");
 }
 
-export function saveAiEngine(id: number | null, draft: AiEngineDraft, actor: string) {
+export function saveAiEngine(id: number | null, draft: AiEngineDraft, apiKey: string, actor: string) {
   const parsed = validateEngine(draft);
   if (!parsed.ok) return parsed;
   const engine = parsed.engine;
   const now = new Date().toISOString();
   const database = getDb();
-  if (id) {
-    const existing = database.prepare("SELECT id FROM ai_engines WHERE id = ?").get(id) as { id: number } | undefined;
-    if (!existing) return { ok: false as const, message: "That engine was not found." };
-    database.prepare("UPDATE ai_engines SET name = ?, kind = ?, model_name = ?, endpoint = ?, secret_ref = ?, enabled = ?, updated_at = ? WHERE id = ?")
-      .run(engine.name, engine.kind, engine.model, engine.endpoint, engine.secretRef, engine.enabled ? 1 : 0, now, id);
+  const existing = id ? database.prepare("SELECT id, secret, secret_ref FROM ai_engines WHERE id = ?").get(id) as { id: number; secret: string; secret_ref: string } | undefined : undefined;
+  if (id && !existing) return { ok: false as const, message: "That engine was not found." };
+  const key = validateEngineKey(apiKey);
+  if (!key.ok) return key;
+  const secret = key.key || existing?.secret || "";
+  const secretRef = engine.secretRef || existing?.secret_ref || "";
+  if (id && existing) {
+    database.prepare("UPDATE ai_engines SET name = ?, kind = ?, model_name = ?, endpoint = ?, secret_ref = ?, secret = ?, enabled = ?, updated_at = ? WHERE id = ?")
+      .run(engine.name, engine.kind, engine.model, engine.endpoint, secretRef, secret, engine.enabled ? 1 : 0, now, id);
     audit(actor, "ai.engine", String(id));
     return { ok: true as const, id };
   }
-  const result = database.prepare("INSERT INTO ai_engines (name, kind, model_name, endpoint, secret_ref, enabled, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .run(engine.name, engine.kind, engine.model, engine.endpoint, engine.secretRef, engine.enabled ? 1 : 0, now);
+  const result = database.prepare("INSERT INTO ai_engines (name, kind, model_name, endpoint, secret_ref, secret, enabled, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .run(engine.name, engine.kind, engine.model, engine.endpoint, secretRef, secret, engine.enabled ? 1 : 0, now);
   const created = Number(result.lastInsertRowid);
   audit(actor, "ai.engine", String(created));
   return { ok: true as const, id: created };

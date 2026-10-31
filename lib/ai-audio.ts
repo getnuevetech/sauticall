@@ -1,5 +1,17 @@
 import crypto from "crypto";
 
+function providerErrorText(body: string, secret: string) {
+  let message = body.replace(/\s+/g, " ").trim().slice(0, 240);
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: unknown } };
+    if (typeof parsed.error?.message === "string") message = parsed.error.message.replace(/\s+/g, " ").trim().slice(0, 240);
+  } catch {
+    message = body.replace(/\s+/g, " ").trim().slice(0, 240);
+  }
+  if (secret) message = message.split(secret).join("[hidden]");
+  return message;
+}
+
 export const AUDIO_CAPS = { maxSeconds: 180, maxBytes: 5_000_000, retentionDays: 3650, scriptLength: 2000 };
 
 export type AudioPolicy = {
@@ -160,6 +172,7 @@ export async function readEngineAudio(
   payload: { text: string; voice: string; model: string },
   maxBytes: number,
   fetchImpl: typeof fetch = fetch,
+  auth: { bearer?: string } = {},
 ) {
   let url: URL;
   try {
@@ -168,11 +181,13 @@ export async function readEngineAudio(
     return { ok: false as const, message: "The text-to-voice address is not a valid https address." };
   }
   if (url.protocol !== "https:" || url.username || url.password) return { ok: false as const, message: "The text-to-voice address must be https, without a password in the address." };
+  const headers: Record<string, string> = { "content-type": "application/json", accept: "audio/wav, audio/mpeg" };
+  if (auth.bearer) headers.authorization = `Bearer ${auth.bearer}`;
   let response: Response;
   try {
     response = await fetchImpl(url, {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "audio/wav, audio/mpeg" },
+      headers,
       body: JSON.stringify(payload),
       redirect: "error",
       signal: AbortSignal.timeout(8000),
@@ -180,7 +195,10 @@ export async function readEngineAudio(
   } catch {
     return { ok: false as const, message: "The text-to-voice engine did not respond. No audio was stored." };
   }
-  if (!response.ok) return { ok: false as const, message: "The text-to-voice engine did not return audio. No audio was stored." };
+  if (!response.ok) {
+    const detail = providerErrorText(await response.text(), auth.bearer || "");
+    return { ok: false as const, message: detail ? `The text-to-voice engine did not return audio. ${detail}` : "The text-to-voice engine did not return audio. No audio was stored." };
+  }
   const type = (response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
   const mime = type === "audio/mpeg" || type === "audio/mp3" ? "audio/mpeg" : type === "audio/wav" || type === "audio/wave" || type === "audio/x-wav" ? "audio/wav" : "";
   if (!mime) return { ok: false as const, message: "The text-to-voice engine returned something other than audio. No audio was stored." };

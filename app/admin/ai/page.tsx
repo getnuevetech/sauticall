@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { AiSectionNav } from "@/components/admin/AiSectionNav";
+import { SecretField } from "@/components/admin/SecretField";
 import { requirePermission } from "@/lib/access";
-import { AI_ENGINE_KINDS, AI_FUNCTIONS, featureReady } from "@/lib/ai-system";
+import { AI_ENGINE_KINDS, AI_FUNCTIONS, featureReady, jobKind } from "@/lib/ai-system";
 import { enabledSwitchCodes, listAiAssignments, listAiEngines, listAiSwitches } from "@/lib/ai-store";
 import { flagOn } from "@/lib/db";
 import { removeAiEngine, saveAiAssignmentForm, saveAiEngineForm, saveAiSwitchForm } from "./actions";
@@ -30,6 +31,7 @@ export default async function AiSystemPage({ searchParams }: { searchParams: Pro
         <h1>AI System</h1>
         <AiSectionNav current="system" />
         <p>Turn services on or off, register each model, and choose which model does each job. Settings apply after you save.</p>
+        <p>Add each engine yourself. Give it a name, the kind of work it does, the model name, its https address, and an API key. The key is stored on this server and is not shown again. Turn the engine on, then assign it to a job. This server does not include a built-in model. Nothing on this page places a call.</p>
         <p>Outbound tests use the customer's 3CX extension and trunk. {flagOn("pbx.live_trunk") ? "Adding that trunk is on." : "Adding that trunk is off."} {flagOn("pbx.voipms_backup") ? "VoIP.ms backup is on and uses the customer's client after a confirmed trunk failure." : "VoIP.ms backup is off. Only an administrator can turn it on in Platform controls."} Nothing on this page places a call.</p>
         {notice ? <p className="form-feedback">{notice}</p> : null}
         {query.error ? <p className="ops-alert">{query.error}</p> : null}
@@ -52,14 +54,14 @@ export default async function AiSystemPage({ searchParams }: { searchParams: Pro
         </form>
         <form action={saveAiAssignmentForm} className="ops-card">
           <h2>Job assignments</h2>
-          <p>One engine can speak text. Another can run outbound calls. Leave a job blank until an engine is ready.</p>
+          <p>Each job uses one engine that is on and matches that job. The same engine can do more than one job of its kind. Leave a job blank until an engine is ready.</p>
           {AI_FUNCTIONS.map((job) => (
             <label key={job.code}>
               {job.label}
               <small>{job.detail}</small>
               <select name={`job_${job.code}`} defaultValue={String(assignments.get(job.code) || "")}>
                 <option value="">Not assigned</option>
-                {readyEngines.map((engine) => <option key={engine.id} value={engine.id}>{engine.name} · {KIND_LABEL[engine.kind] || engine.kind}</option>)}
+                {readyEngines.filter((engine) => engine.kind === jobKind(job.code)).map((engine) => <option key={engine.id} value={engine.id}>{engine.name} · {engine.model}</option>)}
               </select>
             </label>
           ))}
@@ -70,7 +72,7 @@ export default async function AiSystemPage({ searchParams }: { searchParams: Pro
         <div className="ops-drawer-head">
           <div>
             <h2>{selected ? selected.name : "Add an engine"}</h2>
-            <p className="ops-kicker">{selected ? (KIND_LABEL[selected.kind] || selected.kind) : "In-house model"}</p>
+            <p className="ops-kicker">{selected ? (KIND_LABEL[selected.kind] || selected.kind) : "Any service you connect"}</p>
           </div>
           {selected ? <Link href="/admin/ai?new=1" aria-label="Close">×</Link> : null}
         </div>
@@ -82,23 +84,27 @@ export default async function AiSystemPage({ searchParams }: { searchParams: Pro
               {AI_ENGINE_KINDS.map((kind) => <option key={kind} value={kind}>{KIND_LABEL[kind]}</option>)}
             </select>
           </label>
-          <label>Model name <input name="model" defaultValue={selected?.model || ""} placeholder="sauticall-voice-1" required /></label>
-          <label>Service address <input name="endpoint" defaultValue={selected?.endpoint || ""} placeholder="https://voice.internal.example" /></label>
-          <label>Secret reference <input name="secret_ref" defaultValue={selected?.secretRef || ""} placeholder="vault:ai-voice" autoComplete="off" /></label>
+          <label>Model name <input name="model" defaultValue={selected?.model || ""} placeholder="Model id from that service" required /></label>
+          <label>Service address <input name="endpoint" defaultValue={selected?.endpoint || ""} placeholder="https://" /></label>
+          <SecretField name="secret" label="API key" stored={Boolean(selected?.hasSecret)} hint="Stored write-only" />
+          <p className="ops-muted">Leave the key blank to keep the saved key. The address is called only for a text-to-voice job. A language model is stored for the jobs you assign.</p>
           <label className="ops-toggle-row"><span className="ops-toggle"><input type="checkbox" name="enabled" defaultChecked={selected?.enabled || false} /><span /></span> Engine is on</label>
           <div className="ops-actions"><button className="btn btn-primary" type="submit">{selected ? "Save engine" : "Add engine"}</button></div>
         </form>
         {engines.length ? (
           <div className="ops-table-wrap">
             <table className="ops-table">
-              <thead><tr><th>Engine</th><th>Job readiness</th></tr></thead>
+              <thead><tr><th>Engine</th><th>Jobs</th></tr></thead>
               <tbody>
-                {engines.map((engine) => (
+                {engines.map((engine) => {
+                  const jobs = AI_FUNCTIONS.filter((job) => assignments.get(job.code) === engine.id).map((job) => job.label);
+                  return (
                   <tr key={engine.id} data-current={selected?.id === engine.id ? "true" : undefined}>
-                    <td><Link href={`/admin/ai?id=${engine.id}`}><strong>{engine.name}</strong></Link><small>{engine.model}</small></td>
-                    <td><span className={`ops-badge ${engine.enabled ? "ok" : "muted"}`}>{engine.enabled ? "On" : "Off"}</span></td>
+                    <td><Link href={`/admin/ai?id=${engine.id}`}><strong>{engine.name}</strong></Link><small>{KIND_LABEL[engine.kind] || engine.kind} · {engine.model}</small></td>
+                    <td><span className={`ops-badge ${engine.enabled ? "ok" : "muted"}`}>{engine.enabled ? "On" : "Off"}</span>{jobs.length ? <small>{jobs.join(", ")}</small> : null}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

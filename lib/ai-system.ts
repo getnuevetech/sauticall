@@ -34,7 +34,7 @@ export type AiEngineDraft = {
   enabled: boolean;
 };
 
-export type AiEngineRecord = AiEngineDraft & { id: number };
+export type AiEngineRecord = AiEngineDraft & { id: number; hasSecret: boolean };
 
 const SWITCH_CODES = new Set<string>(AI_SWITCHES.map((item) => item.code));
 const FUNCTION_CODES = new Set<string>(AI_FUNCTIONS.map((item) => item.code));
@@ -58,14 +58,27 @@ export function customerAiState(input: { master: boolean; feature: boolean; plan
   return { code: "included" as const, label: "Included on this plan" };
 }
 
+export function jobKind(functionCode: string): AiEngineKind {
+  if (functionCode === "tts") return "tts";
+  if (functionCode === "stt") return "stt";
+  return "llm";
+}
+
+export function validateEngineKey(key: string) {
+  const clean = key.trim();
+  if (clean.length > 300) return { ok: false as const, message: "That API key is too long." };
+  if (/\s/.test(clean)) return { ok: false as const, message: "The API key cannot contain spaces." };
+  return { ok: true as const, key: clean };
+}
+
 export function validateEngine(input: AiEngineDraft): { ok: true; engine: AiEngineDraft } | { ok: false; message: string } {
   const name = input.name.trim().slice(0, 80);
   const model = input.model.trim().slice(0, 120);
-  const endpoint = input.endpoint.trim().slice(0, 200);
+  const endpoint = input.endpoint.trim().slice(0, 300);
   const secretRef = input.secretRef.trim().slice(0, 80);
   if (!name) return { ok: false, message: "Enter a name for this engine." };
   if (!AI_ENGINE_KINDS.includes(input.kind as AiEngineKind)) return { ok: false, message: "Choose text to voice, speech to text, or a language model." };
-  if (!model) return { ok: false, message: "Enter the model name." };
+  if (!model) return { ok: false, message: "Enter the model name from that service." };
   if (endpoint && !/^https:\/\/[^\s]+$/i.test(endpoint)) return { ok: false, message: "The engine address must start with https://, or stay blank until the service is ready." };
   if (secretRef && !/^[A-Za-z0-9][A-Za-z0-9._-]*[:/][A-Za-z0-9._:/-]+$/.test(secretRef)) return { ok: false, message: "Use a vault name such as vault:ai-voice. Do not paste the secret itself." };
   if (input.enabled && !endpoint) return { ok: false, message: "Add an https address before turning this engine on." };
@@ -134,5 +147,6 @@ export function validateAssignment(functionCode: string, engineId: number, engin
   const engine = engines.find((item) => item.id === engineId);
   if (!engine) return { ok: false as const, message: "Choose an engine that is saved on this system." };
   if (!engine.enabled) return { ok: false as const, message: `${engine.name} is off. Turn it on before assigning it.` };
+  if (engine.kind !== jobKind(functionCode)) return { ok: false as const, message: `${engine.name} does not do this job. Choose an engine of the matching kind.` };
   return { ok: true as const, functionCode, engineId };
 }

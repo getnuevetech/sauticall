@@ -468,6 +468,7 @@ function migrate(database: Database.Database) {
       model_name TEXT NOT NULL DEFAULT '',
       endpoint TEXT NOT NULL DEFAULT '',
       secret_ref TEXT NOT NULL DEFAULT '',
+      secret TEXT NOT NULL DEFAULT '',
       enabled INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL DEFAULT ''
     );
@@ -613,6 +614,8 @@ function migrate(database: Database.Database) {
   if (!extensionCols.has("former_number")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN former_number TEXT NOT NULL DEFAULT ''");
   if (!extensionCols.has("removed_at")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN removed_at TEXT NOT NULL DEFAULT ''");
   if (!extensionCols.has("welcome_note")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN welcome_note TEXT NOT NULL DEFAULT ''");
+  const engineCols = new Set((database.prepare("PRAGMA table_info(ai_engines)").all() as { name: string }[]).map((column) => column.name));
+  if (!engineCols.has("secret")) database.exec("ALTER TABLE ai_engines ADD COLUMN secret TEXT NOT NULL DEFAULT ''");
 }
 
 function put(database: Database.Database, key: string, value: unknown) {
