@@ -8,7 +8,24 @@ import { AppPassword } from "./AppPassword";
 import { clockLabel, extensionSetup, personInitials } from "@/lib/account-display";
 import { Icon } from "@/components/Icon";
 
-type Person = { id: number; number: string; first: string; last: string; email: string; status: string; welcome: string };
+type Person = { id: number; number: string; first: string; last: string; email: string; status: string; welcome: string; aiRole: string; aiName: string };
+type AiChoice = { code: string; label: string };
+
+function AiExtensionFields({ choices, role, name }: { choices: AiChoice[]; role: string; name: string }) {
+  if (choices.length === 0) return <p>No AI system is included on this plan. An administrator adds each AI system to a plan.</p>;
+  return (
+    <>
+      <label>AI system
+        <select name="ai_role" defaultValue={role}>
+          <option value="">Ordinary extension</option>
+          {choices.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
+        </select>
+      </label>
+      <label>AI extension name <input name="ai_name" defaultValue={name} placeholder="Front desk" /></label>
+      <p>Choose an AI system to make this extension an AI extension for this account. Live calls stay off until the phone-system connection is verified.</p>
+    </>
+  );
+}
 type Group = { id: number; kind: string; name: string; number: string; strategy: string; answers: boolean; status: string; people: string };
 type Choice = { value: string; label: string };
 
@@ -26,6 +43,7 @@ export function PhoneSystem({
   hoursClose,
   hoursNote,
   people,
+  aiChoices,
   groups,
   ringChoices,
   queueChoices,
@@ -49,6 +67,7 @@ export function PhoneSystem({
   hoursClose: string;
   hoursNote: string;
   people: Person[];
+  aiChoices: AiChoice[];
   groups: Group[];
   ringChoices: Choice[];
   queueChoices: Choice[];
@@ -155,6 +174,7 @@ export function PhoneSystem({
                       <label>First name <input name="first_name" required /></label>
                       <label>Last name <input name="last_name" required /></label>
                       <label>Email <input name="email" type="email" required /></label>
+                      <AiExtensionFields choices={aiChoices} role="" name="" />
                       <button className="ws-btn primary" type="submit">Add person</button>
                       <button className="ws-btn ghost" type="button" onClick={() => setAdding(false)}>Cancel</button>
                     </form>
@@ -177,7 +197,7 @@ export function PhoneSystem({
                         return (
                           <tr key={person.id} className={selected?.id === person.id ? "selected" : ""}>
                             <td>
-                              <span className="pbx-user"><span className="ws-avatar">{personInitials(`${person.first} ${person.last}`)}</span><span><strong>{person.first} {person.last}</strong><small>{person.email}</small></span></span>
+                              <span className="pbx-user"><span className="ws-avatar">{personInitials(`${person.first} ${person.last}`)}</span><span><strong>{person.first} {person.last}</strong><small>{person.aiName ? `${person.aiName} · ${person.email}` : person.email}</small></span></span>
                             </td>
                             <td>{person.number}</td>
                             <td><span className={`pbx-status ${setup.tone}`}>{setup.label}</span></td>
@@ -223,6 +243,7 @@ export function PhoneSystem({
                             <label>First name <input name="first_name" defaultValue={selected.first} required /></label>
                             <label>Last name <input name="last_name" defaultValue={selected.last} required /></label>
                             <label>Email <input name="email" type="email" defaultValue={selected.email} required /></label>
+                            <AiExtensionFields choices={aiChoices} role={selected.aiRole} name={selected.aiName} />
                             <button className="ws-btn primary" type="submit">Save user</button>
                             <button className="ws-btn ghost" type="button" onClick={() => setEditingPerson(false)}>Cancel</button>
                           </form>
@@ -233,6 +254,7 @@ export function PhoneSystem({
                             <p><span>Department</span><strong>{company || "Not set"}</strong></p>
                             <p><span>Setup status</span><strong className={`pbx-status ${extensionSetup(selected.status).tone}`}>{extensionSetup(selected.status).label}</strong></p>
                             <p><span>Device status</span><strong>Not available</strong></p>
+                            <p><span>AI extension</span><strong>{selected.aiRole ? `${selected.aiName || "Named on the AI page"} · ${aiChoices.find((item) => item.code === selected.aiRole)?.label || selected.aiRole}` : "Ordinary extension"}</strong></p>
                           </>
                         )}
                         {selected.welcome ? <p>{selected.welcome}</p> : null}

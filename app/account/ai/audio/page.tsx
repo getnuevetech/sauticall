@@ -2,6 +2,8 @@ import Link from "next/link";
 import { generateAudioForm, keepAudioForm, uploadAudioForm } from "./actions";
 import { guardAccount } from "@/lib/guard";
 import { listClips, listVoices } from "@/lib/ai-audio-store";
+import { paidPlan } from "@/lib/pbx";
+import { planAllows } from "@/lib/plan-features";
 
 function sourceLabel(source: string) {
   if (source === "preview") return "Preview tone. This is not a spoken voice.";
@@ -12,6 +14,16 @@ function sourceLabel(source: string) {
 export default async function AccountAudioPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string; id?: string }> }) {
   const user = await guardAccount();
   const query = await searchParams;
+  if (!planAllows(paidPlan(user.id), "ai_voice")) {
+    return (
+      <div className="workspace-page">
+        <header className="workspace-page-head">
+          <h1>Audio</h1>
+          <p>Text to voice is not included on this plan. <Link className="text-link" href="/account/ai">Back to AI</Link></p>
+        </header>
+      </div>
+    );
+  }
   const voices = listVoices().filter((voice) => voice.enabled);
   const clips = listClips(user.id);
   const notice = query.saved === "preview" ? "Preview tone stored. No call was placed."

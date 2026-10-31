@@ -181,6 +181,8 @@ function migrate(database: Database.Database) {
       welcome_note TEXT NOT NULL DEFAULT '',
       former_number TEXT NOT NULL DEFAULT '',
       removed_at TEXT NOT NULL DEFAULT '',
+      ai_role TEXT NOT NULL DEFAULT '',
+      ai_name TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       UNIQUE(user_id, number)
     );
@@ -505,6 +507,14 @@ function migrate(database: Database.Database) {
       updated_at TEXT NOT NULL DEFAULT '',
       PRIMARY KEY (user_id, feature_code)
     );
+    CREATE TABLE IF NOT EXISTS ai_account_settings (
+      user_id INTEGER NOT NULL,
+      feature_code TEXT NOT NULL,
+      display_name TEXT NOT NULL DEFAULT '',
+      greeting TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (user_id, feature_code)
+    );
     CREATE TABLE IF NOT EXISTS ai_audio_policy (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       max_seconds INTEGER NOT NULL,
@@ -614,6 +624,8 @@ function migrate(database: Database.Database) {
   if (!extensionCols.has("former_number")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN former_number TEXT NOT NULL DEFAULT ''");
   if (!extensionCols.has("removed_at")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN removed_at TEXT NOT NULL DEFAULT ''");
   if (!extensionCols.has("welcome_note")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN welcome_note TEXT NOT NULL DEFAULT ''");
+  if (!extensionCols.has("ai_role")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN ai_role TEXT NOT NULL DEFAULT ''");
+  if (!extensionCols.has("ai_name")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN ai_name TEXT NOT NULL DEFAULT ''");
   const engineCols = new Set((database.prepare("PRAGMA table_info(ai_engines)").all() as { name: string }[]).map((column) => column.name));
   if (!engineCols.has("secret")) database.exec("ALTER TABLE ai_engines ADD COLUMN secret TEXT NOT NULL DEFAULT ''");
 }

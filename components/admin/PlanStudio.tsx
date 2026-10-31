@@ -121,7 +121,7 @@ export function PlanStudio({
           {tab === "features" ? (
             <section className="ops-card">
               <h2>Included features</h2>
-              <p>Select the features included in this plan.</p>
+              <p>Select the features included in this plan. An AI system is available only to customers on a plan where that system is checked.</p>
               {groups.map((group) => (
                 <div key={group} className="ops-stack">
                   <h3>{group}</h3>

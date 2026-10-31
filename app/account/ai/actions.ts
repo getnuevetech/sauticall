@@ -40,6 +40,20 @@ export async function requestAiService(formData: FormData) {
   redirect("/account/ai?saved=requested");
 }
 
+export async function saveAccountAiForm(formData: FormData) {
+  const user = await guardAccount();
+  const { paidPlan } = await import("@/lib/pbx");
+  const { saveAccountAi } = await import("@/lib/ai-account-store");
+  const result = saveAccountAi(user.id, paidPlan(user.id), {
+    feature: String(formData.get("feature") || ""),
+    displayName: String(formData.get("display_name") || ""),
+    greeting: String(formData.get("greeting") || ""),
+    extensionId: Number(formData.get("extension_id") || 0),
+  });
+  if (!result.ok) redirect(`/account/ai?error=${encodeURIComponent(result.message)}`);
+  redirect("/account/ai?saved=configured");
+}
+
 export async function setAiService(formData: FormData) {
   const user = await guardAccount();
   const feature = serviceOf(formData);

@@ -427,6 +427,13 @@ export async function addPerson(formData: FormData) {
   const last = String(formData.get("last_name") || "").trim().slice(0, 40);
   const email = String(formData.get("email") || "").trim().slice(0, 120);
   if (!first || !last || !email.includes("@")) redirect("/account/phone?error=First%20name%2C%20last%20name%2C%20and%20email%20are%20required.");
+  const { systemsForPlan, validateAiExtension } = await import("@/lib/ai-account");
+  const aiChoice = validateAiExtension({
+    role: String(formData.get("ai_role") || ""),
+    name: String(formData.get("ai_name") || ""),
+    allowed: systemsForPlan(plan.features).filter((item) => item.included).map((item) => item.code),
+  });
+  if (!aiChoice.ok) redirect(`/account/phone?error=${encodeURIComponent(aiChoice.message)}`);
   const count = getDb().prepare("SELECT COUNT(*) AS n FROM pbx_extensions WHERE user_id = ? AND status != 'removed'").get(user.id) as { n: number };
   if (count.n >= extensionCapacity(plan)) redirect("/account/phone?error=This%20plan%20has%20no%20room%20for%20another%20person.");
   const { departmentNameIssue: nameIssue } = await import("@/lib/pbx-user");
@@ -450,6 +457,10 @@ export async function addPerson(formData: FormData) {
     .prepare("INSERT INTO pbx_extensions (user_id, number, first_name, last_name, email, status, access_password, created_at) VALUES (?, ?, ?, ?, ?, 'waiting', ?, ?)")
     .run(user.id, number, first, last, email, appPassword(), new Date().toISOString());
   audit(user.email, "pbx.person", number);
+  if (aiChoice.role) {
+    const { assignExtensionAi } = await import("@/lib/ai-account-store");
+    assignExtensionAi(user.id, plan, Number(info.lastInsertRowid), aiChoice.role, aiChoice.name);
+  }
   if (flagOn("pbx.live_provision")) {
     const extensionId = Number(info.lastInsertRowid);
     const { finishAfterResponse } = await import("@/lib/later");
@@ -461,7 +472,8 @@ export async function addPerson(formData: FormData) {
 export async function savePerson(formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
-  const { updateExtensionProfile } = await import("@/lib/pbx");
+  const { paidPlan, updateExtensionProfile } = await import("@/lib/pbx");
+  const plan = paidPlan(user.id);
   const result = await updateExtensionProfile(Number(formData.get("id")), user.id, {
     first: String(formData.get("first_name") || ""),
     last: String(formData.get("last_name") || ""),
@@ -469,6 +481,16 @@ export async function savePerson(formData: FormData) {
   });
   audit(user.email, "pbx.person.edit", result.ok ? "saved" : result.message.slice(0, 400));
   if (!result.ok) redirect(`/account/phone?error=${encodeURIComponent(safeCustomerError(result.message, "This person could not be updated. Please try again, or contact support."))}`);
+  const { systemsForPlan, validateAiExtension } = await import("@/lib/ai-account");
+  const aiChoice = validateAiExtension({
+    role: String(formData.get("ai_role") || ""),
+    name: String(formData.get("ai_name") || ""),
+    allowed: systemsForPlan(plan?.features || []).filter((item) => item.included).map((item) => item.code),
+  });
+  if (!aiChoice.ok) redirect(`/account/phone?error=${encodeURIComponent(aiChoice.message)}`);
+  const { assignExtensionAi } = await import("@/lib/ai-account-store");
+  const assigned = assignExtensionAi(user.id, plan, Number(formData.get("id")), aiChoice.role, aiChoice.name);
+  if (!assigned.ok) redirect(`/account/phone?error=${encodeURIComponent(assigned.message)}`);
   redirect("/account/phone?saved=person");
 }
 

@@ -8,8 +8,9 @@ import { customerMessage } from "@/lib/customer-message";
 import { accountNeedsMfa } from "@/lib/mfa";
 import { DEPARTMENT_NAME_RULES, acceptedDepartmentName } from "@/lib/pbx-user";
 import { extensionSetup } from "@/lib/account-display";
+import { systemsForPlan } from "@/lib/ai-account";
 
-type Extension = { id: number; number: string; former_number: string; first_name: string; last_name: string; email: string; status: string; welcome_note: string };
+type Extension = { id: number; number: string; former_number: string; first_name: string; last_name: string; email: string; status: string; welcome_note: string; ai_role: string; ai_name: string };
 
 function extensionNumber(row: Extension) {
   return row.status === "removed" && row.former_number ? row.former_number : row.number;
@@ -20,7 +21,7 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
   const params = await searchParams;
   const plan = paidPlan(user.id);
   const limit = plan ? extensionCapacity(plan) : 0;
-  const rows = getDb().prepare("SELECT id, number, former_number, first_name, last_name, email, status, welcome_note FROM pbx_extensions WHERE user_id = ? ORDER BY number").all(user.id) as Extension[];
+  const rows = getDb().prepare("SELECT id, number, former_number, first_name, last_name, email, status, welcome_note, ai_role, ai_name FROM pbx_extensions WHERE user_id = ? ORDER BY number").all(user.id) as Extension[];
   const hours = getDb().prepare("SELECT name, open_time, close_time, last_message FROM pbx_departments WHERE user_id = ?").get(user.id) as { name: string; open_time: string; close_time: string; last_message: string } | undefined;
   const lines = getDb().prepare("SELECT status FROM phone_lines WHERE user_id = ?").all(user.id) as { status: string }[];
   const groups = getDb().prepare("SELECT * FROM call_groups WHERE user_id = ? ORDER BY kind, id").all(user.id) as CallGroup[];
@@ -61,7 +62,10 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
         email: row.email,
         status: row.status,
         welcome: row.welcome_note,
+        aiRole: row.ai_role,
+        aiName: row.ai_name,
       }))}
+      aiChoices={systemsForPlan(plan?.features || []).filter((item) => item.included).map((item) => ({ code: item.code, label: item.label }))}
       groups={groups.map((group) => ({
         id: group.id,
         kind: group.kind,
