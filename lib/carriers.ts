@@ -4,6 +4,7 @@ import { didInfoIsAbsent, normalizeRequestedDid, readDids, type ListedDid } from
 import { adminPbxError, pbxAccessMessage, pbxErrorText, pbxRoleIsAdmin, roleFromToken } from "./pbx-access";
 import { matchOrderPop, readPopServers, voipFailureText } from "./provider-error";
 import { readRateCenters } from "./places";
+import { xapiWriteHeaders } from "./xapi-headers";
 
 export type PublicConfig = Record<string, string>;
 
@@ -263,15 +264,11 @@ async function accessToken(connection: ReturnType<typeof getConnection>) {
 export async function pbxRequest(path: string, init: { method?: string; body?: unknown; contentType?: string; headers?: Record<string, string> } = {}) {
   try {
     const { origin, token } = await accessToken(getConnection("3cx"));
-    const contentType = init.contentType || "application/json";
     const response = await fetch(`${origin}/xapi/v1/${path}`, {
       method: init.method || "GET",
       headers: {
         authorization: `Bearer ${token}`,
-        accept: "application/json",
-        "odata-version": "4.0",
-        ...(init.body ? { "content-type": contentType, prefer: "return=representation" } : {}),
-        ...init.headers,
+        ...(init.body ? xapiWriteHeaders(init.headers || {}) : { Accept: "application/json", "OData-Version": "4.0", ...init.headers }),
       },
       body: init.body ? JSON.stringify(init.body) : undefined,
       cache: "no-store",

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { completeEmergency, completeTrunk, linkTrunk, retryTrunk, sendEmergencyAddress, syncMinutes } from "../actions";
+import { completeEmergency, completeTrunk, confirmTrunkCalls, linkTrunk, retryTrunk, sendEmergencyAddress, syncMinutes } from "../actions";
 import { SipReveal } from "@/components/admin/OpsBits";
 import { requirePermission } from "@/lib/access";
 import { flagOn } from "@/lib/db";
@@ -45,7 +45,7 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
       </ul>
       {line.status === "trunk_waiting" ? (
         <div>
-          <p className="ops-alert">Add this trunk in the 3CX admin. The automatic request was refused.</p>
+          <p className="ops-alert">{line.trunkId ? "The 3CX trunk id is saved. Provisioning stays incomplete until the trunk is registered and an administrator records the inbound and outbound test calls." : "Add this trunk in the 3CX admin. The automatic request was refused."}</p>
           <ol className="ops-steps">
             <li>Create a SIP trunk for {line.company}.</li>
             <li>Use registrar {line.sipHost || "the saved POP"}. The SIP user and password are below. Use the saved password.</li>
@@ -59,6 +59,8 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
         <summary>Technical response</summary>
         <p>{line.message || "No technical response is saved."}</p>
       </details>
+      <h3>Phone system trunk</h3>
+      <p>{line.trunkId ? `3CX trunk id ${line.trunkId}${line.trunkNumber ? `, internal number ${line.trunkNumber}` : ""}.` : "No 3CX trunk id is stored yet."}</p>
       <h3>Routing configuration</h3>
       <dl className="ops-facts">
         <div><dt>Inbound destination</dt><dd>{line.extension ? `Extension ${line.extension}` : "Not saved"}</dd></div>
@@ -80,10 +82,16 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
         <form action={retryTrunk}>
           <input type="hidden" name="id" value={line.id} />
           <input type="hidden" name="company" value={line.userId} />
-          <button className="btn btn-primary" type="submit">Review & retry 3CX setup</button>
+          <button className="btn btn-primary" type="submit">Retry failed step</button>
         </form>
-        <p className="ops-muted">Checks for an existing trunk before retrying. It continues at the step that is still open.</p>
+        <p className="ops-muted">Uses the VoIP.ms template already on 3CX, reuses this company’s SIP account and any trunk id already stored, and does not place a call.</p>
       </div>
+      <form action={confirmTrunkCalls}>
+        <input type="hidden" name="id" value={line.id} />
+        <input type="hidden" name="company" value={line.userId} />
+        <button className="btn btn-secondary" type="submit">Record successful test calls</button>
+        <p className="ops-muted">Available after the trunk id is stored and both routes are saved. 3CX must show the trunk registered. This does not place a call.</p>
+      </form>
       <form action={linkTrunk} className="ops-stack">
         <input type="hidden" name="id" value={line.id} />
         <input type="hidden" name="company" value={line.userId} />
@@ -145,6 +153,7 @@ export default async function LinesPage({ searchParams }: { searchParams: Promis
         <p className="ops-muted">{reading ? "Reading call minutes is on." : "Reading call minutes is off."} {trunks ? "Adding a 3CX trunk from here is on. A retry uses the customer's SIP account and does not place a call." : "Adding trunks from here is off, so a retry records the waiting step."} {flagOn("pbx.voipms_backup") ? "VoIP.ms backup is on for a confirmed trunk failure, and it uses that customer's client." : "VoIP.ms backup is off. Only an administrator can turn it on in Platform controls."}</p>
         {params.error ? <p className="form-feedback">{params.error}</p> : null}
         {params.saved === "recorded" ? <p className="form-feedback">The note was recorded. Registration was not verified.</p> : null}
+        {params.saved === "calls" ? <p className="form-feedback">Test calls were recorded. The trunk was registered on 3CX. SautiCall did not place the calls.</p> : null}
         {params.saved === "linked" ? <p className="form-feedback">The trunk was read from 3CX and routing was saved. No call was placed.</p> : null}
         {params.saved === "1" ? <p className="form-feedback">Call minutes were updated.</p> : null}
         <nav className="ops-tabs">

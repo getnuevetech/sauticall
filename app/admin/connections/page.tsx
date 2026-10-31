@@ -122,7 +122,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
               <label>API base URL <input name="base_url" defaultValue={config.base_url || ""} autoComplete="off" /></label>
               <label>Client ID <input name="client_id" defaultValue={config.client_id || ""} autoComplete="off" /></label>
               <SecretField name="secret" label="Client secret" stored={connection.hasSecret} />
-              <label>Trunk template <input name="trunk_template" defaultValue={config.trunk_template || "GenericSIPTrunk.pv.xml"} /></label>
+              <label>Trunk template <input name="trunk_template" defaultValue={config.trunk_template && config.trunk_template !== "GenericSIPTrunk.pv.xml" ? config.trunk_template : "voipms.pv.xml"} /></label>
             </>
           )}
           <details className="ops-details">

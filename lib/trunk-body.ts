@@ -108,6 +108,30 @@ export function mentionsDelta(message: string) {
   return /delta/i.test(message);
 }
 
+export function trunkProvisionVerdict(input: { registered: boolean; inbound: boolean; outbound: boolean; callsConfirmed: boolean }) {
+  if (!input.registered) return { complete: false, status: "trunk_waiting" as const, reason: "The 3CX trunk is not registered." };
+  if (!input.inbound || !input.outbound) return { complete: false, status: "trunk_waiting" as const, reason: "Inbound and outbound routing are not both verified." };
+  if (!input.callsConfirmed) return { complete: false, status: "trunk_waiting" as const, reason: "Inbound and outbound test calls have not been confirmed. No call was placed from SautiCall." };
+  return { complete: true, status: "trunk_live" as const, reason: "The trunk is registered, both routes are verified, and the test calls were confirmed." };
+}
+
+export function readTrunkIdentity(body: unknown) {
+  const record = body && typeof body === "object" ? body as Record<string, unknown> : {};
+  const value = record.value && typeof record.value === "object" && !Array.isArray(record.value) ? record.value as Record<string, unknown> : record;
+  const id = typeof value.Id === "number" && Number.isInteger(value.Id) ? value.Id : 0;
+  const number = value.Number == null ? "" : String(value.Number).replace(/\D/g, "");
+  const registered = value.IsOnline === true || value.IsRegistered === true;
+  return { id, number, registered };
+}
+
+export function redactProvisioning(message: string, secrets: string[]) {
+  let text = message;
+  for (const secret of secrets) {
+    if (secret && secret.length > 3) text = text.split(secret).join("[hidden]");
+  }
+  return text.replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [hidden]").replace(/\s+/g, " ").trim().slice(0, 2000);
+}
+
 export function manualTrunkNote(input: {
   company: string;
   did: string;
@@ -126,7 +150,7 @@ export function manualTrunkNote(input: {
     `VoIP.ms SIP account ${input.account} at ${host} is ready. 3CX did not accept an automatic trunk, so add it in the 3CX admin.`,
     `Company ${input.company}.`,
     `Registrar ${host}, SIP user ${input.account}. Use the SIP password already stored for this company.`,
-    `Trunk number ${input.did}. If 3CX asks for 11 digits, enter ${input.dialed}.`,
+    `Main trunk number ${input.dialed}, in national format.`,
     `Route inbound ${input.did} to extension ${input.extension}.`,
     `Add an outbound rule limited to extensions ${input.from}–${input.to}.`,
     "Enter the trunk id from 3CX on this line. SautiCall will read that trunk and try the inbound and outbound rules. If those are refused too, finish both rules in 3CX and record that the routing was finished there.",
@@ -197,7 +221,7 @@ export function trunkPassthroughBody(input: {
   if (!gateway.Port) gateway.Port = 5060;
   if (!gateway.TemplateFilename && input.template) gateway.TemplateFilename = input.template;
   if (number) keepDid(body, number);
-  return body;
+  return fillNullDeltas(body) as Record<string, unknown>;
 }
 
 function keepDid(body: Record<string, unknown>, number: string) {
@@ -208,7 +232,7 @@ function keepDid(body: Record<string, unknown>, number: string) {
   }
   if (current && typeof current === "object") {
     const record = current as Record<string, unknown>;
-    if (Array.isArray(record.delta)) {
+    if ("delta" in record || "@odata.type" in record) {
       record.delta = [number];
       return;
     }
@@ -218,6 +242,31 @@ function keepDid(body: Record<string, unknown>, number: string) {
     }
   }
   body.DidNumbers = [number];
+}
+
+export const VOIPMS_TRUNK_TEMPLATE = "voipms.pv.xml";
+
+export function trunkTemplateName(saved: string) {
+  const name = saved.trim();
+  if (!name || name === "GenericSIPTrunk.pv.xml" || name === "GenericVoIPProvider.pv.xml") return VOIPMS_TRUNK_TEMPLATE;
+  return /^[\w.-]+$/.test(name) ? name : VOIPMS_TRUNK_TEMPLATE;
+}
+
+export function trunkDialedNumber(did: string) {
+  const digitsOnly = did.replace(/\D/g, "");
+  if (digitsOnly.length === 11 && digitsOnly.startsWith("1")) return digitsOnly.slice(1);
+  return digitsOnly;
+}
+
+export function fillNullDeltas(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(fillNullDeltas);
+  if (!value || typeof value !== "object") return value;
+  const next: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) next[key] = fillNullDeltas(child);
+  if ("delta" in next && (next.delta === null || next.delta === undefined)) {
+    next.delta = Array.isArray(next.value) ? next.value : [];
+  }
+  return next;
 }
 
 export function trunkClientBody(input: {
