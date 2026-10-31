@@ -58,12 +58,6 @@ export function customerAiState(input: { master: boolean; feature: boolean; plan
   return { code: "included" as const, label: "Included on this plan" };
 }
 
-export function jobKind(functionCode: string): AiEngineKind {
-  if (functionCode === "tts") return "tts";
-  if (functionCode === "stt") return "stt";
-  return "llm";
-}
-
 export function validateEngineKey(key: string) {
   const clean = key.trim();
   if (clean.length > 300) return { ok: false as const, message: "That API key is too long." };
@@ -147,6 +141,5 @@ export function validateAssignment(functionCode: string, engineId: number, engin
   const engine = engines.find((item) => item.id === engineId);
   if (!engine) return { ok: false as const, message: "Choose an engine that is saved on this system." };
   if (!engine.enabled) return { ok: false as const, message: `${engine.name} is off. Turn it on before assigning it.` };
-  if (engine.kind !== jobKind(functionCode)) return { ok: false as const, message: `${engine.name} does not do this job. Choose an engine of the matching kind.` };
   return { ok: true as const, functionCode, engineId };
 }

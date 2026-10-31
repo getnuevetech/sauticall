@@ -15,7 +15,7 @@ export default async function AiAudioAdminPage({ searchParams }: { searchParams:
   const query = await searchParams;
   const policy = audioPolicy();
   const voices = listVoices();
-  const engines = listAiEngines().filter((item) => item.kind === "tts" && item.enabled);
+  const engines = listAiEngines().filter((item) => item.enabled);
   const clips = listRecentClips();
   const notice = query.saved === "policy" ? "Audio limits saved. No call was placed."
     : query.saved === "voice" ? "Voice saved. No call was placed."
