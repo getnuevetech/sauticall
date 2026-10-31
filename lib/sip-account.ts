@@ -18,12 +18,8 @@ export const TRUNK_SIP_DEFAULTS: Record<string, string> = {
 };
 
 export function sipUsernameCandidates(code: string) {
-  const shown = code.trim().slice(0, 12);
   const compact = code.replace(/[^A-Za-z0-9]/g, "").slice(0, 12);
-  const list: string[] = [];
-  if (/^[A-Za-z0-9-]{1,12}$/.test(shown)) list.push(shown);
-  if (/^[A-Za-z0-9]{1,12}$/.test(compact) && !list.includes(compact)) list.push(compact);
-  return list;
+  return /^[A-Za-z0-9]{1,12}$/.test(compact) ? [compact] : [];
 }
 
 export function callerIdDigits(did: string) {

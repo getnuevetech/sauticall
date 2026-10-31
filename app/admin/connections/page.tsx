@@ -109,7 +109,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
                   <p className="ops-muted">VoIP.ms accepts ulaw, g729, gsm, or all. Other names are left out before a line account is created.</p>
                   <label>DTMF <input name="dtmf_mode" defaultValue={config.dtmf_mode || "auto"} /></label>
                   <label>NAT <input name="nat" defaultValue={config.nat || "yes"} /></label>
-                  <p className="ops-muted">Each customer gets an ID such as I-0000001 or B-0000001. VoIP.ms is given that ID at sauticall.com. The customer's own email is not sent.</p>
+                  <p className="ops-muted">Each customer gets an ID such as I0000001 or B0000001. VoIP.ms is given that ID at sauticall.com. The customer's own email is not sent.</p>
                   <label>Client phone <input name="client_phone" defaultValue={config.client_phone || ""} autoComplete="off" /></label>
                   <label>Street <input name="client_address" defaultValue={config.client_address || ""} autoComplete="off" /></label>
                   <PlaceSelects countryLabel="Country" regionLabel="State or province" cityLabel="City" countryName="client_country" regionName="client_state" cityName="client_city" countryDefault={config.client_country || "US"} regionDefault={config.client_state || ""} cityDefault={config.client_city || ""} />

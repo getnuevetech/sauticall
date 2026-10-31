@@ -4,9 +4,9 @@ import { callerIdDigits, sipUsernameCandidates, TRUNK_SIP_DEFAULTS } from "../li
 import { choosePlanPackage } from "../lib/reseller-package.ts";
 
 test("a SIP username uses the customer ID and stays within 12 characters", () => {
-  assert.deepEqual(sipUsernameCandidates("I-0000020"), ["I-0000020", "I0000020"]);
-  assert.deepEqual(sipUsernameCandidates("B-0000007"), ["B-0000007", "B0000007"]);
-  assert.deepEqual(sipUsernameCandidates("I-000000123456"), ["I-0000001234", "I00000012345"]);
+  assert.deepEqual(sipUsernameCandidates("I0000020"), ["I0000020"]);
+  assert.deepEqual(sipUsernameCandidates("B0000007"), ["B0000007"]);
+  assert.deepEqual(sipUsernameCandidates("I-0000020"), ["I0000020"]);
   assert.equal(callerIdDigits("3345397005"), "3345397005");
   assert.equal(callerIdDigits("13345397005"), "3345397005");
   assert.equal(callerIdDigits(""), "");
