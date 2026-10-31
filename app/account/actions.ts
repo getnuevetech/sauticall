@@ -490,6 +490,8 @@ export async function addPerson(formData: FormData) {
       if (extensionEmailConflict(raw)) getDb().prepare("DELETE FROM pbx_extensions WHERE id = ? AND xapi_id = 0").run(extensionId);
       redirect(`/account/phone?error=${encodeURIComponent(extensionCustomerMessage(raw))}`);
     }
+    const { scheduleAutomaticTrunks } = await import("@/lib/lines");
+    scheduleAutomaticTrunks(user.id);
   }
   redirect("/account/phone?saved=1");
 }

@@ -11,6 +11,8 @@ import { firstListedId, idFromPbx } from "./pbx-id";
 import { manualTrunkNote, mentionsDelta, readTrunkIdentity, redactProvisioning, trunkDialedNumber, trunkGroupBody, trunkPassthroughBody, trunkProvisionVerdict, trunkTemplateName, wrapCollections } from "./trunk-body";
 import { shownAccountName } from "./pbx-user";
 import { carrierDidRef, numberIsBought, orderTimedOut } from "./number-order";
+import { automaticStopNote, trunkMayAutoTry } from "./trunk-tries";
+import { inboundRuleFound, outboundRuleFound, portNumbers } from "./trunk-routes";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
 
@@ -205,7 +207,7 @@ export async function attachTrunk(lineId: number) {
   const note = `3CX trunk id ${trunkId}${trunkNumber ? `, internal number ${trunkNumber}` : ""}. ${outbound.message}${departmentNote} ${verdict.reason}`;
   saveWaiting(line.id, trunkId, trunkNumber, true, note);
   openTask(line.id, line.user_id, line.did, note);
-  return { ok: false, message: note.slice(0, 500) };
+  return { ok: true, message: note.slice(0, 500) };
 }
 
 export async function confirmTrunkCalls(lineId: number) {
@@ -272,6 +274,76 @@ export function ensureCustomerLine(userId: number, requestId: number, did: strin
   return Number(info.lastInsertRowid);
 }
 
+type TrunkLineState = { id: number; user_id: number; did: string; status: string; trunk_id: number; trunk_attempts: number; last_message: string };
+
+function readTrunkLine(lineId: number) {
+  return getDb().prepare("SELECT id, user_id, did, status, trunk_id, trunk_attempts, last_message FROM phone_lines WHERE id = ?").get(lineId) as TrunkLineState | undefined;
+}
+
+function stopAutomaticTrunk(line: TrunkLineState) {
+  if (line.trunk_id || line.trunk_attempts < 3) return line.last_message;
+  const note = automaticStopNote(line.last_message);
+  if (note !== line.last_message) getDb().prepare("UPDATE phone_lines SET last_message = ? WHERE id = ?").run(note, line.id);
+  return note;
+}
+
+async function ensureLineAccount(line: TrunkLineState) {
+  if (getSubaccount(line.user_id)) return;
+  const client = await ensureVoipClient(line.user_id);
+  if (!client.ok) return;
+  await ensureSubaccount(line.user_id, client.clientId, line.did);
+}
+
+export async function retryTrunkLine(lineId: number) {
+  const line = readTrunkLine(lineId);
+  if (!line) return { ok: false, message: "That line was not found." };
+  await ensureLineAccount(line);
+  return attachTrunk(lineId);
+}
+
+export async function runAutomaticTrunk(lineId: number) {
+  let line = readTrunkLine(lineId);
+  if (!line) return { ok: false, message: "That line was not found." };
+  if ((line.status === "trunk_live" || line.status === "trunk_done") && line.trunk_id) return { ok: true, message: line.last_message || "This number is already a trunk on the phone system." };
+  if (line.status === "not_on_carrier") return { ok: false, message: "Not on the phone company" };
+  await ensureLineAccount(line);
+  if (line.trunk_id) return attachTrunk(lineId);
+  let result = { ok: false, message: line.last_message || "The trunk has not been added." };
+  while (trunkMayAutoTry(line.trunk_attempts) && !line.trunk_id && line.status !== "trunk_live" && line.status !== "trunk_done" && line.status !== "not_on_carrier") {
+    const claimed = getDb().prepare(
+      "UPDATE phone_lines SET trunk_attempts = trunk_attempts + 1 WHERE id = ? AND trunk_attempts < 3 AND trunk_id = 0 AND status NOT IN ('trunk_live', 'trunk_done', 'not_on_carrier')",
+    ).run(lineId);
+    if (claimed.changes !== 1) break;
+    result = await attachTrunk(lineId);
+    line = readTrunkLine(lineId);
+    if (!line) return result;
+    if (line.trunk_id) return result;
+  }
+  line = readTrunkLine(lineId);
+  if (!line) return result;
+  if (!line.trunk_id && line.trunk_attempts >= 3) return { ok: false, message: stopAutomaticTrunk(line) };
+  return result;
+}
+
+export function trunkLinesToTry(userId = 0) {
+  const sql = userId
+    ? "SELECT id FROM phone_lines WHERE user_id = ? AND trunk_id = 0 AND trunk_attempts < 3 AND status NOT IN ('trunk_live', 'trunk_done', 'not_on_carrier') ORDER BY id"
+    : "SELECT id FROM phone_lines WHERE trunk_id = 0 AND trunk_attempts < 3 AND status NOT IN ('trunk_live', 'trunk_done', 'not_on_carrier') ORDER BY id";
+  return (userId ? getDb().prepare(sql).all(userId) : getDb().prepare(sql).all()) as { id: number }[];
+}
+
+export function startTrunks(lineIds: number[]) {
+  const ids = [...new Set(lineIds.filter((id) => id > 0))];
+  if (!ids.length) return;
+  finishAfterResponse(async () => {
+    for (const id of ids) await runAutomaticTrunk(id);
+  });
+}
+
+export function scheduleAutomaticTrunks(userId = 0) {
+  startTrunks(trunkLinesToTry(userId).map((line) => line.id));
+}
+
 export function publishBoughtNumbers(userId: number) {
   const rows = getDb().prepare("SELECT id, payload, status, provider_ref FROM account_requests WHERE user_id = ? AND kind = 'number' AND status IN ('ordered', 'completed')").all(userId) as { id: number; payload: string; status: string; provider_ref: string }[];
   for (const row of rows) {
@@ -284,6 +356,75 @@ export function publishBoughtNumbers(userId: number) {
     if (!numberIsBought(row.status, row.provider_ref, did)) continue;
     ensureCustomerLine(userId, row.id, did);
   }
+}
+
+export function publishAllBoughtNumbers() {
+  const rows = getDb().prepare("SELECT DISTINCT user_id FROM account_requests WHERE kind = 'number' AND status IN ('ordered', 'completed')").all() as { user_id: number }[];
+  for (const row of rows) publishBoughtNumbers(row.user_id);
+}
+
+function requestForOwnedDid(userId: number, did: string, sourceRequestId: number) {
+  const ref = carrierDidRef(did);
+  const ten = ref.startsWith("voipms:") ? ref.slice("voipms:".length) : "";
+  if (!ten) return 0;
+  const database = getDb();
+  const byDid = database.prepare("SELECT request_id FROM phone_lines WHERE user_id = ? AND did = ?").get(userId, ten) as { request_id: number } | undefined;
+  if (byDid?.request_id) return byDid.request_id;
+  const byRef = database.prepare("SELECT id FROM account_requests WHERE user_id = ? AND kind = 'number' AND provider_ref = ? ORDER BY id DESC LIMIT 1").get(userId, ref) as { id: number } | undefined;
+  if (byRef) return byRef.id;
+  const source = database.prepare("SELECT id, kind FROM account_requests WHERE id = ? AND user_id = ?").get(sourceRequestId, userId) as { id: number; kind: string } | undefined;
+  const sourceUsed = database.prepare("SELECT id FROM phone_lines WHERE request_id = ?").get(sourceRequestId);
+  if (source?.kind === "number" && !sourceUsed) {
+    database.prepare("UPDATE account_requests SET status = 'ordered', provider_ref = ? WHERE id = ?").run(ref, source.id);
+    return source.id;
+  }
+  const info = database.prepare(
+    "INSERT INTO account_requests (user_id, kind, payload, status, provider_ref, staff_note, created_at) VALUES (?, 'number', ?, 'ordered', ?, '', ?)",
+  ).run(userId, JSON.stringify({ did: ten }), ref, new Date().toISOString());
+  return Number(info.lastInsertRowid);
+}
+
+export async function connectOwnedNumbers(userId: number, sourceRequestId: number, dids: string[]) {
+  const lineIds: number[] = [];
+  const waiting: string[] = [];
+  for (const did of portNumbers(dids.join(","))) {
+    const owned = await lookupOwnedDid(did);
+    if (!owned.ok || !owned.owned) {
+      waiting.push(did);
+      continue;
+    }
+    const requestId = requestForOwnedDid(userId, did, sourceRequestId);
+    const lineId = ensureCustomerLine(userId, requestId, did);
+    if (lineId) lineIds.push(lineId);
+  }
+  return { lineIds, waiting };
+}
+
+export async function checkTrunkRouting(lineId: number) {
+  const line = getDb().prepare("SELECT * FROM phone_lines WHERE id = ?").get(lineId) as Line | undefined;
+  if (!line) return { ok: false, message: "That line was not found." };
+  if (!line.trunk_id) return { ok: false, message: "Save the 3CX trunk before checking routes." };
+  const span = extensionSpan(line.user_id);
+  const detail = await pbxRequest(`Trunks(${line.trunk_id})?$select=Id,Number,IsOnline`);
+  const identity = readTrunkIdentity(detail.ok ? detail.body : null);
+  const inbound = await pbxRequest("InboundRules?$top=100");
+  const outbound = await pbxRequest("OutboundRules?$top=100");
+  const inboundFound = inbound.ok && inboundRuleFound(inbound.body, line.trunk_id, line.did);
+  const outboundFound = outbound.ok && outboundRuleFound(outbound.body, line.trunk_id, span.from, span.to);
+  const registered = Boolean(detail.ok && identity.registered);
+  const parts = [
+    detail.ok ? (registered ? `3CX trunk ${line.trunk_id} is registered.` : `3CX trunk ${line.trunk_id} is not registered.`) : `3CX did not confirm trunk ${line.trunk_id}. ${detail.message}`,
+    inbound.ok ? (inboundFound ? "The inbound route is on 3CX." : "3CX did not return an inbound route for this number.") : `Inbound rules could not be read. ${inbound.message}`,
+    outbound.ok ? (outboundFound ? `The outbound rule for extensions ${span.from}–${span.to} is on 3CX.` : "3CX did not return an outbound rule for this trunk and extension range.") : `Outbound rules could not be read. ${outbound.message}`,
+    "No call was placed.",
+  ];
+  const note = redactProvisioning(parts.join(" "), []);
+  if (line.status === "trunk_live" || line.status === "trunk_done") {
+    getDb().prepare("UPDATE phone_lines SET trunk_number = ?, last_message = ? WHERE id = ?").run(identity.number || line.trunk_number || "", note, line.id);
+    return { ok: registered && inboundFound && outboundFound, message: note };
+  }
+  saveWaiting(line.id, line.trunk_id, identity.number || line.trunk_number || "", inboundFound && outboundFound, note);
+  return { ok: registered && inboundFound && outboundFound, message: note };
 }
 
 function storedMonthly(requestId: number, fallback: string) {
@@ -360,12 +501,10 @@ export async function purchaseNumber(input: { requestId: number; userId: number;
     }
     const confirmed = await lookupOwnedDid(input.did);
     const userId = input.userId;
-    finishAfterResponse(async () => {
-      await attachTrunk(lineId);
-      await enforceUser(userId);
-      const { sendEmergency } = await import("./e911");
-      await sendEmergency(lineId);
-    });
+    await runAutomaticTrunk(lineId);
+    await enforceUser(userId);
+    const { sendEmergency } = await import("./e911");
+    await sendEmergency(lineId);
     if (!confirmed.ok || !confirmed.owned) {
       const reason = confirmed.ok ? `orderDID succeeded but getDIDsInfo does not list ${input.did} yet.` : `orderDID succeeded. getDIDsInfo ${input.did}: ${confirmed.message}`;
       const linkNote = linked ? ` connectDID to ${sub.account} returned ${linked}.` : ` connectDID to ${sub.account} was sent.`;
