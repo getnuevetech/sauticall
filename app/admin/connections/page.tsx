@@ -109,7 +109,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
                   <p className="ops-muted">VoIP.ms accepts ulaw, g729, gsm, or all. Other names are left out before a line account is created.</p>
                   <label>DTMF <input name="dtmf_mode" defaultValue={config.dtmf_mode || "auto"} /></label>
                   <label>NAT <input name="nat" defaultValue={config.nat || "yes"} /></label>
-                  <p className="ops-muted">Each customer gets an ID such as I-0000001 or B-0000001. VoIP.ms is given that ID at sauticall.com. The customer's own email is not sent.</p>
+                  <p className="ops-muted">Each customer gets an ID such as I0000001 or B0000001. VoIP.ms is given that ID at sauticall.com. The customer's own email is not sent.</p>
                   <label>Client phone <input name="client_phone" defaultValue={config.client_phone || ""} autoComplete="off" /></label>
                   <label>Street <input name="client_address" defaultValue={config.client_address || ""} autoComplete="off" /></label>
                   <PlaceSelects countryLabel="Country" regionLabel="State or province" cityLabel="City" countryName="client_country" regionName="client_state" cityName="client_city" countryDefault={config.client_country || "US"} regionDefault={config.client_state || ""} cityDefault={config.client_city || ""} />
@@ -127,7 +127,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
           )}
           <details className="ops-details">
             <summary>Setup guide</summary>
-            {provider === "3cx" ? <p>In 3CX, open Integrations, then API. Add a client, turn on 3CX Configuration API Access, choose the DEFAULT department, and set the role to System Owner. Then open Advanced, Console Restrictions, and allow access from everywhere.</p> : <p>This login is the reseller account. Signup creates a client and a line account under it. Ordering also needs the routing and POP saved here. Account confirmation texts use the text message number when that number is already on the account.</p>}
+            {provider === "3cx" ? <p>In 3CX, open Integrations, then API. Add a client, turn on 3CX Configuration API Access, choose the DEFAULT department, and set the role to System Owner. Then open Advanced, Console Restrictions, and allow access from everywhere.</p> : <p>This login is the reseller account. Signup creates the client with the customer ID email. The SIP sub-account is created when that customer has a paid plan and buys a number. Ordering also needs the routing and POP saved here. Account confirmation texts use the text message number when that number is already on the account.</p>}
           </details>
           <details className="ops-details">
             <summary>Technical response</summary>

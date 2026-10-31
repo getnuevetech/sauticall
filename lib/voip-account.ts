@@ -1,11 +1,13 @@
 import { callVoipms, getConnection, VOIPMS_READ_MS, VOIPMS_WRITE_MS } from "./carriers";
 import { getDb } from "./db";
-import { DEFAULT_LINE_CODECS, lineCodecs } from "./line-codecs";
+import { lineCodecs } from "./line-codecs";
 import { planPaidAt, resolvedLineValue } from "./line-variable-store";
 import { lineOverride, nextBillingDate } from "./line-variables";
-import { chooseResellerPackage } from "./reseller-package";
 import { readOutboundCalls, type CdrCall } from "./minute-math";
-import { appPassword } from "./pbx";
+import { appPassword, paidPlan } from "./pbx";
+import { ensureCustomerCode } from "./customer-code-store";
+import { choosePlanPackage, chooseResellerPackage } from "./reseller-package";
+import { callerIdDigits, sipUsernameCandidates, TRUNK_SIP_DEFAULTS } from "./sip-account";
 import { matchListedSubaccount, readCreatedSubaccount, readListedSubaccounts, subaccountDigits, subaccountUpdateParams } from "./subaccount-ref";
 
 export type Subaccount = {
@@ -23,30 +25,44 @@ export type Subaccount = {
 
 type Settings = Record<string, string>;
 
-function usernameFor(userId: number) {
-  return `sc${String(userId).padStart(4, "0")}`;
-}
-
 function sipHost(pop: string) {
   const value = pop.trim();
   if (!value) return "";
   return value.includes(".") ? value : `${value}.voip.ms`;
 }
 
+function configured(value: string | undefined, fallback: string) {
+  const next = (value || "").trim();
+  return next || fallback;
+}
+
+function paidPlanName(userId: number) {
+  const named = paidPlan(userId)?.name;
+  if (named) return named;
+  const row = getDb().prepare("SELECT plan_name FROM payment_attempts WHERE user_id = ? AND status = 'paid' ORDER BY id DESC LIMIT 1").get(userId) as { plan_name: string } | undefined;
+  return row?.plan_name?.trim() || "";
+}
+
+function accountLabel(userId: number) {
+  const code = ensureCustomerCode(userId);
+  return code ? `SautiCall ${code}` : `SautiCall ${userId}`;
+}
+
 function settingsFromConnection(userId = 0): Settings {
   const config = getConnection("voipms").public;
   const settings: Settings = {
-    protocol: "1",
-    device_type: config.device_type || "1",
-    lock_international: config.lock_international === "1" ? "1" : "0",
-    international_route: config.international_route === "2" ? "2" : "1",
-    music_on_hold: config.music_on_hold || "default",
-    allowed_codecs: lineCodecs(config.allowed_codecs || DEFAULT_LINE_CODECS),
-    dtmf_mode: config.dtmf_mode || "auto",
-    nat: config.nat || "yes",
+    ...TRUNK_SIP_DEFAULTS,
+    device_type: configured(config.device_type, TRUNK_SIP_DEFAULTS.device_type),
+    lock_international: configured(config.lock_international, TRUNK_SIP_DEFAULTS.lock_international),
+    international_route: configured(config.international_route, TRUNK_SIP_DEFAULTS.international_route),
+    canada_routing: configured(config.canada_routing, TRUNK_SIP_DEFAULTS.canada_routing),
+    music_on_hold: configured(config.music_on_hold, TRUNK_SIP_DEFAULTS.music_on_hold),
+    allowed_codecs: lineCodecs(configured(config.allowed_codecs, TRUNK_SIP_DEFAULTS.allowed_codecs)),
+    dtmf_mode: configured(config.dtmf_mode, TRUNK_SIP_DEFAULTS.dtmf_mode),
+    nat: configured(config.nat, TRUNK_SIP_DEFAULTS.nat),
   };
   if (!userId) return settings;
-  for (const key of ["device_type", "lock_international", "international_route", "music_on_hold", "allowed_codecs", "dtmf_mode", "nat"]) {
+  for (const key of ["device_type", "lock_international", "international_route", "canada_routing", "music_on_hold", "allowed_codecs", "dtmf_mode", "nat"]) {
     const value = resolvedLineValue(userId, key);
     if (value.trim() === "") continue;
     settings[key] = key === "allowed_codecs" ? lineCodecs(lineOverride(settings[key] || "", value)) : lineOverride(settings[key] || "", value);
@@ -77,17 +93,17 @@ function resellerRejected(result: { status: string; message: string }) {
   return /resellerpackage|resellerclient|resellernextbilling/i.test(`${result.status} ${result.message}`);
 }
 
-async function lineClientSettings(base: Settings, resellerClient: string, userId: number) {
+async function lineClientSettings(base: Settings, resellerClient: string, userId: number, planName = "") {
   const settings = forLine(base);
   delete settings.reseller_client;
   delete settings.reseller_package;
   delete settings.reseller_nextbilling;
   if (!resellerClient) return { settings, warning: "" };
-  const assigned = await callVoipms("getClientPackages", { client: resellerClient }, VOIPMS_READ_MS);
-  let packageId = chooseResellerPackage(assigned.body, null);
+  const catalog = await callVoipms("getPackages", {}, VOIPMS_READ_MS);
+  let packageId = choosePlanPackage(planName, catalog.body);
   if (!packageId) {
-    const catalog = await callVoipms("getPackages", {}, VOIPMS_READ_MS);
-    packageId = chooseResellerPackage(null, catalog.body);
+    const assigned = await callVoipms("getClientPackages", { client: resellerClient }, VOIPMS_READ_MS);
+    packageId = chooseResellerPackage(assigned.body, catalog.body);
   }
   if (!packageId) {
     return { settings, warning: `VoIP.ms has no reseller package, so client ${resellerClient} was not attached to the line account.` };
@@ -139,13 +155,13 @@ export async function linkSubaccountClient(userId: number, clientId: string) {
   if (!row?.account || !clientId) return { ok: true, message: "" };
   const settings = readSettings(row.settings_json);
   if (settings.reseller_client === clientId && settings.reseller_package) return { ok: true, message: "" };
-  const attached = await lineClientSettings(settings, clientId, userId);
+  const attached = await lineClientSettings(settings, clientId, userId, paidPlanName(userId));
   if (!attached.settings.reseller_package) return { ok: false, message: attached.warning };
   const id = await lineAccountId(userId, row.account, row.provider_id);
   if (!id) return { ok: false, message: "VoIP.ms did not return a numeric id for this line account, so it was not linked to the client." };
   const result = await callVoipms("setSubAccount", subaccountUpdateParams(id, {
     ...attached.settings,
-    description: `SautiCall ${userId}`,
+    description: accountLabel(userId),
     auth_type: row.locked ? "2" : "1",
     password: row.locked ? "" : row.password,
   }), VOIPMS_WRITE_MS);
@@ -154,7 +170,7 @@ export async function linkSubaccountClient(userId: number, clientId: string) {
   return { ok: true, message: "" };
 }
 
-export async function ensureSubaccount(userId: number, resellerClient = ""): Promise<{ ok: true; account: string; sipHost: string; warning?: string } | { ok: false; message: string }> {
+export async function ensureSubaccount(userId: number, resellerClient = "", did = ""): Promise<{ ok: true; account: string; sipHost: string; warning?: string } | { ok: false; message: string }> {
   const existing = getSubaccount(userId);
   if (existing?.account && existing.password) {
     let warning = "";
@@ -166,13 +182,30 @@ export async function ensureSubaccount(userId: number, resellerClient = ""): Pro
   }
   const connection = getConnection("voipms");
   if (!connection.enabled || !connection.secret) return { ok: false, message: "VoIP.ms is not connected, so a line account was not created." };
-  const username = usernameFor(userId);
-  const attached = await lineClientSettings(settingsFromConnection(userId), resellerClient, userId);
+  const code = ensureCustomerCode(userId);
+  const names = sipUsernameCandidates(code);
+  if (!names.length) return { ok: false, message: "This customer has no customer ID, so the SIP username was not created." };
+  const planName = paidPlanName(userId);
+  if (!planName) return { ok: false, message: "The SIP account is created after a paid plan is on this customer and a number is bought." };
+  const caller = callerIdDigits(did);
+  const base = caller ? { ...settingsFromConnection(userId), callerid_number: caller } : settingsFromConnection(userId);
+  const attached = await lineClientSettings(base, resellerClient, userId, planName);
   let settings = attached.settings;
-  const description = `SautiCall ${userId}`;
+  const description = accountLabel(userId);
   const host = sipHost(connection.public.pop || "");
   const password = appPassword();
-  const createdCall = await openLine(settings, (next) => callVoipms("createSubAccount", { username, description, auth_type: "1", password, ...next }, VOIPMS_WRITE_MS));
+  let username = names[0];
+  let createdCall: Awaited<ReturnType<typeof openLine>> = { result: { ok: false, status: "invalid_username", message: "invalid_username", body: null }, settings: attached.settings, detached: "" };
+  for (const candidate of names) {
+    username = candidate;
+    createdCall = await openLine(attached.settings, (next) => callVoipms("createSubAccount", { username: candidate, description, auth_type: "1", password, ...next }, VOIPMS_WRITE_MS));
+    if (!createdCall.result.ok && /callerid/i.test(`${createdCall.result.status} ${createdCall.result.message}`) && attached.settings.callerid_number) {
+      const stripped = { ...attached.settings };
+      delete stripped.callerid_number;
+      createdCall = await openLine(stripped, (next) => callVoipms("createSubAccount", { username: candidate, description, auth_type: "1", password, ...next }, VOIPMS_WRITE_MS));
+    }
+    if (createdCall.result.ok || !/invalid_username/i.test(`${createdCall.result.status} ${createdCall.result.message}`)) break;
+  }
   settings = createdCall.settings;
   const created = createdCall.result;
   const detached = createdCall.detached
@@ -184,8 +217,10 @@ export async function ensureSubaccount(userId: number, resellerClient = ""): Pro
     return { ok: true, account: createdRef.account, sipHost: host, warning: detached || undefined };
   }
   const listed = await callVoipms("getSubAccounts", {}, VOIPMS_READ_MS);
-  const found = matchListedSubaccount(readListedSubaccounts(listed.body), username, description);
+  const rows = readListedSubaccounts(listed.body);
+  const found = names.map((candidate) => matchListedSubaccount(rows, candidate, description)).find((item) => item);
   if (found) {
+    username = found.username || username;
     if (!found.id) {
       saveSubaccount({ user_id: userId, account: found.account, username, password, sip_host: host, settings_json: JSON.stringify(settings) });
       const missingId = "VoIP.ms listed the line account without a numeric id, so its settings were not updated.";
@@ -234,7 +269,7 @@ export async function setOutboundLocked(userId: number, locked: boolean) {
     }
   }
   const result = await callVoipms("setSubAccount", subaccountUpdateParams(id, {
-    description: `SautiCall ${userId}`,
+    description: accountLabel(userId),
     ...settings,
     auth_type: locked ? "2" : "1",
     password: locked ? "" : row.password,

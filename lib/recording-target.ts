@@ -20,7 +20,7 @@ export function cleanPrefix(value: string) {
 }
 
 export function recordingObjectKey(prefix: string, customerCode: string, id: number, extension: string) {
-  const who = /^[IB]-\d{7}$/.test(customerCode) ? customerCode : "unassigned";
+  const who = /^[IB]\d{7}$/.test(customerCode) ? customerCode : "unassigned";
   const ext = extension === "mp3" ? "mp3" : extension === "txt" ? "txt" : "wav";
   return `${cleanPrefix(prefix)}/${who}/${id}.${ext}`;
 }

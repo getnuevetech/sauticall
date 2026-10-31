@@ -266,7 +266,7 @@ export async function purchaseNumber(input: { requestId: number; userId: number;
       }
       if (!balanceCovers(balance, fees)) return stop("This account does not have enough phone-company balance to buy that number yet.", `Client ${client.clientId} balance ${balance?.toFixed(2)} does not cover monthly ${fees.monthly} and setup ${fees.setup}.`);
     }
-    const sub = await ensureSubaccount(input.userId, client.clientId);
+    const sub = await ensureSubaccount(input.userId, client.clientId, input.did);
     if (!sub.ok) return stop("The phone company line for this customer is not ready yet. An administrator can finish it on the customer page.", sub.message);
     if (sub.warning) recordFailure({ area: "client", userId: input.userId, subject: sub.account, detail: sub.warning });
     const current = await lookupOwnedDid(input.did);
