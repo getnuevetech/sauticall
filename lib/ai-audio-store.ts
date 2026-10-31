@@ -156,7 +156,7 @@ export async function generateClip(userId: number, title: string, script: string
   if (!enabledSwitchCodes().has("master")) return { ok: false as const, message: "SautiCall has turned audio generation off." };
   const policy = audioPolicy();
   if (voice.engineId) {
-    const engine = listAiEngines().find((item) => item.id === voice.engineId && item.enabled && item.kind === "tts");
+    const engine = listAiEngines().find((item) => item.id === voice.engineId && item.enabled);
     if (!engine) return { ok: false as const, message: "The text-to-voice engine for this voice is off." };
     const spoken = await readEngineAudio(
       engine.endpoint,

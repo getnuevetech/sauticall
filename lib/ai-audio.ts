@@ -36,7 +36,7 @@ export function validateVoice(input: { name: string; voiceKey: string; rights: b
   const voiceKey = input.voiceKey.trim().slice(0, 80);
   if (!name) return { ok: false as const, message: "Enter a name for this voice." };
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/.test(voiceKey)) return { ok: false as const, message: "The voice key can use letters, numbers, and . _ : -." };
-  if (input.engineKind && input.engineKind !== "tts") return { ok: false as const, message: "Choose a text-to-voice engine, or leave the engine blank for the preview tone." };
+  if (input.engineKind === "missing") return { ok: false as const, message: "Choose an engine that is saved on this system, or leave the engine blank for the preview tone." };
   if (input.enabled && !input.rights) return { ok: false as const, message: "Confirm the right to use this voice before turning it on." };
   return { ok: true as const, voice: { name, voiceKey, rights: input.rights, enabled: input.enabled && input.rights } };
 }

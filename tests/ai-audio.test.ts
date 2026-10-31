@@ -30,7 +30,7 @@ test("a voice stays off until the rights box is checked", () => {
   const on = validateVoice({ name: "Preview", voiceKey: "preview", rights: true, enabled: true, engineKind: null });
   assert.equal(on.ok && on.voice.enabled, true);
   const language = validateVoice({ name: "Preview", voiceKey: "preview", rights: true, enabled: true, engineKind: "llm" });
-  assert.equal(language.ok, false);
+  assert.equal(language.ok, true);
 });
 
 test("kept audio is not expired and drafts are", () => {

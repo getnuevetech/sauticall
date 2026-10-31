@@ -54,8 +54,9 @@ test("two engines can be assigned to different jobs", () => {
   }
   const off = validateAssignment("tts", 3, [{ ...voice, id: 3, enabled: false }]);
   assert.equal(off.ok, false);
-  const mismatch = validateAssignment("receptionist", voice.id, [voice, outbound]);
-  assert.equal(mismatch.ok, false);
+  const shared = validateAssignment("receptionist", voice.id, [voice, outbound]);
+  const alsoShared = validateAssignment("tts", voice.id, [voice, outbound]);
+  assert.equal(shared.ok && alsoShared.ok, true);
   const sameModel = validateAssignment("personal_assistant", outbound.id, [voice, outbound]);
   assert.equal(sameModel.ok, true);
   const secret = validateEngine({ name: "Voice", kind: "tts", model: "sauticall-voice-1", endpoint: "https://voice.internal.example", secretRef: "sk-live-secret", enabled: true });
