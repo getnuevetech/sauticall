@@ -7,6 +7,7 @@ import { extensionAddedNoticeIsOn, extensionWelcomeText, webClientUrl, welcomeCu
 import { describeExtensionFailure, numberAlreadyUsed } from "./pbx-access";
 import {
   acceptedDepartmentName,
+  accountDepartmentName,
   departmentCreateBody,
   departmentNameIssue,
   departmentNameTakenMessage,
@@ -391,9 +392,11 @@ async function ensureDepartment(userId: number) {
   const database = getDb();
   const range = plannedDepartmentRange(userId);
   const existing = database.prepare("SELECT * FROM pbx_departments WHERE user_id = ?").get(userId) as Department | undefined;
-  const name = acceptedDepartmentName(existing?.name || "");
+  const person = database.prepare("SELECT name, business_name FROM users WHERE id = ?").get(userId) as { name: string; business_name: string } | undefined;
+  const chosen = normalizeDepartmentName(existing?.name || "") || accountDepartmentName(person?.business_name || "", person?.name || "");
+  const name = acceptedDepartmentName(chosen);
   if (!name) {
-    const customer = departmentNameIssue(existing?.name || "");
+    const customer = departmentNameIssue(chosen);
     throw new PhoneSystemError(customer);
   }
   if (existing?.xapi_id) {

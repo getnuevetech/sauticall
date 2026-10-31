@@ -340,6 +340,8 @@ export const liveCopy: Record<string, Record<string, unknown>> = {
       registerSubmit: "Create account →",
       registerName: "Full name",
       registerNameHint: "Your full name",
+      registerBusiness: "Business name",
+      registerBusinessHint: "Used as your company name",
       registerEmail: "Email address",
       registerEmailHint: "you@business.com",
       registerPhone: "Mobile number",
