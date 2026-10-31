@@ -1,7 +1,7 @@
 export type FlagRecord = { key: string; label: string; description: string; enabled: boolean };
 
 const GROUPS = [
-  { id: "access", label: "Access & security", keys: ["auth.signup", "auth.password_login", "auth.mfa", "auth.test_code", "auth.show_sign_in"] },
+  { id: "access", label: "Access & security", keys: ["auth.signup", "auth.password_login", "auth.mfa", "auth.test_code", "auth.verify_email", "auth.verify_sms", "auth.show_sign_in"] },
   { id: "phone", label: "Phone operations", keys: ["numbers.search", "numbers.live_search", "numbers.live_order", "numbers.auto_order", "porting.requests", "porting.live_submit", "pbx.live_provision", "pbx.live_trunk", "pbx.voipms_backup", "minutes.live_sync", "minutes.enforce"] },
   { id: "payments", label: "Payments", keys: ["billing.checkout", "billing.fund_client"] },
   { id: "ai", label: "AI features", keys: ["marketing.ai_demo", "marketing.estimator", "contact.form", "sales.custom_request"] },

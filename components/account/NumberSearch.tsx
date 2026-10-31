@@ -32,6 +32,7 @@ export function NumberSearch({
   const [country, setCountry] = useState("US");
   const [mode, setMode] = useState<(typeof MODES)[number][0]>("city");
   const [message, setMessage] = useState("");
+  const [messageError, setMessageError] = useState(false);
   const [pending, setPending] = useState(false);
   const queryLabel = mode === "number" ? copy.numbersQueryNumber || "Number" : mode === "prefix" ? copy.numbersQueryPrefix || "Starts with" : copy.numbersQuerySuffix || "Ends with";
 
@@ -51,8 +52,10 @@ export function NumberSearch({
     setPending(true);
     const response = await fetch(`/api/numbers/search?${params}`);
     const payload = (await response.json()) as { dids?: Did[]; message?: string };
-    setDids(payload.dids || []);
-    setMessage(payload.message || (payload.dids?.length ? "" : copy.numbersEmpty));
+    const next = payload.dids || [];
+    setDids(next);
+    setMessageError(!response.ok || next.length === 0);
+    setMessage(payload.message || (next.length ? "" : copy.numbersEmpty));
     setPending(false);
   }
 
@@ -79,7 +82,7 @@ export function NumberSearch({
           <button className="btn btn-primary" type="submit" disabled={pending}>{copy.numbersSearchLabel}</button>
         </form>
       ) : <p>{copy.numbersLiveOff}</p>}
-      {message ? <p className="form-feedback">{message}</p> : null}
+      {message ? <p className={messageError ? "form-feedback form-error" : "form-feedback"} role={messageError ? "alert" : "status"}>{message}</p> : null}
       {dids.map((item) => (
         <form key={item.did} action={saveNumber} className="feature-card">
           <input type="hidden" name="did" value={item.did} />

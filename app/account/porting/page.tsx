@@ -36,7 +36,7 @@ export default async function PortingPage({ searchParams }: { searchParams: Prom
         <p>{text("portingBody")}</p>
       </header>
             {params.saved ? <p className="form-feedback">{text("portingSaved")}</p> : null}
-            {params.error ? <p className="form-feedback">{customerMessage(params.error, "Something went wrong. Please try again, or contact support.")}</p> : null}
+            {params.error ? <p className="form-feedback form-error" role="alert">{customerMessage(params.error, "Something went wrong. Please try again, or contact support.")}</p> : null}
             {!included ? <div className="contact-form"><p>Number transfer is not included on your plan.</p></div> : open ? <PortForm labels={labels} /> : <div className="contact-form"><p>{text("portingClosed")}</p></div>}
             <div style={{ marginTop: 28 }}>
               {rows.map((row) => {

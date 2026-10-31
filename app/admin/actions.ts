@@ -232,14 +232,13 @@ export async function orderSavedNumber(formData: FormData) {
   const actor = user.email;
   finishAfterResponse(async () => {
     const { purchaseNumber } = await import("@/lib/lines");
-    const { carrierDidRef } = await import("@/lib/number-order");
+    const { orderRecord } = await import("@/lib/number-order");
     const { audit: record, getDb: db } = await import("@/lib/db");
     try {
       const result = await purchaseNumber({ requestId: id, userId: buyerId, did, monthly });
-      const status = result.ok || result.pending ? "ordered" : "exception";
-      const ref = result.ok ? carrierDidRef(did) : "";
-      db().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(status, (result.detail || result.message).slice(0, 400), ref, id);
-      record(actor, "request.order", `${id}:${status}`);
+      const recorded = orderRecord(result, did);
+      db().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(recorded.status, (result.detail || result.message).slice(0, 400), recorded.providerRef, id);
+      record(actor, "request.order", `${id}:${recorded.status}`);
     } catch (error) {
       const detail = error instanceof Error ? error.message : "The purchase could not be finished.";
       db().prepare("UPDATE account_requests SET status = 'exception', staff_note = ? WHERE id = ?").run(detail.slice(0, 400), id);
@@ -273,7 +272,7 @@ export async function setRequestStatus(formData: FormData) {
   const note = String(formData.get("staff_note") || "").slice(0, 400);
   const allowed = new Set(["requested", "ordering", "submitted", "ordered", "completed", "exception", "cancelled"]);
   if (!allowed.has(status)) redirect("/admin/requests?error=Unknown%20status.");
-  const row = getDb().prepare("SELECT kind, payload, provider_ref FROM account_requests WHERE id = ?").get(id) as { kind: string; payload: string; provider_ref: string } | undefined;
+  const row = getDb().prepare("SELECT user_id, kind, payload, provider_ref FROM account_requests WHERE id = ?").get(id) as { user_id: number; kind: string; payload: string; provider_ref: string } | undefined;
   if (!row) redirect("/admin/requests?error=That%20request%20was%20not%20found.");
   let providerRef = row.provider_ref;
   if (row.kind === "number" && (status === "ordered" || status === "completed")) {
@@ -291,6 +290,16 @@ export async function setRequestStatus(formData: FormData) {
     providerRef = carrierDidRef(did);
   }
   getDb().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(status, note, providerRef, id);
+  if (row.kind === "number" && (status === "ordered" || status === "completed") && providerRef) {
+    const { ensureCustomerLine } = await import("@/lib/lines");
+    let did = "";
+    try {
+      did = String((JSON.parse(row.payload) as { did?: string }).did || "");
+    } catch {
+      did = "";
+    }
+    ensureCustomerLine(row.user_id, id, did);
+  }
   audit(user.email, "request.status", `${id}:${status}`);
   redirect("/admin/requests");
 }

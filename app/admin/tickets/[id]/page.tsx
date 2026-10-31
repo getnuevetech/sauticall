@@ -26,7 +26,7 @@ export default async function TicketPage({ params, searchParams }: { params: Pro
       <p><Link href="/admin/tickets">Ticket desk</Link></p>
       <h2>SC-{ticket.id} · {ticket.subject}</h2>
       <p>{statusLabel(ticket.status)} · {ticket.priority} priority · opened {formatWhen(ticket.created_at)} · updated {formatWhen(ticket.updated_at)}</p>
-      {query.error ? <p className="form-feedback">{query.error}</p> : null}
+      {query.error ? <p className="form-feedback form-error" role="alert">{query.error}</p> : null}
       {query.saved ? <p className="form-feedback">{query.saved}</p> : null}
       <div className="desk">
         <section>

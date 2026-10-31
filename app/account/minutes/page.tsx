@@ -39,6 +39,7 @@ export default async function MinutesPage({ searchParams }: { searchParams: Prom
       calls={calls.map((call) => ({ id: call.uniqueid, destination: call.destination, seconds: call.seconds, startedAt: call.started_at }))}
       mailboxes={people.map((person) => ({ id: person.id, number: person.status === "removed" && person.former_number ? person.former_number : person.number, name: `${person.first_name} ${person.last_name}`.trim() }))}
       notice={notice}
+      noticeError={Boolean(params.error)}
     />
   );
 }

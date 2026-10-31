@@ -31,15 +31,18 @@ export function PlaceSelects({
   const [city, setCity] = useState(cityDefault);
   const [places, setPlaces] = useState<string[]>([]);
   const [note, setNote] = useState("");
+  const [noteError, setNoteError] = useState(false);
 
   useEffect(() => {
     if (!includeCity || !region) {
       setPlaces([]);
       setNote("");
+      setNoteError(false);
       return;
     }
     let cancel = false;
     setNote("");
+    setNoteError(false);
     fetch(`/api/numbers/places?country=${country}&region=${region}`)
       .then((response) => response.json())
       .then((payload: { places?: string[]; message?: string }) => {
@@ -48,11 +51,13 @@ export function PlaceSelects({
         setPlaces(list);
         setCity((current) => list.find((item) => item.toUpperCase() === current.toUpperCase()) || "");
         setNote(list.length ? "" : payload.message || "No cities were returned for that state.");
+        setNoteError(list.length === 0);
       })
       .catch(() => {
         if (!cancel) {
           setPlaces([]);
           setNote("The city list could not be loaded.");
+          setNoteError(true);
         }
       });
     return () => {
@@ -84,7 +89,7 @@ export function PlaceSelects({
           {places.map((place) => <option key={place} value={place}>{place}</option>)}
         </select>
       </label> : null}
-      {note ? <p className="form-feedback" style={{ gridColumn: "1 / -1" }}>{note}</p> : null}
+      {note ? <p className={noteError ? "form-feedback form-error" : "form-feedback"} role={noteError ? "alert" : "status"} style={{ gridColumn: "1 / -1" }}>{note}</p> : null}
     </>
   );
 }

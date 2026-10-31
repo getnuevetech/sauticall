@@ -50,6 +50,7 @@ export function AddressEditor({
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [note, setNote] = useState(lookup ? "" : "Google address lookup is not configured. Enter the address below.");
+  const [noteError, setNoteError] = useState(!lookup);
   const [busy, setBusy] = useState(false);
 
   function setField(key: keyof AddressValues, value: string) {
@@ -59,14 +60,17 @@ export function AddressEditor({
   async function search() {
     setBusy(true);
     setNote("");
+    setNoteError(false);
     try {
       const response = await fetch(`/api/address?q=${encodeURIComponent(query)}`);
       const payload = await response.json() as { suggestions?: Suggestion[]; message?: string };
       setSuggestions(payload.suggestions || []);
       setNote(payload.message || "");
+      setNoteError(Boolean(payload.message));
     } catch {
       setSuggestions([]);
       setNote("Google address lookup is not available right now.");
+      setNoteError(true);
     } finally {
       setBusy(false);
     }
@@ -75,6 +79,7 @@ export function AddressEditor({
   async function choose(id: string) {
     setBusy(true);
     setNote("");
+    setNoteError(false);
     try {
       const response = await fetch(`/api/address?place=${encodeURIComponent(id)}`);
       const payload = await response.json() as { address?: Omit<AddressValues, "full_name">; message?: string };
@@ -82,11 +87,14 @@ export function AddressEditor({
         setValues((current) => ({ ...current, ...payload.address }));
         setSuggestions([]);
         setNote("Address filled from Google. Check it, then save. Saving also updates the VoIP.ms client.");
+        setNoteError(false);
       } else {
         setNote(payload.message || "Google did not return a complete street address.");
+        setNoteError(true);
       }
     } catch {
       setNote("Google address lookup is not available right now.");
+      setNoteError(true);
     } finally {
       setBusy(false);
     }
@@ -109,7 +117,7 @@ export function AddressEditor({
           {suggestions.map((item) => <li key={item.id}><button type="button" onClick={() => void choose(item.id)}>{item.label}</button></li>)}
         </ul>
       ) : null}
-      {note ? <p className="form-feedback">{note}</p> : null}
+      {note ? <p className={noteError ? "form-feedback form-error" : "form-feedback"} role={noteError ? "alert" : "status"}>{note}</p> : null}
       <label>Contact name <input name="full_name" value={values.full_name} onChange={(event) => setField("full_name", event.target.value)} required /></label>
       <label>Street number <input name="street_number" value={values.street_number} onChange={(event) => setField("street_number", event.target.value)} required /></label>
       <label>Street name <input name="street_name" value={values.street_name} onChange={(event) => setField("street_name", event.target.value)} required /></label>

@@ -24,6 +24,8 @@ type AttemptRow = {
   checkout_url: string;
   plan_name?: string;
   product_kind?: string;
+  bundle_name?: string;
+  carrier_funded?: number;
 };
 
 export type PublicGatewayConfig = {
@@ -216,12 +218,21 @@ function saveCheckout(id: number, providerRef: string, url: string) {
 
 async function markPaid(id: number) {
   const info = getDb().prepare("UPDATE payment_attempts SET status = 'paid', paid_at = ? WHERE id = ? AND status = 'pending'").run(new Date().toISOString(), id);
-  if (!info.changes) return;
-  const { grantForPayment, enforceUser } = await import("./minutes");
-  grantForPayment(id);
   const attempt = attemptById(id);
-  if (attempt?.user_id) await enforceUser(attempt.user_id);
-  if (attempt?.user_id && attempt.product_kind !== "bundle" && attempt.plan_name) {
+  if (!attempt || attempt.status !== "paid") return;
+  const bundle = attempt.product_kind === "bundle";
+  if (!info.changes && !bundle) return;
+  const { grantForPayment, enforceUser } = await import("./minutes");
+  if (info.changes) {
+    grantForPayment(id);
+    if (attempt.user_id) await enforceUser(attempt.user_id);
+  }
+  if (attempt.user_id && bundle) {
+    const { fundBundlePayment } = await import("./voip-client");
+    await fundBundlePayment(attempt.user_id, attempt.id);
+    return;
+  }
+  if (info.changes && attempt.user_id && attempt.plan_name) {
     const { fundPaidPlanWithRetry } = await import("./voip-client");
     await fundPaidPlanWithRetry(attempt.user_id, attempt.plan_name);
   }
@@ -229,7 +240,14 @@ async function markPaid(id: number) {
 
 export async function confirmReturn(attemptId: number, query: { session_id?: string; token?: string; orderId?: string; cancelled?: string }) {
   const attempt = attemptById(attemptId);
-  if (!attempt || attempt.status === "paid") return;
+  if (!attempt) return;
+  if (attempt.status === "paid") {
+    if (attempt.product_kind === "bundle" && attempt.user_id) {
+      const { fundBundlePayment } = await import("./voip-client");
+      await fundBundlePayment(attempt.user_id, attempt.id);
+    }
+    return;
+  }
   if (query.cancelled === "1" && attempt.status === "pending") {
     getDb().prepare("UPDATE payment_attempts SET status = 'cancelled' WHERE id = ? AND status = 'pending'").run(attempt.id);
     return;

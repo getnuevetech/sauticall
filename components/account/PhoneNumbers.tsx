@@ -53,6 +53,7 @@ export function PhoneNumbers({
   owned,
   requests,
   notice,
+  noticeError = false,
 }: {
   initialTab?: "mine" | "find" | "e911";
   phoneVerified: boolean;
@@ -66,12 +67,14 @@ export function PhoneNumbers({
   owned: Owned[];
   requests: Requested[];
   notice: string;
+  noticeError?: boolean;
 }) {
   const [tab, setTab] = useState<"mine" | "find" | "e911">(initialTab);
   const [match, setMatch] = useState<"" | "number" | "prefix" | "suffix">("");
   const [dids, setDids] = useState<Did[]>([]);
   const [selected, setSelected] = useState<Did | null>(null);
   const [message, setMessage] = useState("");
+  const [messageError, setMessageError] = useState(false);
   const router = useRouter();
   const refreshes = useRef(0);
   const buying = requests.some((row) => row.status === "Buying");
@@ -114,6 +117,7 @@ export function PhoneNumbers({
     const searchBy = String(data.get("searchBy") || "city");
     if (searchBy === "pattern" && !query) {
       setMessage("Enter an area code or number pattern.");
+      setMessageError(true);
       setDids([]);
       setSelected(null);
       setPending(false);
@@ -138,7 +142,9 @@ export function PhoneNumbers({
     setSelected(next[0] || null);
     setCountry(String(data.get("country") || "US"));
     setWhere([placeLabel(city), region].filter(Boolean).join(", "));
-    setMessage(payload.message || (next.length ? "" : "No numbers matched that search."));
+    const problem = !response.ok || next.length === 0;
+    setMessageError(problem);
+    setMessage(payload.message || (problem ? "No numbers matched that search." : ""));
     setPending(false);
   }
 
@@ -151,7 +157,7 @@ export function PhoneNumbers({
         </div>
         <Link className="ws-btn ghost num-outline" href="/account/porting">Transfer a number</Link>
       </header>
-      {notice ? <p className="form-feedback">{notice}</p> : null}
+      {notice ? <p className={noticeError ? "form-feedback form-error" : "form-feedback"} role={noticeError ? "alert" : "status"}>{notice}</p> : null}
       <div className="num-tabs">
         <button type="button" className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")}>My numbers</button>
         <button type="button" className={tab === "find" ? "active" : ""} onClick={() => setTab("find")}>Find a number</button>
@@ -231,7 +237,7 @@ export function PhoneNumbers({
                   </div>
                 </form>
                 {!live ? <p>Number search is not available right now.</p> : null}
-                {message ? <p className="form-feedback">{message}</p> : null}
+                {message ? <p className={messageError ? "form-feedback form-error" : "form-feedback"} role={messageError ? "alert" : "status"}>{message}</p> : null}
               </section>
             ) : null}
             {included && !closed ? (

@@ -90,7 +90,7 @@ export function PlatformControls({ initial }: { initial: FlagRecord[] }) {
           <button type="button" className="btn btn-primary" disabled={saving} onClick={() => { if (mfaChanged(saved, pending)) setReview(true); else void save(); }}>{mfaChanged(saved, pending) ? "Review & save" : "Save changes"}</button>
         </div>
       ) : null}
-      {error ? <p className="form-feedback">{error}</p> : null}
+      {error ? <p className="form-feedback form-error" role="alert">{error}</p> : null}
       {review && mfa && mfaSaved ? (
         <div className="ap-modal-scrim">
           <div className="ap-modal" role="dialog" aria-modal="true" aria-labelledby="mfa-review">

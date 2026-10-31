@@ -730,6 +730,8 @@ export async function updateExtensionProfile(id: number, userId: number, input: 
   const last = input.last.trim().replace(/\s+/g, " ").slice(0, 40);
   const email = input.email.trim().toLowerCase().slice(0, 120);
   if (!first || !last || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, message: "Enter a first name, last name, and email." };
+  const taken = getDb().prepare("SELECT id FROM pbx_extensions WHERE lower(email) = lower(?) AND status != 'removed' AND id != ?").get(email, id) as { id: number } | undefined;
+  if (taken) return { ok: false, message: "That email is already used for an extension. Use a different email." };
   if (row.xapi_id) {
     if (!flagOn("pbx.live_provision")) return { ok: false, message: "The phone system is not accepting changes right now." };
     const patched = await pbxRequest(`Users(${row.xapi_id})`, {
@@ -739,8 +741,9 @@ export async function updateExtensionProfile(id: number, userId: number, input: 
     if (!patched.ok) {
       const detail = patched.message || "The name could not be saved.";
       const { recordFailure } = await import("./failure-log");
+      const { extensionCustomerMessage } = await import("./customer-message");
       recordFailure({ area: "extension", userId: row.user_id, subject: row.number, detail });
-      return { ok: false, message: detail };
+      return { ok: false, message: extensionCustomerMessage(detail) };
     }
   }
   getDb().prepare("UPDATE pbx_extensions SET first_name = ?, last_name = ?, email = ? WHERE id = ?").run(first, last, email, id);

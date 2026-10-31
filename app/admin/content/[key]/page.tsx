@@ -49,7 +49,7 @@ export default async function ContentPage({ params, searchParams }: { params: Pr
               <Link className="btn btn-secondary" href={query.compare === "1" ? `/admin/content/plans?${keep}` : `/admin/content/plans?${new URLSearchParams({ ...Object.fromEntries(keep), compare: "1" })}`}>Compare features</Link>
             </div>
           </div>
-          {query.error ? <p className="form-feedback">{query.error}</p> : null}
+          {query.error ? <p className="form-feedback form-error" role="alert">{query.error}</p> : null}
           {query.saved ? <p className="form-feedback">Plans saved. Existing purchase records were not rewritten.</p> : null}
           <form className="ops-toolbar" method="get">
             {query.compare === "1" ? <input type="hidden" name="compare" value="1" /> : null}
@@ -130,7 +130,7 @@ export default async function ContentPage({ params, searchParams }: { params: Pr
     return (
       <>
         <p className="ops-kicker">Catalog & billing / Minute bundles</p>
-        {query.error ? <p className="form-feedback">{query.error}</p> : null}
+        {query.error ? <p className="form-feedback form-error" role="alert">{query.error}</p> : null}
         {query.saved ? <p className="form-feedback">Bundles saved. Customer balances were not changed.</p> : null}
         <BundleStudio initial={bundles} purchases={bundlePurchaseCounts()} currency={money.code} currencyChoices={money.choices} />
       </>

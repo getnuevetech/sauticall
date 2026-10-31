@@ -39,7 +39,7 @@ export default async function AccountAudioPage({ searchParams }: { searchParams:
         <p>Store a message or a preview. SautiCall keeps the file on this account. Nothing here places a call. <Link className="text-link" href="/account/ai">Back to AI services</Link></p>
       </header>
       {notice ? <p className="form-feedback">{notice}</p> : null}
-      {query.error ? <p className="form-feedback">{query.error}</p> : null}
+      {query.error ? <p className="form-feedback form-error" role="alert">{query.error}</p> : null}
       <form className="contact-form" action={generateAudioForm}>
         <h3>Generate</h3>
         <p>No charge is calculated on this screen. Generation only stores audio.</p>

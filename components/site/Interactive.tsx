@@ -143,7 +143,7 @@ export function SetupAssistant({
             </div>
           </div>
         ) : null}
-        {message ? <p className="form-feedback">{message}</p> : null}
+        {message ? <p className="form-feedback form-error" role="alert">{message}</p> : null}
       </div>
       <form className="demo-form" onSubmit={onSubmit}>
         <input name="prompt" aria-label="Describe your phone setup" placeholder={placeholder || "6 people, an AI receptionist, and keep our current number"} required />

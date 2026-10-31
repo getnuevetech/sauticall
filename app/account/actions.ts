@@ -89,26 +89,31 @@ export async function register(_previous: FormState, formData: FormData) {
   const { ensureCustomerCode } = await import("@/lib/customer-code-store");
   ensureCustomerCode(id, planName);
   finishAfterResponse(() => import("@/lib/voip-client").then(({ ensureVoipClient }) => ensureVoipClient(id)));
-  const { requestOrigin } = await import("@/lib/payments");
-  const { sendAccountEmail } = await import("@/lib/account-verify");
-  const origin = await requestOrigin();
-  const emailResult = await sendAccountEmail(user.id, origin).catch(() => ({ ok: false as const, message: "The confirmation email could not be sent. Try again shortly." }));
-  const { sendAccountSms } = await import("@/lib/account-verify");
-  const smsResult = await sendAccountSms(user.id).catch(() => ({ ok: false as const, message: "The text message could not be sent. Try again in a minute." }));
+  const emailOn = flagOn("auth.verify_email");
+  const smsOn = flagOn("auth.verify_sms");
+  const query = new URLSearchParams();
+  if (emailOn) {
+    const { requestOrigin } = await import("@/lib/payments");
+    const { sendAccountEmail } = await import("@/lib/account-verify");
+    const emailResult = await sendAccountEmail(user.id, await requestOrigin()).catch(() => ({ ok: false as const, message: "The confirmation email could not be sent. Try again shortly." }));
+    query.set("email", emailResult.ok ? "sent" : "waiting");
+    if (!emailResult.ok && emailResult.message) query.set("error", emailResult.message);
+  }
+  if (smsOn) {
+    const { sendAccountSms } = await import("@/lib/account-verify");
+    const smsResult = await sendAccountSms(user.id).catch(() => ({ ok: false as const, message: "The text message could not be sent. Try again in a minute." }));
+    query.set("sms", smsResult.ok ? "sent" : "waiting");
+    if (!query.get("error") && !smsResult.ok && smsResult.message) query.set("error", smsResult.message);
+  }
   audit(email, "auth.register", planName || "customer");
-  const query = new URLSearchParams({
-    email: emailResult.ok ? "sent" : "waiting",
-    sms: smsResult.ok ? "sent" : "waiting",
-  });
   if (planName) query.set("plan", planName);
-  if (!emailResult.ok && emailResult.message) query.set("error", emailResult.message);
-  else if (!smsResult.ok && smsResult.message) query.set("error", smsResult.message);
   redirect(`/account/verify?${query}`);
 }
 
 export async function confirmEmailCode(_previous: FormState, formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
+  if (!flagOn("auth.verify_email")) redirect("/account/verify");
   const { confirmEmailCode: confirm } = await import("@/lib/account-verify");
   const result = confirm(user.id, String(formData.get("code") || ""));
   if (!result.ok) redirect(`/account/verify?error=${encodeURIComponent(result.message)}`);
@@ -118,6 +123,7 @@ export async function confirmEmailCode(_previous: FormState, formData: FormData)
 export async function confirmPhoneCode(_previous: FormState, formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
+  if (!flagOn("auth.verify_sms")) redirect("/account/verify");
   const { confirmSmsCode } = await import("@/lib/account-verify");
   const result = confirmSmsCode(user.id, String(formData.get("code") || ""));
   if (!result.ok) redirect(`/account/verify?error=${encodeURIComponent(result.message)}`);
@@ -129,6 +135,7 @@ export async function confirmPhoneCode(_previous: FormState, formData: FormData)
 export async function resendEmailVerification() {
   const user = await currentUser();
   if (!user) redirect("/account/login");
+  if (!flagOn("auth.verify_email")) redirect("/account/verify");
   const { requestOrigin } = await import("@/lib/payments");
   const { sendAccountEmail } = await import("@/lib/account-verify");
   const result = await sendAccountEmail(user.id, await requestOrigin());
@@ -143,6 +150,7 @@ export async function saveMobile(_previous: FormState, formData: FormData) {
   const phone = normalizeMobile(String(formData.get("phone") || ""));
   if (!phone) redirect("/account/verify?error=Enter%20a%20mobile%20number%20with%20the%20country%20code.");
   getDb().prepare("UPDATE users SET phone = ?, phone_verified_at = '' WHERE id = ?").run(phone, user.id);
+  if (!flagOn("auth.verify_sms")) redirect("/account/verify?phone=saved");
   const { sendAccountSms } = await import("@/lib/account-verify");
   const result = await sendAccountSms(user.id).catch(() => ({ ok: false as const, message: "The text message could not be sent. Try again in a minute." }));
   if (result.ok) redirect("/account/verify?sms=sent");
@@ -153,6 +161,7 @@ export async function saveMobile(_previous: FormState, formData: FormData) {
 export async function resendPhoneVerification() {
   const user = await currentUser();
   if (!user) redirect("/account/login");
+  if (!flagOn("auth.verify_sms")) redirect("/account/verify");
   const { sendAccountSms } = await import("@/lib/account-verify");
   const result = await sendAccountSms(user.id);
   if (!result.ok) redirect(`/account/verify?sms=waiting&error=${encodeURIComponent(result.message)}`);
@@ -279,7 +288,7 @@ export async function saveNumber(formData: FormData) {
   const { planAllows } = await import("@/lib/plan-features");
   if (!planAllows(paidPlan(user.id), "numbers")) redirect("/account/numbers?error=Business%20numbers%20are%20not%20included%20on%20your%20plan.");
   const verified = getDb().prepare("SELECT phone_verified_at FROM users WHERE id = ?").get(user.id) as { phone_verified_at: string } | undefined;
-  if (!verified?.phone_verified_at) redirect("/account/numbers?error=Confirm%20your%20mobile%20number%20before%20buying%20a%20number.");
+  if (flagOn("auth.verify_sms") && !verified?.phone_verified_at) redirect("/account/numbers?error=Confirm%20your%20mobile%20number%20before%20buying%20a%20number.");
   const { getEmergency } = await import("@/lib/e911");
   const emergency = getEmergency(user.id);
   if (!emergency) redirect("/account/numbers?error=Add%20your%20address%20before%20buying%20a%20number.");
@@ -310,12 +319,11 @@ export async function saveNumber(formData: FormData) {
   const buyerId = user.id;
   finishAfterResponse(async () => {
     const { purchaseNumber } = await import("@/lib/lines");
-    const { carrierDidRef } = await import("@/lib/number-order");
+    const { orderRecord } = await import("@/lib/number-order");
     const result = await purchaseNumber({ requestId, userId: buyerId, did, monthly });
-    const status = result.ok || result.pending ? "ordered" : "exception";
-    const ref = result.ok ? carrierDidRef(did) : "";
-    getDb().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(status, result.detail || result.message, ref, requestId);
-    audit(user.email, "request.order", `${requestId}:${status}`);
+    const recorded = orderRecord(result, did);
+    getDb().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(recorded.status, result.detail || result.message, recorded.providerRef, requestId);
+    audit(user.email, "request.order", `${requestId}:${recorded.status}`);
   });
   redirect("/account/numbers?saved=ordering");
 }
@@ -427,6 +435,8 @@ export async function addPerson(formData: FormData) {
   const last = String(formData.get("last_name") || "").trim().slice(0, 40);
   const email = String(formData.get("email") || "").trim().slice(0, 120);
   if (!first || !last || !email.includes("@")) redirect("/account/phone?error=First%20name%2C%20last%20name%2C%20and%20email%20are%20required.");
+  const taken = getDb().prepare("SELECT id FROM pbx_extensions WHERE lower(email) = lower(?) AND status != 'removed'").get(email) as { id: number } | undefined;
+  if (taken) redirect("/account/phone?error=That%20email%20is%20already%20used%20for%20an%20extension.%20Use%20a%20different%20email.");
   const { systemsForPlan, validateAiExtension } = await import("@/lib/ai-account");
   const aiChoice = validateAiExtension({
     role: String(formData.get("ai_role") || ""),
@@ -450,7 +460,11 @@ export async function addPerson(formData: FormData) {
   const allocated = await allocateExtension(user.id, used, reserved.plan, reserved.ranges);
   if (!allocated.ok) {
     audit(user.email, "pbx.extension.allocate", allocated.message.slice(0, 400));
-    redirect(`/account/phone?error=${encodeURIComponent(safeCustomerError(allocated.message, "We could not add this person yet. Please try again, or contact support."))}`);
+    const { extensionCustomerMessage } = await import("@/lib/customer-message");
+    const setupMessage = /not enabled|missing credentials|not configured/i.test(allocated.message)
+      ? "People cannot be added until an administrator turns on the phone system."
+      : extensionCustomerMessage(allocated.message);
+    redirect(`/account/phone?error=${encodeURIComponent(setupMessage)}`);
   }
   const number = allocated.number;
   const info = getDb()
@@ -463,8 +477,13 @@ export async function addPerson(formData: FormData) {
   }
   if (flagOn("pbx.live_provision")) {
     const extensionId = Number(info.lastInsertRowid);
-    const { finishAfterResponse } = await import("@/lib/later");
-    finishAfterResponse(() => provisionExtension(extensionId));
+    const result = await provisionExtension(extensionId);
+    if (!result.ok) {
+      const raw = "detail" in result && result.detail ? String(result.detail) : result.message;
+      const { extensionCustomerMessage, extensionEmailConflict } = await import("@/lib/customer-message");
+      if (extensionEmailConflict(raw)) getDb().prepare("DELETE FROM pbx_extensions WHERE id = ? AND xapi_id = 0").run(extensionId);
+      redirect(`/account/phone?error=${encodeURIComponent(extensionCustomerMessage(raw))}`);
+    }
   }
   redirect("/account/phone?saved=1");
 }

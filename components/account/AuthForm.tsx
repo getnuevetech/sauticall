@@ -43,7 +43,7 @@ export function AuthForm({
       ))}
       {extra}
       <button className={submitClassName} type="submit" disabled={pending} aria-busy={pending}>{pending ? waiting : submit}</button>
-      {state?.error ? <div className="form-feedback">{state.error}</div> : null}
+      {state?.error ? <div className="form-feedback form-error" role="alert">{state.error}</div> : null}
     </form>
   );
 }

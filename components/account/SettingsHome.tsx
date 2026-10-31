@@ -33,6 +33,7 @@ export function SettingsHome({
   mfaOn,
   mfaRequired,
   notice,
+  noticeError = false,
   addressLine,
   address,
   lookup,
@@ -50,6 +51,7 @@ export function SettingsHome({
   mfaOn: boolean;
   mfaRequired: boolean;
   notice: string;
+  noticeError?: boolean;
   addressLine: string;
   address: {
     full_name: string;
@@ -77,7 +79,7 @@ export function SettingsHome({
           <p>Manage your profile, business, and account preferences.</p>
         </div>
       </header>
-      {notice ? <p className="form-feedback">{notice}</p> : null}
+      {notice ? <p className={noticeError ? "form-feedback form-error" : "form-feedback"} role={noticeError ? "alert" : "status"}>{notice}</p> : null}
       <div className="num-tabs">
         {TABS.map((item) => <button key={item.id} type="button" className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)}>{item.label}</button>)}
       </div>

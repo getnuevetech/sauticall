@@ -191,7 +191,7 @@ export function PlanStudio({
           </aside>
         ) : null}
       </div>
-      {duplicate ? <p className="form-feedback">Another plan already uses that name.</p> : null}
+      {duplicate ? <p className="form-feedback form-error" role="alert">Another plan already uses that name.</p> : null}
       <div className="ap-savebar ops-save">
         <div>
           <strong>{changes.length ? `${changes.length} unsaved ${changes.length === 1 ? "change" : "changes"}` : "No unsaved changes"}</strong>

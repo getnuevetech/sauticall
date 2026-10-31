@@ -20,6 +20,11 @@ export function wholeMoney(amount: number) {
   return Number.isInteger(value) ? `$${value}` : money(value);
 }
 
+export function bundlePayLabel(amount: string, gatewayLabel: string) {
+  const method = gatewayLabel.replace(/\s*via\s+stripe\b/gi, "").replace(/\bstripe\b/gi, "").replace(/\s+/g, " ").trim();
+  return method ? `Pay ${amount} with ${method}` : `Pay ${amount}`;
+}
+
 export function chicagoDate(iso: string) {
   const time = Date.parse(iso);
   if (!Number.isFinite(time)) return "";

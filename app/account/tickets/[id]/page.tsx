@@ -20,7 +20,7 @@ export default async function AccountTicketPage({ params, searchParams }: { para
         <h1>{found.ticket.subject}</h1>
         <p>SC-{found.ticket.id} · {statusLabel(found.ticket.status)} · {formatWhen(found.ticket.updated_at)}</p>
       </header>
-            {query.error ? <p className="form-feedback">{customerMessage(query.error, "The reply could not be sent. Please try again, or contact support.")}</p> : null}
+            {query.error ? <p className="form-feedback form-error" role="alert">{customerMessage(query.error, "The reply could not be sent. Please try again, or contact support.")}</p> : null}
             {query.saved ? <p className="form-feedback">{customerMessage(query.saved, "Saved.")}</p> : null}
             <div className="ticket-thread">
               {found.messages.map((message) => (

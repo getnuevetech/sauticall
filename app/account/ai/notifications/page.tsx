@@ -42,7 +42,7 @@ export default async function AccountNotificationsPage({ searchParams }: { searc
         {route.lines.map((line) => <p key={line.name}><strong>{line.name === "idle" ? "Idle" : line.state === "ready" ? "Ready" : line.state === "withheld" ? "Closed" : line.state === "unknown" ? "Unconfirmed" : "Needs attention"}.</strong> {line.text}</p>)}
       </article>
       {notice ? <p className="form-feedback">{notice}</p> : null}
-      {query.error ? <p className="form-feedback">{query.error}</p> : null}
+      {query.error ? <p className="form-feedback form-error" role="alert">{query.error}</p> : null}
       {!active ? <p>Turn on Automated notifications before preparing one. <Link className="text-link" href="/account/ai">Review AI services</Link></p> : null}
       <form className="contact-form" action={saveCampaignForm}>
         <h3>Notification</h3>

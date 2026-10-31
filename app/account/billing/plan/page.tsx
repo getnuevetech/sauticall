@@ -27,7 +27,7 @@ export default async function ManagePlanPage({ searchParams }: { searchParams: P
       <Link className="ws-back" href="/account/billing">← Back to billing</Link>
       <h1>Manage your plan</h1>
       <p>Compare plans and choose what fits your business.</p>
-      {params.error ? <p className="form-feedback">{customerMessage(params.error, "Payment could not be started. Please try again, or contact support.")}</p> : null}
+      {params.error ? <p className="form-feedback form-error" role="alert">{customerMessage(params.error, "Payment could not be started. Please try again, or contact support.")}</p> : null}
       <section className="ws-card bill-now">
         <span>Current plan</span>
         {current ? <p>You&apos;re on {current.name} · {wholeMoney(current.price)}/month · {current.seats || 1} {current.seats === 1 ? "person" : "people"} · {current.includedMinutes.toLocaleString("en-US")} outbound minutes.</p> : <p>You do not have a paid plan yet. Choose one below.</p>}

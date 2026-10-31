@@ -148,6 +148,7 @@ function migrate(database: Database.Database) {
   if (!paymentCols.has("product_minutes")) database.exec("ALTER TABLE payment_attempts ADD COLUMN product_minutes INTEGER NOT NULL DEFAULT 0");
   if (!paymentCols.has("bundle_name")) database.exec("ALTER TABLE payment_attempts ADD COLUMN bundle_name TEXT NOT NULL DEFAULT ''");
   if (!paymentCols.has("paid_at")) database.exec("ALTER TABLE payment_attempts ADD COLUMN paid_at TEXT NOT NULL DEFAULT ''");
+  if (!paymentCols.has("carrier_funded")) database.exec("ALTER TABLE payment_attempts ADD COLUMN carrier_funded INTEGER NOT NULL DEFAULT 0");
   const lineCols = new Set((database.prepare("PRAGMA table_info(phone_lines)").all() as { name: string }[]).map((column) => column.name));
   if (lineCols.size && !lineCols.has("e911_json")) database.exec("ALTER TABLE phone_lines ADD COLUMN e911_json TEXT NOT NULL DEFAULT ''");
   if (lineCols.size && !lineCols.has("e911_status")) database.exec("ALTER TABLE phone_lines ADD COLUMN e911_status TEXT NOT NULL DEFAULT 'missing'");

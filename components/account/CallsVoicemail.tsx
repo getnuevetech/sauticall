@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { refreshMinutes, startBundleCheckout } from "@/app/account/actions";
-import { callDuration, chicagoClock, formatPhone, perMinute, wholeMoney } from "@/lib/account-display";
+import { bundlePayLabel, callDuration, chicagoClock, formatPhone, perMinute, wholeMoney } from "@/lib/account-display";
 import { Icon } from "@/components/Icon";
 
 type Bundle = { name: string; minutes: number; price: number };
@@ -24,6 +24,7 @@ export function CallsVoicemail({
   calls,
   mailboxes,
   notice,
+  noticeError = false,
 }: {
   initialTab: string;
   included: number;
@@ -37,6 +38,7 @@ export function CallsVoicemail({
   calls: Call[];
   mailboxes: Mailbox[];
   notice: string;
+  noticeError?: boolean;
 }) {
   const [tab, setTab] = useState(initialTab === "history" || initialTab === "voicemail" || initialTab === "settings" ? initialTab : "minutes");
   const [picked, setPicked] = useState(bundles[bundles.length - 1]?.name || "");
@@ -58,7 +60,7 @@ export function CallsVoicemail({
           <p>Track your minutes and manage voice messages in one place.</p>
         </div>
       </header>
-      {notice ? <p className="form-feedback">{notice}</p> : null}
+      {notice ? <p className={noticeError ? "form-feedback form-error" : "form-feedback"} role={noticeError ? "alert" : "status"}>{notice}</p> : null}
       <div className="num-tabs">
         <button type="button" className={tab === "minutes" ? "active" : ""} onClick={() => setTab("minutes")}>Minutes & bundles</button>
         <button type="button" className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>Call history</button>
@@ -112,7 +114,7 @@ export function CallsVoicemail({
               <form key={gateway.id} action={startBundleCheckout} className="cv-pay">
                 <input type="hidden" name="bundle" value={bundle.name} />
                 <input type="hidden" name="gatewayId" value={gateway.id} />
-                <button className="ws-btn primary" type="submit">Pay {wholeMoney(bundle.price)} with {gateway.label}</button>
+                <button className="ws-btn primary" type="submit">{bundlePayLabel(wholeMoney(bundle.price), gateway.label)}</button>
               </form>
             )) : null}
             <p>Review eligible destinations, applicable charges, and the final total before paying.</p>

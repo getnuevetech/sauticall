@@ -21,7 +21,7 @@ export function MediaForm() {
       <label>Words that describe the picture <input name="alt" placeholder="Company logo" /></label>
       <button className="btn btn-primary" type="submit">Upload</button>
       {url ? <p>Saved. Copy this address: {url}</p> : null}
-      {error ? <div className="form-feedback">{error}</div> : null}
+      {error ? <div className="form-feedback form-error" role="alert">{error}</div> : null}
     </form>
   );
 }

@@ -106,7 +106,7 @@ export function PageEditor({ docKey, initial }: { docKey: string; initial: Recor
           <button type="button" className="btn btn-primary" disabled={saving} onClick={() => void save()}>{saving ? "Saving" : "Save to live"}</button>
         </div>
       ) : null}
-      {error ? <p className="form-feedback">{error}</p> : null}
+      {error ? <p className="form-feedback form-error" role="alert">{error}</p> : null}
     </div>
   );
 }
