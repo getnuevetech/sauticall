@@ -421,15 +421,37 @@ export async function completeEmergency(formData: FormData) {
   redirect(`/admin/lines?line=${id}`);
 }
 
+function postedTrunkId(formData: FormData) {
+  const raw = String(formData.get("trunk_id") || "").trim();
+  if (!raw) return 0;
+  return /^\d+$/.test(raw) ? Number(raw) : -1;
+}
+
+export async function linkTrunk(formData: FormData) {
+  const user = await staff("settings.lines");
+  const id = Number(formData.get("id"));
+  const owner = getDb().prepare("SELECT user_id FROM phone_lines WHERE id = ?").get(id) as { user_id: number } | undefined;
+  ownedCompany(formData, owner?.user_id || 0, "/admin/lines");
+  const trunkId = postedTrunkId(formData);
+  if (trunkId < 1) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent("Enter the trunk id shown in 3CX.")}`);
+  const { linkManualTrunk } = await import("@/lib/lines");
+  const result = await linkManualTrunk(id, trunkId);
+  audit(user.email, "trunk.link", `${id}:${trunkId}:${result.ok ? "ok" : "failed"}`);
+  if (!result.ok) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent(result.message)}`);
+  redirect(`/admin/lines?line=${id}&saved=linked`);
+}
+
 export async function completeTrunk(formData: FormData) {
   const user = await staff("settings.lines");
   const id = Number(formData.get("id"));
   const owner = getDb().prepare("SELECT user_id FROM phone_lines WHERE id = ?").get(id) as { user_id: number } | undefined;
   ownedCompany(formData, owner?.user_id || 0, "/admin/lines");
+  const trunkId = postedTrunkId(formData);
+  if (trunkId < 0) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent("Enter the trunk id shown in 3CX.")}`);
   const note = String(formData.get("note") || "");
   const { markTrunkDone } = await import("@/lib/lines");
-  const result = markTrunkDone(id, note);
-  audit(user.email, "trunk.done", String(id));
+  const result = markTrunkDone(id, note, trunkId);
+  audit(user.email, "trunk.done", `${id}:${trunkId || "none"}`);
   if (!result.ok) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent(result.message)}`);
   redirect(`/admin/lines?line=${id}&saved=recorded`);
 }

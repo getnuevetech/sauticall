@@ -7,7 +7,7 @@ import { didInfoIsAbsent, lookupMayOrder, normalizeRequestedDid, readDids } from
 import { balanceCovers, fundNeedsRetry, fundRetryDetail, planFundAmount, readClientBalance, resellerOrderFees } from "../lib/client-funding.ts";
 import { carrierDidRef, customerLineStatus, customerNumberStatus, numberIsBought, numberPurchaseMode } from "../lib/number-order.ts";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "../lib/outbound-rule.ts";
-import { trunkArrayBody, trunkClientBody, trunkContentTypes, trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFailureText, trunkFilledDeltas, trunkGroupBody, trunkLeanBody, trunkPlainBody, trunkPostBody, trunkReadyBody, trunkReplayBody, trunkServiceBody, trunkShape, trunkSmallBody } from "../lib/trunk-body.ts";
+import { manualTrunkNote, trunkArrayBody, trunkClientBody, trunkContentTypes, trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFailureText, trunkFilledDeltas, trunkGroupBody, trunkLeanBody, trunkPassthroughBody, trunkPlainBody, trunkPostBody, trunkReadyBody, trunkReplayBody, trunkServiceBody, trunkShape, trunkSmallBody } from "../lib/trunk-body.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
 import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
@@ -655,6 +655,61 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
   assert.match(failure, /^lean: 3CX returned 400/);
   assert.match(failure, /DidNumbers:delta\(1\)/);
   assert.ok(failure.indexOf("lean:") < failure.indexOf("shape "));
+});
+
+test("a trunk post keeps the template 3CX returned and the manual steps omit the password", () => {
+  const posted = trunkPassthroughBody({
+    seed: {
+      "@odata.context": "https://pbx.example/xapi/v1/$metadata#Trunks/$entity",
+      "@odata.type": "#Pbx.Trunk",
+      Number: "10000",
+      Id: 0,
+      Groups: [{ GroupId: 4 }],
+      DidNumbers: { "@odata.context": "https://pbx.example/xapi/v1/$metadata#Collection(String)", value: [] },
+      Gateway: {
+        "@odata.type": "#Pbx.Gateway",
+        Name: "Generic",
+        Port: 5060,
+        InboundParams: {
+          "@odata.context": "https://pbx.example/xapi/v1/$metadata#Collection(Pbx.GatewayParameterBinding)",
+          value: [{ ParamId: 9, Custom: "$CalledNum" }],
+        },
+      },
+    },
+    name: "SautiCall 3345397005",
+    number: "3345397005",
+    authId: "577137_sc0002",
+    password: "sip-secret",
+    host: "houston1.voip.ms",
+    template: "GenericSIPTrunk.pv.xml",
+  });
+  assert.equal(JSON.stringify(posted).includes("@odata.context"), false);
+  assert.equal(posted["@odata.type"], "#Pbx.Trunk");
+  assert.equal(posted.Number, "10000");
+  assert.deepEqual(posted.Groups, [{ GroupId: 4 }]);
+  assert.deepEqual(posted.DidNumbers, { value: ["3345397005"] });
+  assert.deepEqual(posted.AuthPassword, { Value: "sip-secret" });
+  assert.equal((posted.Gateway as { Host: string; InboundParams: { value: { Custom: string }[] } }).Host, "houston1.voip.ms");
+  assert.equal((posted.Gateway as { InboundParams: { value: { Custom: string }[] } }).InboundParams.value[0].Custom, "$CalledNum");
+  const note = manualTrunkNote({
+    company: "Texas Labz",
+    did: "3345397005",
+    dialed: "13345397005",
+    extension: "510",
+    from: "510",
+    to: "510",
+    account: "577137_sc0002",
+    host: "houston1.voip.ms",
+    reason: "3CX returned 400: The input was not valid. delta: The delta field is required.",
+  });
+  assert.match(note, /Texas Labz/);
+  assert.match(note, /3345397005/);
+  assert.match(note, /13345397005/);
+  assert.match(note, /extension 510/);
+  assert.match(note, /510–510/);
+  assert.match(note, /577137_sc0002/);
+  assert.match(note, /houston1\.voip\.ms/);
+  assert.equal(note.includes("sip-secret"), false);
 });
 
 test("a created 3CX user id can come from the Location header", () => {
