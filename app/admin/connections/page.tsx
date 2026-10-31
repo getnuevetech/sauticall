@@ -99,7 +99,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
                     <select name="billing_type" defaultValue={config.billing_type || "1"}><option value="1">Per minute</option><option value="2">One monthly price</option></select>
                   </label>
                   <label className="check-option"><input type="checkbox" name="cnam" defaultChecked={config.cnam === "1"} /> Show the caller’s name</label>
-                  <label>Line account phone type code <input name="device_type" defaultValue={config.device_type || "1"} /></label>
+                  <p className="ops-muted">A line account is created as an ATA device, IP Phone or Softphone.</p>
                   <label>International route
                     <select name="international_route" defaultValue={config.international_route || "1"}><option value="1">Value</option><option value="2">Premium</option></select>
                   </label>

@@ -165,7 +165,7 @@ export async function saveConnection(formData: FormData) {
       dialtime: String(formData.get("dialtime") || "60").trim(),
       cnam: formData.get("cnam") === "on" ? "1" : "0",
       billing_type: String(formData.get("billing_type") || "1") === "2" ? "2" : "1",
-      device_type: String(formData.get("device_type") || "1").trim() || "1",
+      device_type: "2",
       lock_international: formData.get("lock_international") === "on" ? "1" : "0",
       international_route: String(formData.get("international_route") || "1") === "2" ? "2" : "1",
       music_on_hold: String(formData.get("music_on_hold") || "default").trim() || "default",

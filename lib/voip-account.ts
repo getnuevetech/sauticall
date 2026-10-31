@@ -52,7 +52,6 @@ function settingsFromConnection(userId = 0): Settings {
   const config = getConnection("voipms").public;
   const settings: Settings = {
     ...TRUNK_SIP_DEFAULTS,
-    device_type: configured(config.device_type, TRUNK_SIP_DEFAULTS.device_type),
     lock_international: configured(config.lock_international, TRUNK_SIP_DEFAULTS.lock_international),
     international_route: configured(config.international_route, TRUNK_SIP_DEFAULTS.international_route),
     canada_routing: configured(config.canada_routing, TRUNK_SIP_DEFAULTS.canada_routing),
@@ -62,7 +61,7 @@ function settingsFromConnection(userId = 0): Settings {
     nat: configured(config.nat, TRUNK_SIP_DEFAULTS.nat),
   };
   if (!userId) return settings;
-  for (const key of ["device_type", "lock_international", "international_route", "canada_routing", "music_on_hold", "allowed_codecs", "dtmf_mode", "nat"]) {
+  for (const key of ["lock_international", "international_route", "canada_routing", "music_on_hold", "allowed_codecs", "dtmf_mode", "nat"]) {
     const value = resolvedLineValue(userId, key);
     if (value.trim() === "") continue;
     settings[key] = key === "allowed_codecs" ? lineCodecs(lineOverride(settings[key] || "", value)) : lineOverride(settings[key] || "", value);
@@ -80,7 +79,7 @@ function readSettings(raw: string): Settings {
 }
 
 function forLine(settings: Settings): Settings {
-  const next: Settings = { ...settings, allowed_codecs: lineCodecs(settings.allowed_codecs || "") };
+  const next: Settings = { ...settings, allowed_codecs: lineCodecs(settings.allowed_codecs || ""), device_type: TRUNK_SIP_DEFAULTS.device_type };
   if (!next.reseller_client || !next.reseller_package) {
     delete next.reseller_client;
     delete next.reseller_package;
@@ -154,7 +153,7 @@ export async function linkSubaccountClient(userId: number, clientId: string) {
   const row = getSubaccount(userId);
   if (!row?.account || !clientId) return { ok: true, message: "" };
   const settings = readSettings(row.settings_json);
-  if (settings.reseller_client === clientId && settings.reseller_package) return { ok: true, message: "" };
+  if (settings.reseller_client === clientId && settings.reseller_package && settings.device_type === TRUNK_SIP_DEFAULTS.device_type) return { ok: true, message: "" };
   const attached = await lineClientSettings(settings, clientId, userId, paidPlanName(userId));
   if (!attached.settings.reseller_package) return { ok: false, message: attached.warning };
   const id = await lineAccountId(userId, row.account, row.provider_id);
@@ -170,10 +169,32 @@ export async function linkSubaccountClient(userId: number, clientId: string) {
   return { ok: true, message: "" };
 }
 
+async function ensurePhoneDevice(userId: number) {
+  const row = getSubaccount(userId);
+  if (!row?.account) return { ok: true as const, message: "" };
+  const stored = readSettings(row.settings_json);
+  if (stored.device_type === TRUNK_SIP_DEFAULTS.device_type) return { ok: true as const, message: "" };
+  const id = await lineAccountId(userId, row.account, row.provider_id);
+  if (!id) return { ok: false as const, message: "VoIP.ms did not return a numeric id for this line account, so the phone type was not changed." };
+  const settings = forLine(stored);
+  const result = await callVoipms("setSubAccount", subaccountUpdateParams(id, {
+    ...settings,
+    description: accountLabel(userId),
+    auth_type: row.locked ? "2" : "1",
+    password: row.locked ? "" : row.password,
+    ...(row.locked ? { ip: "203.0.113.1" } : {}),
+  }), VOIPMS_WRITE_MS);
+  if (!result.ok) return { ok: false as const, message: `VoIP.ms did not set the line account to an ATA device, IP Phone or Softphone (${result.message || result.status}).` };
+  getDb().prepare("UPDATE voip_subaccounts SET settings_json = ? WHERE user_id = ?").run(JSON.stringify(settings), userId);
+  return { ok: true as const, message: "" };
+}
+
 export async function ensureSubaccount(userId: number, resellerClient = "", did = ""): Promise<{ ok: true; account: string; sipHost: string; warning?: string } | { ok: false; message: string }> {
   const existing = getSubaccount(userId);
   if (existing?.account && existing.password) {
     let warning = "";
+    const device = await ensurePhoneDevice(userId);
+    if (!device.ok) warning = device.message;
     if (resellerClient) {
       const linked = await linkSubaccountClient(userId, resellerClient);
       if (!linked.ok) warning = linked.message;

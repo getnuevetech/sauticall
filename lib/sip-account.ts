@@ -1,6 +1,6 @@
 export const TRUNK_SIP_DEFAULTS: Record<string, string> = {
   protocol: "1",
-  device_type: "1",
+  device_type: "2",
   lock_international: "1",
   international_route: "1",
   canada_routing: "2",

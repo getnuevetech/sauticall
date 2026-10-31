@@ -12,9 +12,9 @@ test("a SIP username uses the customer ID and stays within 12 characters", () =>
   assert.equal(callerIdDigits(""), "");
 });
 
-test("a new trunk uses SIP password login and the portal defaults", () => {
+test("a new line account uses an ATA device, IP phone, or softphone", () => {
   assert.equal(TRUNK_SIP_DEFAULTS.protocol, "1");
-  assert.equal(TRUNK_SIP_DEFAULTS.device_type, "1");
+  assert.equal(TRUNK_SIP_DEFAULTS.device_type, "2");
   assert.equal(TRUNK_SIP_DEFAULTS.lock_international, "1");
   assert.equal(TRUNK_SIP_DEFAULTS.canada_routing, "2");
   assert.equal(TRUNK_SIP_DEFAULTS.allowed_codecs, "ulaw;g729");

@@ -28,14 +28,6 @@ export const LINE_VARIABLES: LineVariable[] = [
     kind: "text",
   },
   {
-    key: "device_type",
-    label: "Phone type code",
-    detail: "Sent when a line account is created. A value here replaces the phone type on Phone connections.",
-    adminValue: "",
-    audience: "admin",
-    kind: "text",
-  },
-  {
     key: "lock_international",
     label: "Block international calls",
     detail: "1 blocks international calls on a new line account. 0 allows them. A value here replaces the switch on Phone connections.",
