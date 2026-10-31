@@ -7,16 +7,16 @@ import { verificationStatus } from "@/lib/account-verify";
 import { systemsForPlan } from "@/lib/ai-account";
 import { Icon } from "@/components/Icon";
 
-type Line = { status: string };
 type Activity = { title: string; detail: string; at: string };
 
 export default async function AccountHome() {
   const user = await guardAccount();
   const usage = accountUsage(user.id);
   const plan = usage.plan;
-  const { publishBoughtNumbers } = await import("@/lib/lines");
+  const { publishBoughtNumbers, scheduleAutomaticTrunks } = await import("@/lib/lines");
   publishBoughtNumbers(user.id);
-  const lines = getDb().prepare("SELECT status FROM phone_lines WHERE user_id = ?").all(user.id) as Line[];
+  scheduleAutomaticTrunks(user.id);
+  const lines = getDb().prepare("SELECT status, trunk_id, trunk_attempts FROM phone_lines WHERE user_id = ?").all(user.id) as { status: string; trunk_id: number; trunk_attempts: number }[];
   const numbers = lines.filter((line) => line.status !== "not_on_carrier").length;
   const people = (getDb().prepare("SELECT COUNT(*) AS n FROM pbx_extensions WHERE user_id = ? AND status != 'removed'").get(user.id) as { n: number }).n;
   const groups = (getDb().prepare("SELECT COUNT(*) AS n FROM call_groups WHERE user_id = ?").get(user.id) as { n: number }).n;
@@ -52,6 +52,7 @@ export default async function AccountHome() {
       </div>
       <p>{doneCount < steps.length ? "Let's get your business ready for its first call." : "Your business phone is ready for calls."}</p>
       {missing.length ? <p>Confirm your {missing.join(", ")}. <Link href="/account/verify">Finish account confirmation</Link></p> : null}
+      {lines.some((line) => line.status === "trunk_waiting" && line.trunk_id === 0 && line.trunk_attempts >= 3) ? <p>A phone connection is waiting for the team. <Link href="/account/numbers">See your numbers</Link></p> : null}
       {next ? (
         <section className="ws-hero">
           <div>

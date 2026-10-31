@@ -97,7 +97,7 @@ export function customerSnapshot(userId: number) {
   const extensions = getDb().prepare("SELECT COUNT(*) AS n FROM pbx_extensions WHERE user_id = ? AND status != 'removed'").get(userId) as { n: number };
   const liveTrunks = getDb().prepare("SELECT COUNT(*) AS n FROM phone_lines WHERE user_id = ? AND status = 'trunk_live' AND trunk_id > 0").get(userId) as { n: number };
   const openTrunks = getDb().prepare("SELECT COUNT(*) AS n FROM trunk_tasks WHERE user_id = ? AND status = 'open'").get(userId) as { n: number };
-  const lines = getDb().prepare("SELECT did, status, trunk_id FROM phone_lines WHERE user_id = ? ORDER BY id").all(userId) as { did: string; status: string; trunk_id: number }[];
+  const lines = getDb().prepare("SELECT did, status, trunk_id, trunk_attempts FROM phone_lines WHERE user_id = ? ORDER BY id").all(userId) as { did: string; status: string; trunk_id: number; trunk_attempts: number }[];
   const client = getDb().prepare("SELECT client_id, email, last_message, funded_cents, funded_plan FROM voip_clients WHERE user_id = ?").get(userId) as { client_id: string; email: string; last_message: string; funded_cents: number; funded_plan: string } | undefined;
   const account = getDb().prepare("SELECT account FROM voip_subaccounts WHERE user_id = ?").get(userId) as { account: string } | undefined;
   const people = getDb().prepare("SELECT number, former_number, first_name, last_name, email, status FROM pbx_extensions WHERE user_id = ? ORDER BY id").all(userId) as { number: string; former_number: string; first_name: string; last_name: string; email: string; status: string }[];

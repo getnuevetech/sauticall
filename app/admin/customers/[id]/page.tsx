@@ -10,7 +10,8 @@ import { flagOn, getDb } from "@/lib/db";
 import { ago } from "@/lib/failure-desk";
 import { formatDay, formatWhen } from "@/lib/format-when";
 import { bestTrunk, outboundChoice } from "@/lib/outbound-path";
-import { formatDid } from "@/lib/phone-ops-view";
+import { formatDid, lineStatusLabel } from "@/lib/phone-ops-view";
+import { trunkAttemptLabel } from "@/lib/trunk-tries";
 import { recordingPublic } from "@/lib/recording-store";
 import { systemsForPlan } from "@/lib/ai-account";
 import { aiSettingsFor, listAiExtensions } from "@/lib/ai-account-store";
@@ -182,7 +183,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
             )}
             <h3>Numbers</h3>
             {account.lines.length === 0 ? <p>No purchased numbers.</p> : (
-              <ul className="desk-lines">{account.lines.map((line) => <li key={line.did}>{formatDid(line.did)} · {line.status}{line.trunk_id ? ` · trunk ${line.trunk_id}` : ""}</li>)}</ul>
+              <ul className="desk-lines">{account.lines.map((line) => <li key={line.did}>{formatDid(line.did)} · {lineStatusLabel(line.status)} · {trunkAttemptLabel({ status: line.status, trunkId: line.trunk_id, attempts: line.trunk_attempts })}</li>)}</ul>
             )}
             <p><Link href={`/admin/lines?company=${account.id}`}>Open this customer's lines and trunks</Link></p>
             <p>Recorded messages: {recordings.provider === "off" ? "storage is off." : `${recordings.provider === "aws" ? "Amazon S3" : "Google Cloud Storage"} bucket ${recordings.bucket}.`}</p>

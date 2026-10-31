@@ -256,7 +256,28 @@ export async function refreshPortStatus(formData: FormData) {
   if (!row || row.kind !== "port" || !row.provider_ref) redirect("/admin/requests?error=This%20transfer%20has%20no%20carrier%20reference%20yet.");
   const { portStatus } = await import("@/lib/carriers");
   const result = await portStatus(row.provider_ref);
-  database().prepare("UPDATE account_requests SET staff_note = ? WHERE id = ?").run(result.ok ? `Carrier status: ${result.status}` : result.message, id);
+  let note = result.ok ? `Carrier status: ${result.status}` : result.message;
+  if (result.ok) {
+    const { portIsComplete, portNumbers } = await import("@/lib/trunk-routes");
+    const owner = database().prepare("SELECT user_id, payload FROM account_requests WHERE id = ?").get(id) as { user_id: number; payload: string } | undefined;
+    let numbers = "";
+    try {
+      numbers = String((JSON.parse(owner?.payload || "{}") as { numbers?: string }).numbers || "");
+    } catch {
+      numbers = "";
+    }
+    if (owner && portIsComplete(result.body) && portNumbers(numbers).length) {
+      const { connectOwnedNumbers, startTrunks } = await import("@/lib/lines");
+      const connected = await connectOwnedNumbers(owner.user_id, id, portNumbers(numbers));
+      if (connected.lineIds.length) {
+        startTrunks(connected.lineIds);
+        note = `${note} The number is on the account. The trunk is being added.`;
+      } else {
+        note = `${note} VoIP.ms does not list the transferred number yet, so the trunk was not started.`;
+      }
+    }
+  }
+  database().prepare("UPDATE account_requests SET staff_note = ? WHERE id = ?").run(note.slice(0, 400), id);
   if (!result.ok) {
     const { recordFailure } = await import("@/lib/failure-log");
     recordFailure({ area: "transfer", subject: row.provider_ref, detail: result.message });
@@ -289,18 +310,34 @@ export async function setRequestStatus(formData: FormData) {
     if (!owned.owned || !carrierDidRef(did)) redirect(`/admin/requests?error=${encodeURIComponent("VoIP.ms does not have this number. The status was not changed. Use Buy this number.")}`);
     providerRef = carrierDidRef(did);
   }
+  let portDids: string[] = [];
+  if (row.kind === "port" && (status === "ordered" || status === "completed")) {
+    const { portNumbers } = await import("@/lib/trunk-routes");
+    try {
+      portDids = portNumbers(String((JSON.parse(row.payload) as { numbers?: string }).numbers || ""));
+    } catch {
+      portDids = [];
+    }
+    const { connectOwnedNumbers } = await import("@/lib/lines");
+    const connected = await connectOwnedNumbers(row.user_id, id, portDids);
+    if (!connected.lineIds.length) redirect(`/admin/requests?error=${encodeURIComponent("VoIP.ms does not list this transferred number yet. The status was not changed, and the trunk was not started.")}`);
+    portDids = connected.waiting;
+    const { startTrunks } = await import("@/lib/lines");
+    startTrunks(connected.lineIds);
+  }
   getDb().prepare("UPDATE account_requests SET status = ?, staff_note = ?, provider_ref = ? WHERE id = ?").run(status, note, providerRef, id);
   if (row.kind === "number" && (status === "ordered" || status === "completed") && providerRef) {
-    const { ensureCustomerLine } = await import("@/lib/lines");
+    const { ensureCustomerLine, startTrunks } = await import("@/lib/lines");
     let did = "";
     try {
       did = String((JSON.parse(row.payload) as { did?: string }).did || "");
     } catch {
       did = "";
     }
-    ensureCustomerLine(row.user_id, id, did);
+    const lineId = ensureCustomerLine(row.user_id, id, did);
+    if (lineId) startTrunks([lineId]);
   }
-  audit(user.email, "request.status", `${id}:${status}`);
+  audit(user.email, "request.status", `${id}:${status}${portDids.length ? `:waiting ${portDids.join(",")}` : ""}`);
   redirect("/admin/requests");
 }
 
@@ -361,6 +398,8 @@ export async function provisionPerson(formData: FormData) {
   const result = await provisionExtension(id);
   audit(user.email, "pbx.provision", `${id}:${result.ok ? "ok" : "failed"}`);
   if (!result.ok) redirect(`/admin/phone/${company}?tab=extensions&ext=${id}&error=${encodeURIComponent(result.detail || result.message)}`);
+  const { scheduleAutomaticTrunks } = await import("@/lib/lines");
+  scheduleAutomaticTrunks(company);
   redirect(`/admin/phone/${company}?tab=extensions&ext=${id}`);
 }
 
@@ -390,8 +429,8 @@ export async function retryTrunk(formData: FormData) {
   const id = Number(formData.get("id"));
   const row = getDb().prepare("SELECT user_id FROM phone_lines WHERE id = ?").get(id) as { user_id: number } | undefined;
   ownedCompany(formData, row?.user_id || 0, "/admin/lines");
-  const { attachTrunk } = await import("@/lib/lines");
-  const result = await attachTrunk(id);
+  const { retryTrunkLine } = await import("@/lib/lines");
+  const result = await retryTrunkLine(id);
   audit(user.email, "trunk.retry", `${id}:${result.ok ? "ok" : "failed"}`);
   if (!result.ok) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent(result.message)}`);
   redirect(`/admin/lines?line=${id}`);
@@ -407,6 +446,18 @@ export async function confirmTrunkCalls(formData: FormData) {
   audit(user.email, "trunk.calls", `${id}:${result.ok ? "ok" : "failed"}`);
   if (!result.ok) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent(result.message)}`);
   redirect(`/admin/lines?line=${id}&saved=calls`);
+}
+
+export async function checkTrunk(formData: FormData) {
+  const user = await staff("settings.lines");
+  const id = Number(formData.get("id"));
+  const row = getDb().prepare("SELECT user_id FROM phone_lines WHERE id = ?").get(id) as { user_id: number } | undefined;
+  ownedCompany(formData, row?.user_id || 0, "/admin/lines");
+  const { checkTrunkRouting } = await import("@/lib/lines");
+  const result = await checkTrunkRouting(id);
+  audit(user.email, "trunk.check", `${id}:${result.ok ? "ok" : "failed"}`);
+  if (!result.ok) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent(result.message)}`);
+  redirect(`/admin/lines?line=${id}&saved=checked`);
 }
 
 export async function revealSip(company: number, which: "user" | "pass") {

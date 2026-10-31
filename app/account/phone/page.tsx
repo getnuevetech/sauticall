@@ -9,6 +9,8 @@ import { accountNeedsMfa } from "@/lib/mfa";
 import { DEPARTMENT_NAME_RULES, shownAccountName } from "@/lib/pbx-user";
 import { extensionSetup } from "@/lib/account-display";
 import { systemsForPlan } from "@/lib/ai-account";
+import { publishBoughtNumbers, scheduleAutomaticTrunks } from "@/lib/lines";
+import { customerConnectionNote } from "@/lib/trunk-tries";
 
 type Extension = { id: number; number: string; former_number: string; first_name: string; last_name: string; email: string; status: string; welcome_note: string; last_message: string; ai_role: string; ai_name: string };
 
@@ -24,7 +26,9 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
   const rows = getDb().prepare("SELECT id, number, former_number, first_name, last_name, email, status, welcome_note, last_message, ai_role, ai_name FROM pbx_extensions WHERE user_id = ? ORDER BY number").all(user.id) as Extension[];
   const hours = getDb().prepare("SELECT name, open_time, close_time, last_message FROM pbx_departments WHERE user_id = ?").get(user.id) as { name: string; open_time: string; close_time: string; last_message: string } | undefined;
   const profile = getDb().prepare("SELECT business_name FROM users WHERE id = ?").get(user.id) as { business_name: string } | undefined;
-  const lines = getDb().prepare("SELECT status FROM phone_lines WHERE user_id = ?").all(user.id) as { status: string }[];
+  publishBoughtNumbers(user.id);
+  scheduleAutomaticTrunks(user.id);
+  const lines = getDb().prepare("SELECT status, trunk_id, trunk_attempts, trunk_routes FROM phone_lines WHERE user_id = ?").all(user.id) as { status: string; trunk_id: number; trunk_attempts: number; trunk_routes: number }[];
   const groups = getDb().prepare("SELECT * FROM call_groups WHERE user_id = ? ORDER BY kind, id").all(user.id) as CallGroup[];
   const saved = params.saved === "department"
     ? "Company name saved. People are added to this department."
@@ -52,6 +56,7 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
       hasPlan={Boolean(plan)}
       bought={lines.some((line) => line.status !== "not_on_carrier")}
       connected={lines.some((line) => line.status === "trunk_live" || line.status === "trunk_done")}
+      connectionStatus={customerConnectionNote(lines.map((line) => ({ status: line.status, trunkId: line.trunk_id, attempts: line.trunk_attempts, routes: line.trunk_routes === 1 })))}
       hoursOpen={hours?.open_time || ""}
       hoursClose={hours?.close_time || ""}
       hoursNote={hours?.last_message ? customerMessage(hours.last_message, "") : ""}

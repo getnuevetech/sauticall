@@ -5,6 +5,7 @@ import { readExtensionPlan } from "./extension-plan";
 import { extensionCapacity } from "./plan-features";
 import { paidPlan } from "./pbx";
 import { shownAccountName } from "./pbx-user";
+import { trunkSubjectMatchesLine } from "./trunk-tries";
 
 export { companyMatches, formatDid, lineStatusLabel, maskCredential, personState, setupEmailState, setupLabel, setupStatus, trunkStep } from "./phone-ops-view";
 import { formatDid, lineStatusLabel, personState, setupStatus } from "./phone-ops-view";
@@ -221,12 +222,23 @@ export type LineView = {
   taskNote: string;
   e911: string;
   e911Message: string;
+  attempts: number;
+  routes: boolean;
   siblings: { id: number; did: string; trunkId: number }[];
+};
+
+export type LoggedTrunkAttempt = {
+  userId: number;
+  company: string;
+  email: string;
+  subject: string;
+  attempts: number;
+  latest: string;
 };
 
 export function listLines(query = "", company = 0, status = "") {
   const rows = getDb().prepare(
-    `SELECT l.id, l.user_id, l.request_id, u.email, u.name, u.business_name, l.did, l.status, l.trunk_id, l.trunk_number, l.last_message,
+    `SELECT l.id, l.user_id, l.request_id, u.email, u.name, u.business_name, l.did, l.status, l.trunk_id, l.trunk_number, l.trunk_attempts, l.trunk_routes, l.last_message,
             l.e911_status, l.e911_message,
             COALESCE(d.name, '') AS department, COALESCE(d.number_from, '') AS number_from, COALESCE(d.number_to, '') AS number_to,
             COALESCE(t.extension_number, '') AS extension_number, COALESCE(t.sip_user, '') AS sip_user, COALESCE(t.sip_host, '') AS sip_host,
@@ -240,7 +252,7 @@ export function listLines(query = "", company = 0, status = "") {
      LEFT JOIN voip_subaccounts s ON s.user_id = l.user_id
      ORDER BY l.id DESC`,
   ).all() as {
-    id: number; user_id: number; request_id: number; email: string; name: string; business_name: string; did: string; status: string; trunk_id: number; trunk_number: string; last_message: string;
+    id: number; user_id: number; request_id: number; email: string; name: string; business_name: string; did: string; status: string; trunk_id: number; trunk_number: string; trunk_attempts: number; trunk_routes: number; last_message: string;
     e911_status: string; e911_message: string; department: string; number_from: string; number_to: string; extension_number: string;
     sip_user: string; sip_host: string; task_status: string; task_note: string; has_account: number; sub_user: string; sub_host: string;
   }[];
@@ -273,6 +285,43 @@ export function listLines(query = "", company = 0, status = "") {
     taskNote: row.task_note,
     e911: row.e911_status,
     e911Message: row.e911_message,
+    attempts: row.trunk_attempts || 0,
+    routes: row.trunk_routes === 1,
     siblings: rows.filter((other) => other.user_id === row.user_id && other.id !== row.id).map((other) => ({ id: other.id, did: other.did, trunkId: other.trunk_id })),
   }));
+}
+
+export function unmatchedTrunkLogs(query = "", company = 0): LoggedTrunkAttempt[] {
+  const lines = getDb().prepare("SELECT user_id, did FROM phone_lines").all() as { user_id: number; did: string }[];
+  const rows = getDb().prepare(
+    `SELECT f.user_id, f.subject, f.detail, COALESCE(u.name, '') AS name, COALESCE(u.business_name, '') AS business_name, COALESCE(u.email, '') AS email
+     FROM failure_log f
+     LEFT JOIN users u ON u.id = f.user_id
+     WHERE f.area = 'trunk'
+     ORDER BY f.id DESC`,
+  ).all() as { user_id: number; subject: string; detail: string; name: string; business_name: string; email: string }[];
+  const needle = query.trim().toLowerCase();
+  const grouped = new Map<string, LoggedTrunkAttempt>();
+  for (const row of rows) {
+    if (company && row.user_id !== company) continue;
+    if (lines.some((line) => line.user_id === row.user_id && trunkSubjectMatchesLine(row.subject, line.did))) continue;
+    const companyName = shownAccountName("", row.business_name, row.name) || row.name || row.email || "Unknown account";
+    const text = `${companyName} ${row.email} ${row.subject}`.toLowerCase();
+    if (needle && !text.includes(needle)) continue;
+    const key = `${row.user_id}|${row.subject}`;
+    const current = grouped.get(key);
+    if (current) {
+      current.attempts += 1;
+      continue;
+    }
+    grouped.set(key, {
+      userId: row.user_id,
+      company: companyName,
+      email: row.email,
+      subject: row.subject,
+      attempts: 1,
+      latest: row.detail.replace(/\s+/g, " ").slice(0, 180),
+    });
+  }
+  return [...grouped.values()];
 }

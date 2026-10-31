@@ -140,7 +140,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
                 {requestStatuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
               </select>
             </label>
-            <p className="ops-muted">Internal tracking only. Does not buy or activate a number.</p>
+            <p className="ops-muted">Saving Ordered or Completed for a number VoIP.ms already owns adds it to the customer account and starts the trunk. It does not buy a new number. Use Buy this number for that.</p>
             <label>Team note <textarea name="staff_note" maxLength={400} defaultValue={selected.staff_note} rows={3} /></label>
             <button className="btn btn-primary" type="submit">Save internal update</button>
           </form>

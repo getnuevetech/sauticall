@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { completeEmergency, completeTrunk, confirmTrunkCalls, linkTrunk, retryTrunk, sendEmergencyAddress, syncMinutes } from "../actions";
+import { checkTrunk, completeEmergency, completeTrunk, confirmTrunkCalls, linkTrunk, retryTrunk, sendEmergencyAddress, syncMinutes } from "../actions";
 import { SipReveal } from "@/components/admin/OpsBits";
 import { requirePermission } from "@/lib/access";
 import { flagOn } from "@/lib/db";
 import { formatAddress, parseEmergency } from "@/lib/e911";
-import { formatDid, lineStatusLabel, listCompanies, listLines, maskCredential, trunkStep, type LineView } from "@/lib/phone-ops";
+import { formatDid, lineStatusLabel, listCompanies, listLines, maskCredential, trunkStep, unmatchedTrunkLogs, type LineView } from "@/lib/phone-ops";
+import { publishAllBoughtNumbers, scheduleAutomaticTrunks } from "@/lib/lines";
+import { trunkAttemptLabel } from "@/lib/trunk-tries";
 
 const E911: Record<string, string> = {
   missing: "Emergency address missing",
@@ -43,9 +45,10 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
         <li><span className={steps.trunk === "Failed" ? "bad" : steps.trunk === "Ready" ? "ok" : "muted"} /> 3CX trunk <strong>{steps.trunk}</strong></li>
         <li><span className="muted" /> Routing <strong>{steps.routing}</strong></li>
       </ul>
+      <p>Automatic tries: <strong>{trunkAttemptLabel(line)}</strong>. Automatic tries stop after 3. Retry failed step is not limited.</p>
       {line.status === "trunk_waiting" ? (
         <div>
-          <p className="ops-alert">{line.trunkId ? "The 3CX trunk id is saved. Provisioning stays incomplete until the trunk is registered and an administrator records the inbound and outbound test calls." : "Add this trunk in the 3CX admin. The automatic request was refused."}</p>
+          <p className="ops-alert">{line.trunkId ? "The 3CX trunk id is saved. Provisioning stays incomplete until the trunk is registered, both routes are on 3CX, and an administrator records the inbound and outbound test calls." : line.attempts >= 3 ? "Automatic tries stopped at 3 of 3. Retry here as many times as you need, or create the trunk in 3CX and save its id." : "Add this trunk in the 3CX admin. The automatic request was refused."}</p>
           <ol className="ops-steps">
             <li>Create a SIP trunk for {line.company}.</li>
             <li>Use registrar {line.sipHost || "the saved POP"}. The SIP user and password are below. Use the saved password.</li>
@@ -84,8 +87,14 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
           <input type="hidden" name="company" value={line.userId} />
           <button className="btn btn-primary" type="submit">Retry failed step</button>
         </form>
-        <p className="ops-muted">Uses the VoIP.ms template already on 3CX, reuses this company’s SIP account and any trunk id already stored, and does not place a call.</p>
+        <p className="ops-muted">Uses the VoIP.ms template already on 3CX, reuses this company’s SIP account and any trunk id already stored, and does not place a call. This retry does not count toward the 3 automatic tries.</p>
       </div>
+      <form action={checkTrunk}>
+        <input type="hidden" name="id" value={line.id} />
+        <input type="hidden" name="company" value={line.userId} />
+        <button className="btn btn-secondary" type="submit">Check trunk and routes in 3CX</button>
+        <p className="ops-muted">Reads registration, the inbound route, and the outbound rule from 3CX, then updates this line. It does not place a call and does not mark the trunk finished.</p>
+      </form>
       <form action={confirmTrunkCalls}>
         <input type="hidden" name="id" value={line.id} />
         <input type="hidden" name="company" value={line.userId} />
@@ -131,9 +140,12 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
 export default async function LinesPage({ searchParams }: { searchParams: Promise<{ q?: string; company?: string; user?: string; status?: string; tab?: string; line?: string; error?: string; saved?: string }> }) {
   await requirePermission("settings.lines");
   const params = await searchParams;
+  publishAllBoughtNumbers();
+  scheduleAutomaticTrunks();
   const tab = params.tab === "numbers" || params.tab === "routing" ? params.tab : "trunks";
   const company = Number(params.company || params.user || 0);
   const rows = listLines(params.q || "", company, params.status || "");
+  const logged = unmatchedTrunkLogs(params.q || "", company);
   const companies = listCompanies();
   const selected = rows.find((row) => row.id === Number(params.line));
   const addressRow = selected ? (await import("@/lib/db")).getDb().prepare("SELECT e911_json FROM phone_lines WHERE id = ? AND user_id = ?").get(selected.id, selected.userId) as { e911_json: string } | undefined : undefined;
@@ -150,11 +162,12 @@ export default async function LinesPage({ searchParams }: { searchParams: Promis
           </div>
           <form action={syncMinutes}><button className="btn btn-secondary" type="submit">Read minutes</button></form>
         </div>
-        <p className="ops-muted">{reading ? "Reading call minutes is on." : "Reading call minutes is off."} {trunks ? "Adding a 3CX trunk from here is on. A retry uses the customer's SIP account and does not place a call." : "Adding trunks from here is off, so a retry records the waiting step."} {flagOn("pbx.voipms_backup") ? "VoIP.ms backup is on for a confirmed trunk failure, and it uses that customer's client." : "VoIP.ms backup is off. Only an administrator can turn it on in Platform controls."}</p>
+        <p className="ops-muted">{reading ? "Reading call minutes is on." : "Reading call minutes is off."} {trunks ? "Adding a 3CX trunk from here is on. A retry uses the customer's SIP account and does not place a call." : "Adding trunks from here is off, so a retry records the waiting step."} Each bought number gets 3 automatic trunk tries, then it waits here. An administrator can retry without that limit, check the routes in 3CX, or save a trunk created by hand. {flagOn("pbx.voipms_backup") ? "VoIP.ms backup is on for a confirmed trunk failure, and it uses that customer's client." : "VoIP.ms backup is off. Only an administrator can turn it on in Platform controls."}</p>
         {params.error ? <p className="form-feedback form-error" role="alert">{params.error}</p> : null}
         {params.saved === "recorded" ? <p className="form-feedback">The note was recorded. Registration was not verified.</p> : null}
         {params.saved === "calls" ? <p className="form-feedback">Test calls were recorded. The trunk was registered on 3CX. SautiCall did not place the calls.</p> : null}
         {params.saved === "linked" ? <p className="form-feedback">The trunk was read from 3CX and routing was saved. No call was placed.</p> : null}
+        {params.saved === "checked" ? <p className="form-feedback">The trunk and routes were read from 3CX. No call was placed.</p> : null}
         {params.saved === "1" ? <p className="form-feedback">Call minutes were updated.</p> : null}
         <nav className="ops-tabs">
           <Link href="/admin/lines?tab=trunks" data-current={tab === "trunks" ? "true" : undefined}>Trunks</Link>
@@ -185,17 +198,19 @@ export default async function LinesPage({ searchParams }: { searchParams: Promis
                 {tab === "routing" ? <th>Inbound</th> : <th>Linked number</th>}
                 {tab === "routing" ? <th>Outbound scope</th> : <th>Provider</th>}
                 <th>{tab === "routing" ? "Verification" : "Phone system"}</th>
+                <th>Tries</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 ? <tr><td colSpan={5}>No lines match.</td></tr> : null}
+              {rows.length === 0 ? <tr><td colSpan={6}>No lines match.</td></tr> : null}
               {rows.map((row) => (
                 <tr key={row.id} data-current={selected?.id === row.id ? "true" : undefined}>
                   <td><strong>{row.company}</strong><small>{row.siblings.length ? `${row.siblings.length + 1} numbers on this account` : "One number on this account"}</small></td>
                   {tab === "routing" ? <td>{row.extension ? `Extension ${row.extension}` : "Not saved"}</td> : <td>{formatDid(row.did)}</td>}
                   {tab === "routing" ? <td>{row.from && row.to ? `${row.from}–${row.to}` : "Reserved range"}</td> : <td>VoIP.ms</td>}
                   <td><span className={`ops-badge ${row.status === "trunk_live" ? "ok" : row.status === "trunk_waiting" ? "warn" : "muted"}`}>{tab === "routing" ? "Not verified" : lineStatusLabel(row.status)}</span></td>
+                  <td>{trunkAttemptLabel(row)}</td>
                   <td><Link className="btn btn-secondary" href={`/admin/lines?tab=${tab}&line=${row.id}&company=${company || ""}&status=${params.status || "all"}&q=${encodeURIComponent(params.q || "")}`}>View</Link></td>
                 </tr>
               ))}
@@ -203,6 +218,26 @@ export default async function LinesPage({ searchParams }: { searchParams: Promis
           </table>
         </div>
         <p className="ops-foot">{rows.length} {rows.length === 1 ? "line" : "lines"}.</p>
+        <h2>Logged trunk attempts with no number line</h2>
+        <p className="ops-muted">These trunk failures never matched a saved number. A retry needs a number line, so they stay here for tracing.</p>
+        <div className="ops-table-wrap">
+          <table className="ops-table">
+            <thead>
+              <tr><th>Company</th><th>Subject</th><th>Logged tries</th><th>Latest note</th></tr>
+            </thead>
+            <tbody>
+              {logged.length === 0 ? <tr><td colSpan={4}>No unmatched trunk logs.</td></tr> : null}
+              {logged.map((row) => (
+                <tr key={`${row.userId}-${row.subject}`}>
+                  <td><strong>{row.company}</strong>{row.email ? <small>{row.email}</small> : null}</td>
+                  <td>{row.subject}</td>
+                  <td>{row.attempts}</td>
+                  <td>{row.latest}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
       {selected ? <LineDrawer line={(({ sipUser: _sipUser, ...rest }) => rest)(selected)} address={addressText(addressRow?.e911_json || "")} maskedUser={maskCredential(selected.sipUser)} /> : null}
     </div>

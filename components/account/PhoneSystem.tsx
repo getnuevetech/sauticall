@@ -39,6 +39,7 @@ export function PhoneSystem({
   hasPlan,
   bought,
   connected,
+  connectionStatus = "",
   hoursOpen,
   hoursClose,
   hoursNote,
@@ -64,6 +65,7 @@ export function PhoneSystem({
   hasPlan: boolean;
   bought: boolean;
   connected: boolean;
+  connectionStatus?: string;
   hoursOpen: string;
   hoursClose: string;
   hoursNote: string;
@@ -156,7 +158,7 @@ export function PhoneSystem({
                 <div className="num-alert">
                   <span className="num-ico"><Icon name="phone" size={16} /></span>
                   <div>
-                    <strong>{bought ? "Your number is bought. Connecting it for calls is still being finished." : "Connect a business number to enable external calling."}</strong>
+                    <strong>{bought ? (connectionStatus || "Your number is bought. Connecting it for calls is still being finished.") : "Connect a business number to enable external calling."}</strong>
                     <p>{bought ? "Inbound and outbound calling starts after that connection is finished." : "People can be added now. Outside calls start after a number is bought."}</p>
                   </div>
                   {bought ? null : <Link className="ws-btn ghost num-outline" href="/account/numbers">Get a number</Link>}
