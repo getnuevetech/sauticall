@@ -516,6 +516,13 @@ function migrate(database: Database.Database) {
       updated_at TEXT NOT NULL DEFAULT '',
       PRIMARY KEY (user_id, feature_code)
     );
+    CREATE TABLE IF NOT EXISTS ai_prompt_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      feature_code TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS ai_audio_policy (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       max_seconds INTEGER NOT NULL,
