@@ -185,7 +185,7 @@ export async function saveConnection(formData: FormData) {
     persist(provider, enabled, {
       base_url: String(formData.get("base_url") || "").trim(),
       client_id: String(formData.get("client_id") || "").trim(),
-      trunk_template: String(formData.get("trunk_template") || "GenericSIPTrunk.pv.xml").trim() || "GenericSIPTrunk.pv.xml",
+      trunk_template: String(formData.get("trunk_template") || "voipms.pv.xml").trim() || "voipms.pv.xml",
     }, secret);
   }
   audit(user.email, "connection.save", provider);
@@ -386,6 +386,18 @@ export async function retryTrunk(formData: FormData) {
   audit(user.email, "trunk.retry", `${id}:${result.ok ? "ok" : "failed"}`);
   if (!result.ok) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent(result.message)}`);
   redirect(`/admin/lines?line=${id}`);
+}
+
+export async function confirmTrunkCalls(formData: FormData) {
+  const user = await staff("settings.lines");
+  const id = Number(formData.get("id"));
+  const row = getDb().prepare("SELECT user_id FROM phone_lines WHERE id = ?").get(id) as { user_id: number } | undefined;
+  ownedCompany(formData, row?.user_id || 0, "/admin/lines");
+  const { confirmTrunkCalls: confirm } = await import("@/lib/lines");
+  const result = await confirm(id);
+  audit(user.email, "trunk.calls", `${id}:${result.ok ? "ok" : "failed"}`);
+  if (!result.ok) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent(result.message)}`);
+  redirect(`/admin/lines?line=${id}&saved=calls`);
 }
 
 export async function revealSip(company: number, which: "user" | "pass") {

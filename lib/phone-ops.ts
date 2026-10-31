@@ -207,6 +207,7 @@ export type LineView = {
   did: string;
   status: string;
   trunkId: number;
+  trunkNumber: string;
   message: string;
   department: string;
   extension: string;
@@ -224,7 +225,7 @@ export type LineView = {
 
 export function listLines(query = "", company = 0, status = "") {
   const rows = getDb().prepare(
-    `SELECT l.id, l.user_id, l.request_id, u.email, u.name, l.did, l.status, l.trunk_id, l.last_message,
+    `SELECT l.id, l.user_id, l.request_id, u.email, u.name, l.did, l.status, l.trunk_id, l.trunk_number, l.last_message,
             l.e911_status, l.e911_message,
             COALESCE(d.name, '') AS department, COALESCE(d.number_from, '') AS number_from, COALESCE(d.number_to, '') AS number_to,
             COALESCE(t.extension_number, '') AS extension_number, COALESCE(t.sip_user, '') AS sip_user, COALESCE(t.sip_host, '') AS sip_host,
@@ -238,7 +239,7 @@ export function listLines(query = "", company = 0, status = "") {
      LEFT JOIN voip_subaccounts s ON s.user_id = l.user_id
      ORDER BY l.id DESC`,
   ).all() as {
-    id: number; user_id: number; request_id: number; email: string; name: string; did: string; status: string; trunk_id: number; last_message: string;
+    id: number; user_id: number; request_id: number; email: string; name: string; did: string; status: string; trunk_id: number; trunk_number: string; last_message: string;
     e911_status: string; e911_message: string; department: string; number_from: string; number_to: string; extension_number: string;
     sip_user: string; sip_host: string; task_status: string; task_note: string; has_account: number; sub_user: string; sub_host: string;
   }[];
@@ -258,6 +259,7 @@ export function listLines(query = "", company = 0, status = "") {
     did: row.did,
     status: row.status,
     trunkId: row.trunk_id,
+    trunkNumber: row.trunk_number || "",
     message: row.last_message || row.task_note,
     department: row.department || "Company name not set",
     extension: row.extension_number,
