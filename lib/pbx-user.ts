@@ -24,6 +24,18 @@ export function acceptedDepartmentName(name: string) {
   return departmentNameIssue(trimmed) ? "" : trimmed;
 }
 
+export function accountDisplayName(business: string, fullName: string) {
+  return normalizeDepartmentName(business) || normalizeDepartmentName(fullName);
+}
+
+export function accountDepartmentName(business: string, fullName: string) {
+  return acceptedDepartmentName(business) || acceptedDepartmentName(fullName);
+}
+
+export function shownAccountName(department: string, business: string, fullName: string) {
+  return acceptedDepartmentName(department) || accountDisplayName(business, fullName);
+}
+
 export function departmentNameTakenMessage(name: string) {
   return `"${name}" is already a department. Choose a different company name. People are added to the company department.`;
 }

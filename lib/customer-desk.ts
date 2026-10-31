@@ -1,4 +1,5 @@
 import { formatPhone } from "./account-display";
+import { shownAccountName } from "./pbx-user";
 import { ensureCustomerCode } from "./customer-code-store";
 import { contactLines, matchesCustomer, type CustomerFilters } from "./customer-view";
 import { getDb } from "./db";
@@ -33,16 +34,15 @@ type Raw = {
   disabled: number;
   created_at: string;
   customer_code: string;
+  business_name: string;
   department: string;
   plan_name: string | null;
   numbers: number;
   open_tickets: number;
 };
 
-function companyName(department: string, name: string) {
-  const company = department.trim();
-  if (!company || company.toLowerCase() === "company name not set") return name || "Customer";
-  return company;
+function companyName(department: string, business: string, name: string) {
+  return shownAccountName(department, business, name) || name || "Customer";
 }
 
 export function listCustomerAccounts(filters: CustomerFilters) {
@@ -50,7 +50,7 @@ export function listCustomerAccounts(filters: CustomerFilters) {
   const missing = database.prepare("SELECT id FROM users WHERE role = 'customer' AND customer_code = ''").all() as { id: number }[];
   for (const person of missing) ensureCustomerCode(person.id);
   const people = database.prepare(
-    `SELECT u.id, u.name, u.email, u.phone, u.disabled, u.created_at, u.customer_code,
+    `SELECT u.id, u.name, u.email, u.phone, u.disabled, u.created_at, u.customer_code, u.business_name,
             COALESCE(d.name, '') AS department,
             (SELECT plan_name FROM payment_attempts p WHERE p.user_id = u.id AND p.status = 'paid' AND IFNULL(p.product_kind, 'plan') != 'bundle' AND p.plan_name != '' ORDER BY p.id DESC LIMIT 1) AS plan_name,
             (SELECT COUNT(*) FROM phone_lines l WHERE l.user_id = u.id) AS numbers,
@@ -65,7 +65,7 @@ export function listCustomerAccounts(filters: CustomerFilters) {
     return {
       id: person.id,
       code: person.customer_code,
-      company: companyName(person.department, contact),
+      company: companyName(person.department, person.business_name || "", contact),
       contact,
       email: person.email,
       phone: person.phone || "",

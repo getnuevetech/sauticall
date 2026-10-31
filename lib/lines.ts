@@ -9,7 +9,7 @@ import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "./
 import { extensionRange, paidPlan, readExtensionPlan } from "./pbx";
 import { firstListedId, idFromPbx } from "./pbx-id";
 import { manualTrunkNote, mentionsDelta, readTrunkIdentity, redactProvisioning, trunkDialedNumber, trunkGroupBody, trunkPassthroughBody, trunkProvisionVerdict, trunkTemplateName, wrapCollections } from "./trunk-body";
-import { acceptedDepartmentName } from "./pbx-user";
+import { shownAccountName } from "./pbx-user";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
 
@@ -17,7 +17,8 @@ type Line = { id: number; user_id: number; request_id: number; did: string; stat
 
 function departmentName(userId: number) {
   const row = getDb().prepare("SELECT name FROM pbx_departments WHERE user_id = ?").get(userId) as { name: string } | undefined;
-  return acceptedDepartmentName(row?.name || "") || "Company name not set";
+  const person = getDb().prepare("SELECT name, business_name FROM users WHERE id = ?").get(userId) as { name: string; business_name: string } | undefined;
+  return shownAccountName(row?.name || "", person?.business_name || "", person?.name || "") || "Company name not set";
 }
 
 function extensionFor(userId: number) {

@@ -4,6 +4,7 @@ import { extensionRange } from "./extension-numbers";
 import { readExtensionPlan } from "./extension-plan";
 import { extensionCapacity } from "./plan-features";
 import { paidPlan } from "./pbx";
+import { shownAccountName } from "./pbx-user";
 
 export { companyMatches, formatDid, lineStatusLabel, maskCredential, personState, setupEmailState, setupLabel, setupStatus, trunkStep } from "./phone-ops-view";
 import { formatDid, lineStatusLabel, personState, setupStatus } from "./phone-ops-view";
@@ -45,7 +46,7 @@ function countsFor(rows: Count[]) {
 export function listCompanies(query = "", status = "") {
   const database = getDb();
   const people = database.prepare(
-    `SELECT u.id, u.name, u.email,
+    `SELECT u.id, u.name, u.email, u.business_name,
             COALESCE(d.name, '') AS department,
             COALESCE(d.xapi_id, 0) AS department_live,
             COALESCE(d.last_message, '') AS department_message,
@@ -55,7 +56,7 @@ export function listCompanies(query = "", status = "") {
      LEFT JOIN pbx_departments d ON d.user_id = u.id
      WHERE u.role = 'customer'
      ORDER BY u.name COLLATE NOCASE, u.email`,
-  ).all() as { id: number; name: string; email: string; department: string; department_live: number; department_message: string; number_from: string; number_to: string }[];
+  ).all() as { id: number; name: string; email: string; business_name: string; department: string; department_live: number; department_message: string; number_from: string; number_to: string }[];
   const extensions = countsFor(database.prepare("SELECT user_id, status, COUNT(*) AS n FROM pbx_extensions GROUP BY user_id, status").all() as Count[]);
   const groupFailed = new Map((database.prepare("SELECT user_id, COUNT(*) AS n FROM call_groups WHERE status = 'failed' GROUP BY user_id").all() as { user_id: number; n: number }[]).map((row) => [row.user_id, row.n]));
   const active = new Set([
@@ -73,7 +74,7 @@ export function listCompanies(query = "", status = "") {
     const failed = count.failed + (groupFailed.get(person.id) || 0) + (person.department_message && /rejected|400|failed|refused/i.test(person.department_message) ? 1 : 0);
     const setup = setupStatus({ records: count.records, failed, waiting: count.waiting, live: count.live });
     const name = person.name || person.email;
-    if (needle && !`${name} ${person.email} ${person.department}`.toLowerCase().includes(needle)) continue;
+    if (needle && !`${name} ${person.email} ${person.department} ${person.business_name || ""}`.toLowerCase().includes(needle)) continue;
     if (status && status !== "all" && setup !== status) continue;
     const paid = paidPlan(person.id);
     const range = person.number_from && person.number_to ? { from: person.number_from, to: person.number_to } : extensionRange(person.id, plan);
@@ -82,7 +83,7 @@ export function listCompanies(query = "", status = "") {
       id: person.id,
       name,
       email: person.email,
-      department: person.department || "Company name not set",
+      department: shownAccountName(person.department, person.business_name || "", person.name) || "Company name not set",
       departmentLive: person.department_live > 0,
       departmentMessage: person.department_message,
       from: String(range.from),
@@ -225,7 +226,7 @@ export type LineView = {
 
 export function listLines(query = "", company = 0, status = "") {
   const rows = getDb().prepare(
-    `SELECT l.id, l.user_id, l.request_id, u.email, u.name, l.did, l.status, l.trunk_id, l.trunk_number, l.last_message,
+    `SELECT l.id, l.user_id, l.request_id, u.email, u.name, u.business_name, l.did, l.status, l.trunk_id, l.trunk_number, l.last_message,
             l.e911_status, l.e911_message,
             COALESCE(d.name, '') AS department, COALESCE(d.number_from, '') AS number_from, COALESCE(d.number_to, '') AS number_to,
             COALESCE(t.extension_number, '') AS extension_number, COALESCE(t.sip_user, '') AS sip_user, COALESCE(t.sip_host, '') AS sip_host,
@@ -239,7 +240,7 @@ export function listLines(query = "", company = 0, status = "") {
      LEFT JOIN voip_subaccounts s ON s.user_id = l.user_id
      ORDER BY l.id DESC`,
   ).all() as {
-    id: number; user_id: number; request_id: number; email: string; name: string; did: string; status: string; trunk_id: number; trunk_number: string; last_message: string;
+    id: number; user_id: number; request_id: number; email: string; name: string; business_name: string; did: string; status: string; trunk_id: number; trunk_number: string; last_message: string;
     e911_status: string; e911_message: string; department: string; number_from: string; number_to: string; extension_number: string;
     sip_user: string; sip_host: string; task_status: string; task_note: string; has_account: number; sub_user: string; sub_host: string;
   }[];
@@ -247,7 +248,7 @@ export function listLines(query = "", company = 0, status = "") {
   const visible = rows.filter((row) => {
     if (company && row.user_id !== company) return false;
     if (status && status !== "all" && lineStatusLabel(row.status).toLowerCase().replace(/\s/g, "") !== status && row.status !== status) return false;
-    const text = `${row.name} ${row.email} ${row.did} ${row.department}`.toLowerCase();
+    const text = `${row.name} ${row.business_name || ""} ${row.email} ${row.did} ${row.department}`.toLowerCase();
     return !needle || text.includes(needle) || formatDid(row.did).toLowerCase().includes(needle);
   });
   return visible.map((row) => ({
@@ -255,13 +256,13 @@ export function listLines(query = "", company = 0, status = "") {
     userId: row.user_id,
     requestId: row.request_id,
     email: row.email,
-    company: row.name || row.email,
+    company: shownAccountName(row.department, row.business_name || "", row.name) || row.name || row.email,
     did: row.did,
     status: row.status,
     trunkId: row.trunk_id,
     trunkNumber: row.trunk_number || "",
     message: row.last_message || row.task_note,
-    department: row.department || "Company name not set",
+    department: shownAccountName(row.department, row.business_name || "", row.name) || "Company name not set",
     extension: row.extension_number,
     from: row.number_from,
     to: row.number_to,
