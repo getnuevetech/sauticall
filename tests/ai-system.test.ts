@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { acceptanceComplete, activationState, customerAiState, featureReady, validateAssignment, validateEngine, type AiEngineRecord } from "../lib/ai-system.ts";
+import { acceptanceComplete, activationState, customerAiState, featureReady, validateAssignment, validateEngine, validateEngineKey, type AiEngineRecord } from "../lib/ai-system.ts";
 
-const voice: AiEngineRecord = { id: 1, name: "Voice", kind: "tts", model: "sauticall-voice-1", endpoint: "https://voice.internal.example", secretRef: "vault:voice", enabled: true };
-const outbound: AiEngineRecord = { id: 2, name: "Outbound", kind: "llm", model: "sauticall-outbound-1", endpoint: "https://outbound.internal.example", secretRef: "vault:outbound", enabled: true };
+const voice: AiEngineRecord = { id: 1, name: "Voice", kind: "tts", model: "sauticall-voice-1", endpoint: "https://voice.internal.example", secretRef: "vault:voice", hasSecret: true, enabled: true };
+const outbound: AiEngineRecord = { id: 2, name: "Outbound", kind: "llm", model: "sauticall-outbound-1", endpoint: "https://outbound.internal.example", secretRef: "", hasSecret: true, enabled: true };
 
 test("the master switch closes every service", () => {
   const open = new Set(["notifications", "receptionist"]);
@@ -54,8 +54,24 @@ test("two engines can be assigned to different jobs", () => {
   }
   const off = validateAssignment("tts", 3, [{ ...voice, id: 3, enabled: false }]);
   assert.equal(off.ok, false);
+  const mismatch = validateAssignment("receptionist", voice.id, [voice, outbound]);
+  assert.equal(mismatch.ok, false);
+  const sameModel = validateAssignment("personal_assistant", outbound.id, [voice, outbound]);
+  assert.equal(sameModel.ok, true);
   const secret = validateEngine({ name: "Voice", kind: "tts", model: "sauticall-voice-1", endpoint: "https://voice.internal.example", secretRef: "sk-live-secret", enabled: true });
   assert.equal(secret.ok, false);
-  const blank = validateEngine({ name: "Voice", kind: "tts", model: "sauticall-voice-1", endpoint: "", secretRef: "vault:voice", enabled: true });
+  const blank = validateEngine({ name: "Voice", kind: "tts", model: "sauticall-voice-1", endpoint: "", secretRef: "", enabled: true });
   assert.equal(blank.ok, false);
+  const first = validateEngine({ name: "Language A", kind: "llm", model: "model-a", endpoint: "https://a.example/v1", secretRef: "", enabled: true });
+  const second = validateEngine({ name: "Language B", kind: "llm", model: "model-b", endpoint: "https://b.example/v1", secretRef: "", enabled: true });
+  assert.equal(first.ok && second.ok, true);
+  if (first.ok && second.ok) {
+    assert.equal(first.engine.endpoint, "https://a.example/v1");
+    assert.equal(second.engine.endpoint, "https://b.example/v1");
+  }
+  const key = validateEngineKey("sk-proj-abcdef12");
+  const other = validateEngineKey("vendor_key_without_prefix");
+  assert.equal(key.ok && key.key, "sk-proj-abcdef12");
+  assert.equal(other.ok && other.key, "vendor_key_without_prefix");
+  assert.equal(validateEngineKey("has spaces").ok, false);
 });

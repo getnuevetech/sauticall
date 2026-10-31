@@ -2,7 +2,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { inspectUpload, normalizePolicy, readEngineAudio, renderPreviewWav, retentionDue, scriptDigest, validateVoice, type AudioPolicy } from "./ai-audio";
-import { enabledSwitchCodes, listAiEngines } from "./ai-store";
+import { enabledSwitchCodes, listAiEngines, readAiEngineSecret } from "./ai-store";
 import { audit, getDb } from "./db";
 import { audioDir } from "./paths";
 
@@ -158,7 +158,13 @@ export async function generateClip(userId: number, title: string, script: string
   if (voice.engineId) {
     const engine = listAiEngines().find((item) => item.id === voice.engineId && item.enabled && item.kind === "tts");
     if (!engine) return { ok: false as const, message: "The text-to-voice engine for this voice is off." };
-    const spoken = await readEngineAudio(engine.endpoint, { text: cleanScript, voice: voice.voiceKey, model: engine.model }, policy.maxBytes);
+    const spoken = await readEngineAudio(
+      engine.endpoint,
+      { text: cleanScript, voice: voice.voiceKey, model: engine.model },
+      policy.maxBytes,
+      fetch,
+      { bearer: readAiEngineSecret(engine.id) },
+    );
     if (!spoken.ok) return spoken;
     const checked = inspectUpload(spoken.bytes, policy);
     if (!checked.ok) return checked;

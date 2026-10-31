@@ -50,4 +50,14 @@ test("an engine response is stored only when it is audio", async () => {
   assert.equal(page.ok, false);
   const insecure = await readEngineAudio("http://voice.internal.example/speak", { text: "Hello", voice: "preview", model: "sauticall-voice-1" }, 2_000_000, async () => new Response(tone.bytes));
   assert.equal(insecure.ok, false);
+  let sent = "";
+  const speech = await readEngineAudio("https://voice.example/speak", { text: "Hello", voice: "preview", model: "model-a" }, 2_000_000, async (url, init) => {
+    const headers = init?.headers as { authorization?: string } | undefined;
+    sent = `${url} ${headers?.authorization || ""} ${init?.body}`;
+    return new Response(JSON.stringify({ error: { message: "refused sk-proj-abcdef12" } }), { status: 401 });
+  }, { bearer: "sk-proj-abcdef12" });
+  assert.equal(speech.ok, false);
+  assert.match(sent, /^https:\/\/voice\.example\/speak Bearer sk-proj-abcdef12/);
+  assert.match(sent, /"text":"Hello"/);
+  if (!speech.ok) assert.equal(speech.message.includes("sk-proj"), false);
 });
