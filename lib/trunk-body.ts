@@ -108,6 +108,31 @@ export function mentionsDelta(message: string) {
   return /delta/i.test(message);
 }
 
+export function manualTrunkNote(input: {
+  company: string;
+  did: string;
+  dialed: string;
+  extension: string;
+  from: string;
+  to: string;
+  account: string;
+  host: string;
+  reason: string;
+}) {
+  const reason = input.reason.replace(/\s+/g, " ").trim().slice(0, 240);
+  const host = input.host || "the saved POP";
+  return [
+    reason,
+    `VoIP.ms SIP account ${input.account} at ${host} is ready. 3CX did not accept an automatic trunk, so add it in the 3CX admin.`,
+    `Company ${input.company}.`,
+    `Registrar ${host}, SIP user ${input.account}. Use the SIP password already stored for this company.`,
+    `Trunk number ${input.did}. If 3CX asks for 11 digits, enter ${input.dialed}.`,
+    `Route inbound ${input.did} to extension ${input.extension}.`,
+    `Add an outbound rule limited to extensions ${input.from}–${input.to}.`,
+    "Enter the trunk id from 3CX on this line. SautiCall will read that trunk and try the inbound and outbound rules. If those are refused too, finish both rules in 3CX and record that the routing was finished there.",
+  ].join(" ");
+}
+
 export function trunkPlainBody(input: {
   seed: Record<string, unknown> | null;
   name: string;
@@ -135,6 +160,64 @@ export function trunkPlainBody(input: {
   if (!gateway.TemplateFilename && input.template) gateway.TemplateFilename = input.template;
   if (number) body.DidNumbers = [number];
   return body;
+}
+
+function stripTrunkMetadata(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripTrunkMetadata);
+  if (!value || typeof value !== "object") return value;
+  const next: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (key.startsWith("@odata.") && key !== "@odata.type") continue;
+    next[key] = stripTrunkMetadata(child);
+  }
+  return next;
+}
+
+export function trunkPassthroughBody(input: {
+  seed: Record<string, unknown> | null;
+  name: string;
+  number: string;
+  authId: string;
+  password: string;
+  host: string;
+  template?: string;
+}) {
+  const number = digits(input.number);
+  const body = stripTrunkMetadata(input.seed ? structuredClone(input.seed) : {}) as Record<string, unknown>;
+  body.Name = input.name;
+  body.AuthID = input.authId;
+  if ("AuthUser" in body) body.AuthUser = input.authId;
+  body.AuthPassword = { Value: input.password };
+  if (number) body.ExternalNumber = number;
+  const gateway = body.Gateway && typeof body.Gateway === "object" && !Array.isArray(body.Gateway)
+    ? body.Gateway as Record<string, unknown>
+    : {};
+  body.Gateway = gateway;
+  if (input.host) gateway.Host = input.host;
+  if (!gateway.Port) gateway.Port = 5060;
+  if (!gateway.TemplateFilename && input.template) gateway.TemplateFilename = input.template;
+  if (number) keepDid(body, number);
+  return body;
+}
+
+function keepDid(body: Record<string, unknown>, number: string) {
+  const current = body.DidNumbers;
+  if (Array.isArray(current)) {
+    body.DidNumbers = [number];
+    return;
+  }
+  if (current && typeof current === "object") {
+    const record = current as Record<string, unknown>;
+    if (Array.isArray(record.delta)) {
+      record.delta = [number];
+      return;
+    }
+    if ("value" in record) {
+      record.value = [number];
+      return;
+    }
+  }
+  body.DidNumbers = [number];
 }
 
 export function trunkClientBody(input: {

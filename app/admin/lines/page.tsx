@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { completeEmergency, completeTrunk, retryTrunk, sendEmergencyAddress, syncMinutes } from "../actions";
+import { completeEmergency, completeTrunk, linkTrunk, retryTrunk, sendEmergencyAddress, syncMinutes } from "../actions";
 import { SipReveal } from "@/components/admin/OpsBits";
 import { requirePermission } from "@/lib/access";
 import { flagOn } from "@/lib/db";
@@ -43,7 +43,17 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
         <li><span className={steps.trunk === "Failed" ? "bad" : steps.trunk === "Ready" ? "ok" : "muted"} /> 3CX trunk <strong>{steps.trunk}</strong></li>
         <li><span className="muted" /> Routing <strong>{steps.routing}</strong></li>
       </ul>
-      {line.status === "trunk_waiting" ? <p className="ops-alert">3CX rejected the request, or a later step is still open. The technical response is below.</p> : null}
+      {line.status === "trunk_waiting" ? (
+        <div>
+          <p className="ops-alert">Add this trunk in the 3CX admin. The automatic request was refused.</p>
+          <ol className="ops-steps">
+            <li>Create a SIP trunk for {line.company}.</li>
+            <li>Use registrar {line.sipHost || "the saved POP"}. The SIP user and password are below. Use the saved password.</li>
+            <li>Use trunk number {formatDid(line.did)}. Route inbound calls to {line.extension ? `extension ${line.extension}` : "the saved extension"}.</li>
+            <li>Add an outbound rule limited to extensions {line.from && line.to ? `${line.from}–${line.to}` : "the company’s reserved range"}.</li>
+          </ol>
+        </div>
+      ) : null}
       {line.status === "trunk_done" ? <p className="ops-muted">An administrator recorded this as complete. Registration was not verified.</p> : null}
       <details className="ops-details" open={Boolean(line.message)}>
         <summary>Technical response</summary>
@@ -74,12 +84,20 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
         </form>
         <p className="ops-muted">Checks for an existing trunk before retrying. It continues at the step that is still open.</p>
       </div>
+      <form action={linkTrunk} className="ops-stack">
+        <input type="hidden" name="id" value={line.id} />
+        <input type="hidden" name="company" value={line.userId} />
+        <label>3CX trunk id <input name="trunk_id" inputMode="numeric" defaultValue={line.trunkId ? String(line.trunkId) : ""} placeholder="Id from the 3CX trunk" required /></label>
+        <button className="btn btn-primary" type="submit">Save this trunk and try routing</button>
+        <p className="ops-muted">Reads that trunk from 3CX, then tries the inbound route and the outbound rule. It does not place a call.</p>
+      </form>
       <form action={completeTrunk} className="ops-stack">
         <input type="hidden" name="id" value={line.id} />
         <input type="hidden" name="company" value={line.userId} />
-        <label>Note <input name="note" placeholder="What was finished on the server" /></label>
-        <button className="btn btn-secondary" type="submit">Record manual completion with note</button>
-        <p className="ops-muted">This records an administrator’s action. It does not imply verified registration.</p>
+        <input type="hidden" name="trunk_id" value={line.trunkId || ""} />
+        <label>Note <input name="note" placeholder="Inbound and outbound finished in 3CX" /></label>
+        <button className="btn btn-secondary" type="submit">Record that routing was finished in 3CX</button>
+        <p className="ops-muted">Use this after the inbound route and outbound rule exist in 3CX. Registration is not verified from here.</p>
       </form>
       {line.requestId ? <p><Link href={`/admin/requests?request=${line.requestId}`}>Open the number request</Link></p> : <p>No number request is linked to this line.</p>}
       <details className="ops-details">
@@ -127,6 +145,7 @@ export default async function LinesPage({ searchParams }: { searchParams: Promis
         <p className="ops-muted">{reading ? "Reading call minutes is on." : "Reading call minutes is off."} {trunks ? "Adding a 3CX trunk from here is on. A retry uses the customer's SIP account and does not place a call." : "Adding trunks from here is off, so a retry records the waiting step."} {flagOn("pbx.voipms_backup") ? "VoIP.ms backup is on for a confirmed trunk failure, and it uses that customer's client." : "VoIP.ms backup is off. Only an administrator can turn it on in Platform controls."}</p>
         {params.error ? <p className="form-feedback">{params.error}</p> : null}
         {params.saved === "recorded" ? <p className="form-feedback">The note was recorded. Registration was not verified.</p> : null}
+        {params.saved === "linked" ? <p className="form-feedback">The trunk was read from 3CX and routing was saved. No call was placed.</p> : null}
         {params.saved === "1" ? <p className="form-feedback">Call minutes were updated.</p> : null}
         <nav className="ops-tabs">
           <Link href="/admin/lines?tab=trunks" data-current={tab === "trunks" ? "true" : undefined}>Trunks</Link>
