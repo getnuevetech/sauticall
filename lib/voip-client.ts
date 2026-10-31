@@ -9,7 +9,7 @@ import { flagOn, getDb, readDoc } from "./db";
 import type { Plan } from "./types";
 import { getEmergency } from "./e911";
 import { regionAllowed } from "./places";
-import { ensureSubaccount, getSubaccount, linkSubaccountClient } from "./voip-account";
+import { getSubaccount, linkSubaccountClient } from "./voip-account";
 
 type ClientRow = { user_id: number; client_id: string; email: string; password: string; last_message: string; updated_at: string; funded_cents?: number; funded_plan?: string };
 
@@ -267,11 +267,6 @@ export function scheduleOutstandingClients() {
 export async function provisionCustomer(userId: number) {
   const client = await ensureVoipClient(userId);
   if (!client.ok) return client;
-  const line = await ensureSubaccount(userId, client.clientId);
-  if (!line.ok) {
-    note(userId, line.message);
-    return { ok: false as const, message: line.message };
-  }
-  await syncCustomerDids(userId);
+  if (getSubaccount(userId)?.account) await syncCustomerDids(userId);
   return { ok: true as const, clientId: client.clientId };
 }

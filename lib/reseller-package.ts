@@ -1,4 +1,4 @@
-export type ResellerPackage = { id: string; monthly: number; setup: number };
+export type ResellerPackage = { id: string; name: string; monthly: number; setup: number };
 
 function money(value: unknown) {
   const number = Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
@@ -15,7 +15,7 @@ export function readPackages(body: unknown): ResellerPackage[] {
     const row = item as Record<string, unknown>;
     const id = String(row.value ?? row.package ?? row.id ?? "").trim();
     if (!/^\d+$/.test(id)) return [];
-    return [{ id, monthly: money(row.monthly_fee), setup: money(row.setup_fee) }];
+    return [{ id, name: String(row.name ?? row.description ?? "").trim(), monthly: money(row.monthly_fee), setup: money(row.setup_fee) }];
   });
 }
 
@@ -26,4 +26,14 @@ export function chooseResellerPackage(assigned: unknown, catalog: unknown) {
   const free = list.find((item) => item.monthly === 0 && item.setup === 0);
   if (free) return free.id;
   return [...list].sort((left, right) => left.monthly - right.monthly || left.setup - right.setup)[0]?.id || "";
+}
+
+export function choosePlanPackage(planName: string, catalog: unknown) {
+  const list = readPackages(catalog);
+  const wanted = planName.trim().toLowerCase();
+  const named = wanted ? list.find((item) => item.name.trim().toLowerCase() === wanted) : undefined;
+  if (named) return named.id;
+  const fallback = list.find((item) => item.name.trim().toLowerCase() === "default");
+  if (fallback) return fallback.id;
+  return chooseResellerPackage(null, catalog);
 }

@@ -1,21 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clientMailbox, formatCustomerCode, kindFromPlan, nextCustomerCode } from "../lib/customer-code.ts";
+import { clientMailbox, customerCodeWithoutHyphen, formatCustomerCode, kindFromPlan, nextCustomerCode } from "../lib/customer-code.ts";
 import { parseGoogleAddress } from "../lib/google-address.ts";
 import { addressReady } from "../lib/e911-address.ts";
 import { bestTrunk, outboundChoice, trunkOutcome } from "../lib/outbound-path.ts";
 
-test("customer IDs use I- and B- with seven digits", () => {
+test("customer IDs use I and B with seven digits and no hyphen", () => {
   assert.equal(kindFromPlan({ seats: 1 }), "individual");
   assert.equal(kindFromPlan(null), "individual");
   assert.equal(kindFromPlan({ seats: 5 }), "business");
   assert.equal(kindFromPlan({ seats: 0, custom: true }), "business");
-  assert.equal(nextCustomerCode("individual", []), "I-0000001");
-  assert.equal(nextCustomerCode("individual", ["I-0000001", "B-0000004"]), "I-0000002");
-  assert.equal(nextCustomerCode("business", ["I-0000009"]), "B-0000001");
-  assert.equal(formatCustomerCode("business", 12), "B-0000012");
-  assert.equal(clientMailbox("I-0000001"), "I-0000001@sauticall.com");
-  assert.equal(clientMailbox("I-0000001").includes("example.com"), false);
+  assert.equal(nextCustomerCode("individual", []), "I0000001");
+  assert.equal(nextCustomerCode("individual", ["I-0000001", "B-0000004"]), "I0000002");
+  assert.equal(nextCustomerCode("business", ["I0000009"]), "B0000001");
+  assert.equal(formatCustomerCode("business", 12), "B0000012");
+  assert.equal(customerCodeWithoutHyphen("I-0000001"), "I0000001");
+  assert.equal(clientMailbox("I0000001"), "I0000001@sauticall.com");
+  assert.equal(clientMailbox("I-0000001"), "I0000001@sauticall.com");
+  assert.equal(clientMailbox("I0000001").includes("example.com"), false);
   assert.equal(clientMailbox("customer-1"), "");
 });
 

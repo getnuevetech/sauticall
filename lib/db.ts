@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
 import { hashPassword } from "./auth";
+import { customerCodeWithoutHyphen } from "./customer-code";
 import { upgradeContent } from "./content-upgrade";
 import { seedDesk } from "./desk-seed";
 import { AI_SWITCHES, DRAFT_NOTIFICATION_AGREEMENT, agreementDigest } from "./ai-system";
@@ -628,6 +629,33 @@ function migrate(database: Database.Database) {
   if (!extensionCols.has("ai_name")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN ai_name TEXT NOT NULL DEFAULT ''");
   const engineCols = new Set((database.prepare("PRAGMA table_info(ai_engines)").all() as { name: string }[]).map((column) => column.name));
   if (!engineCols.has("secret")) database.exec("ALTER TABLE ai_engines ADD COLUMN secret TEXT NOT NULL DEFAULT ''");
+  stripCustomerHyphens(database);
+}
+
+function stripCustomerHyphens(database: Database.Database) {
+  const users = database.prepare("SELECT id, customer_code FROM users WHERE instr(customer_code, '-') > 0").all() as { id: number; customer_code: string }[];
+  const saveUser = database.prepare("UPDATE users SET customer_code = ? WHERE id = ? AND customer_code = ?");
+  for (const row of users) {
+    const next = customerCodeWithoutHyphen(row.customer_code);
+    if (next === row.customer_code) continue;
+    const taken = database.prepare("SELECT id FROM users WHERE customer_code = ?").get(next) as { id: number } | undefined;
+    if (taken && taken.id !== row.id) continue;
+    saveUser.run(next, row.id, row.customer_code);
+  }
+  const clients = database.prepare("SELECT user_id, email FROM voip_clients WHERE instr(email, '-') > 0").all() as { user_id: number; email: string }[];
+  const saveClient = database.prepare("UPDATE voip_clients SET email = ? WHERE user_id = ? AND email = ?");
+  for (const row of clients) {
+    const at = row.email.lastIndexOf("@");
+    if (at < 1) continue;
+    const next = `${customerCodeWithoutHyphen(row.email.slice(0, at))}@${row.email.slice(at + 1)}`;
+    if (next !== row.email) saveClient.run(next, row.user_id, row.email);
+  }
+  const recordings = database.prepare("SELECT id, customer_code FROM recordings WHERE instr(customer_code, '-') > 0").all() as { id: number; customer_code: string }[];
+  const saveRecording = database.prepare("UPDATE recordings SET customer_code = ? WHERE id = ? AND customer_code = ?");
+  for (const row of recordings) {
+    const next = customerCodeWithoutHyphen(row.customer_code);
+    if (next !== row.customer_code) saveRecording.run(next, row.id, row.customer_code);
+  }
 }
 
 function put(database: Database.Database, key: string, value: unknown) {

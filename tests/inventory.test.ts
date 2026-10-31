@@ -74,9 +74,9 @@ test("a number search can target the whole number, its start, or its end", () =>
 
 test("a VoIP.ms client stays tied to the SautiCall customer", () => {
   assert.deepEqual(personName("Ada Customer"), { first: "Ada", last: "Customer" });
-  assert.equal(clientEmail("I-0000012", "ada@example.com"), "I-0000012@sauticall.com");
-  assert.equal(clientEmail("I-0000012", "ada@example.com").includes("ada@example.com"), false);
-  assert.equal(clientEmail("B-0000007", "ada@example.com"), "B-0000007@sauticall.com");
+  assert.equal(clientEmail("I0000012", "ada@example.com"), "I0000012@sauticall.com");
+  assert.equal(clientEmail("I0000012", "ada@example.com").includes("ada@example.com"), false);
+  assert.equal(clientEmail("B0000007", "ada@example.com"), "B0000007@sauticall.com");
   assert.equal(clientEmail("", "ada@example.com"), "");
   assert.equal(clientEmail("customer-12", "ada@example.com"), "");
   assert.equal(clientPlace({}).state, "TX");

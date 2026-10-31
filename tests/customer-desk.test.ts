@@ -5,10 +5,10 @@ import { matchesCustomer, contactLines } from "../lib/customer-view.ts";
 import { ago, failureFacts, groupFailures, providerFor, withinDays } from "../lib/failure-desk.ts";
 import { awsPutRequest, googleAssertion, recordingObjectKey, validateRecording, type RecordingConfig } from "../lib/recording-target.ts";
 
-const row = { code: "B-0000012", company: "Acme Studio", contact: "Alex Morgan", email: "alex@acme.example", phone: "2025550101", plan: "Small Business" };
+const row = { code: "B0000012", company: "Acme Studio", contact: "Alex Morgan", email: "alex@acme.example", phone: "2025550101", plan: "Small Business" };
 
 test("customer search matches the public ID, name, and mobile", () => {
-  assert.equal(matchesCustomer(row, { q: "B-0000012", plan: "all", signin: "all" }), true);
+  assert.equal(matchesCustomer(row, { q: "B0000012", plan: "all", signin: "all" }), true);
   assert.equal(matchesCustomer(row, { q: "alex morgan", plan: "all", signin: "all" }), true);
   assert.equal(matchesCustomer(row, { q: "(202) 555-0101", plan: "all", signin: "all" }), true);
   assert.equal(matchesCustomer(row, { q: "missing", plan: "all", signin: "all" }), false);
@@ -55,7 +55,7 @@ test("failed requests group attempts and read the provider error", () => {
 });
 
 test("recording keys stay inside the bucket prefix and the AWS signature hides the secret", () => {
-  assert.equal(recordingObjectKey("recordings", "B-0000012", 9, "wav"), "recordings/B-0000012/9.wav");
+  assert.equal(recordingObjectKey("recordings", "B0000012", 9, "wav"), "recordings/B0000012/9.wav");
   assert.equal(recordingObjectKey("../etc", "customer-1", 9, "wav"), "etc/unassigned/9.wav");
   const config: RecordingConfig = {
     provider: "aws",
@@ -68,8 +68,8 @@ test("recording keys stay inside the bucket prefix and the AWS signature hides t
     googleKey: "",
     retentionDays: 365,
   };
-  const request = awsPutRequest({ config, objectKey: "recordings/B-0000012/9.wav", body: Buffer.from("hello"), contentType: "audio/wav", now: new Date("2026-10-30T18:00:00.000Z") });
-  assert.equal(request.url, "https://sauticall-recordings.s3.us-east-1.amazonaws.com/recordings/B-0000012/9.wav");
+  const request = awsPutRequest({ config, objectKey: "recordings/B0000012/9.wav", body: Buffer.from("hello"), contentType: "audio/wav", now: new Date("2026-10-30T18:00:00.000Z") });
+  assert.equal(request.url, "https://sauticall-recordings.s3.us-east-1.amazonaws.com/recordings/B0000012/9.wav");
   assert.equal(request.headers.authorization.includes("super-secret-value"), false);
   assert.equal(request.url.includes("super-secret-value"), false);
   assert.equal(validateRecording({ ...config, region: "texas" }).ok, false);
