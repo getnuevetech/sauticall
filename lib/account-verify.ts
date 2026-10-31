@@ -46,6 +46,8 @@ export function verificationStatus(userId: number) {
     phone: row?.phone || "",
     emailVerified: Boolean(row?.email_verified_at),
     phoneVerified: Boolean(row?.phone_verified_at),
+    emailRequired: flagOn("auth.verify_email"),
+    smsRequired: flagOn("auth.verify_sms"),
     addressSaved: addressReady(row ? getEmergency(userId) : null),
     smsReady: smsReady(),
   };

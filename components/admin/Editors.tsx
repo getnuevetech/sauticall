@@ -144,7 +144,7 @@ export function DocumentEditor({ docKey, initial }: { docKey: string; initial: u
       <Field docKey={docKey} value={value} path={[]} onChange={(path, next) => setValue((current) => setPath(current, path, next))} />
       <button className="btn btn-primary" type="submit">Save changes</button>
       {saved ? <div className="form-feedback">Saved.</div> : null}
-      {error ? <div className="form-feedback">{error}</div> : null}
+      {error ? <div className="form-feedback form-error" role="alert">{error}</div> : null}
     </form>
   );
 }
@@ -226,7 +226,7 @@ export function GatewayForm({ gateway }: { gateway?: { id: number; name: string;
         </div>
       </details>
       <button className="btn btn-primary" type="submit">{gateway ? "Save configuration" : "Add gateway"}</button>
-      {error ? <p className="form-feedback">{error}</p> : null}
+      {error ? <p className="form-feedback form-error" role="alert">{error}</p> : null}
     </form>
   );
 }

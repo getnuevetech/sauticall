@@ -21,7 +21,7 @@ export default async function AdminPhonePage({ searchParams }: { searchParams: P
           </div>
           <Link className="btn btn-secondary" href="/admin/phone/numbering">Global numbering settings</Link>
         </div>
-        {params.error ? <p className="form-feedback">{params.error}</p> : null}
+        {params.error ? <p className="form-feedback form-error" role="alert">{params.error}</p> : null}
         <form className="ops-toolbar" method="get">
           <input name="q" defaultValue={params.q || ""} placeholder="Search company or account" aria-label="Search company or account" />
           <select name="status" defaultValue={params.status || "all"} aria-label="Setup status">

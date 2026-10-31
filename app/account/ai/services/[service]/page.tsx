@@ -79,7 +79,7 @@ export default async function AccountAiServicePage({
         ))}
       </nav>
       {notice ? <p className="form-feedback">{notice}</p> : null}
-      {query.error ? <p className="form-feedback">{query.error}</p> : null}
+      {query.error ? <p className="form-feedback form-error" role="alert">{query.error}</p> : null}
       {tab === "overview" ? (
         <article className="contact-form">
           <h3>Purpose</h3>

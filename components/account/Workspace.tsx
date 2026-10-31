@@ -1,3 +1,4 @@
+import { verificationStatus } from "@/lib/account-verify";
 import { currentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { shownAccountName } from "@/lib/pbx-user";
@@ -10,9 +11,10 @@ export async function Workspace({ children }: { children: React.ReactNode }) {
   const profile = getDb().prepare("SELECT business_name FROM users WHERE id = ?").get(user.id) as { business_name: string } | undefined;
   const company = shownAccountName(department?.name || "", profile?.business_name || "", user.name) || "Your business";
   const alerts = (getDb().prepare("SELECT COUNT(*) AS n FROM tickets WHERE user_id = ? AND status NOT IN ('resolved', 'closed')").get(user.id) as { n: number }).n;
-  const verified = getDb().prepare("SELECT email_verified_at, phone_verified_at FROM users WHERE id = ?").get(user.id) as { email_verified_at: string; phone_verified_at: string } | undefined;
+  const verified = verificationStatus(user.id);
+  const needsVerify = (verified.emailRequired && !verified.emailVerified) || (verified.smsRequired && !verified.phoneVerified);
   return (
-    <WorkspaceFrame name={user.name} email={user.email} company={company} alerts={alerts} needsVerify={!verified?.email_verified_at || !verified?.phone_verified_at}>
+    <WorkspaceFrame name={user.name} email={user.email} company={company} alerts={alerts} needsVerify={needsVerify}>
       {children}
     </WorkspaceFrame>
   );

@@ -34,7 +34,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         <a href="#invoices">Invoices</a>
         <a href="#payment">Payment methods</a>
       </nav>
-      {params.error ? <p className="form-feedback">{customerMessage(params.error, "That billing step could not be completed. Please try again, or contact support.")}</p> : null}
+      {params.error ? <p className="form-feedback form-error" role="alert">{customerMessage(params.error, "That billing step could not be completed. Please try again, or contact support.")}</p> : null}
       {params.saved === "variables" ? <p className="form-feedback">Your billing choices were saved.</p> : null}
       <section className="ws-card" style={{ marginBottom: 14 }}>
         <h2>Next phone bill</h2>

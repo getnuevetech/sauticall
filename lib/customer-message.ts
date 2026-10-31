@@ -13,6 +13,16 @@ export function safeCustomerError(detail: string, fallback: string) {
   return safe;
 }
 
+export function extensionEmailConflict(detail: string) {
+  const text = detail.replace(/\s+/g, " ").trim();
+  return /email/i.test(text) && /already|duplicate|unique|exists|in use|taken/i.test(text);
+}
+
+export function extensionCustomerMessage(detail: string) {
+  if (extensionEmailConflict(detail)) return "That email is already used for an extension. Use a different email.";
+  return safeCustomerError(detail, "This person could not be added. Check the name and email, then try again.");
+}
+
 export function customerRequestStatus(status: string) {
   const labels: Record<string, string> = {
     requested: "Saved",

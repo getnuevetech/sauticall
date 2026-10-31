@@ -16,7 +16,7 @@ export default async function NewTicketPage({ searchParams }: { searchParams: Pr
         <h1>{text("ticketsNew")}</h1>
         <p>{text("ticketsBody")}</p>
       </header>
-            {params.error ? <p className="form-feedback">{customerMessage(params.error, "The ticket could not be sent. Please try again, or contact support.")}</p> : null}
+            {params.error ? <p className="form-feedback form-error" role="alert">{customerMessage(params.error, "The ticket could not be sent. Please try again, or contact support.")}</p> : null}
             {topics.length === 0 ? <p>{text("ticketsClosed")}</p> : (
               <form className="contact-form" action={openTicket}>
                 <label>{text("ticketsTopic")}

@@ -4,13 +4,13 @@ import { QUEUE_STRATEGIES, RING_STRATEGIES, groupMembers, strategyLabel, type Ca
 import { getDb } from "@/lib/db";
 import { extensionCapacity, paidPlan } from "@/lib/pbx";
 import { planAllows } from "@/lib/plan-features";
-import { customerMessage } from "@/lib/customer-message";
+import { customerMessage, extensionCustomerMessage } from "@/lib/customer-message";
 import { accountNeedsMfa } from "@/lib/mfa";
 import { DEPARTMENT_NAME_RULES, shownAccountName } from "@/lib/pbx-user";
 import { extensionSetup } from "@/lib/account-display";
 import { systemsForPlan } from "@/lib/ai-account";
 
-type Extension = { id: number; number: string; former_number: string; first_name: string; last_name: string; email: string; status: string; welcome_note: string; ai_role: string; ai_name: string };
+type Extension = { id: number; number: string; former_number: string; first_name: string; last_name: string; email: string; status: string; welcome_note: string; last_message: string; ai_role: string; ai_name: string };
 
 function extensionNumber(row: Extension) {
   return row.status === "removed" && row.former_number ? row.former_number : row.number;
@@ -21,7 +21,7 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
   const params = await searchParams;
   const plan = paidPlan(user.id);
   const limit = plan ? extensionCapacity(plan) : 0;
-  const rows = getDb().prepare("SELECT id, number, former_number, first_name, last_name, email, status, welcome_note, ai_role, ai_name FROM pbx_extensions WHERE user_id = ? ORDER BY number").all(user.id) as Extension[];
+  const rows = getDb().prepare("SELECT id, number, former_number, first_name, last_name, email, status, welcome_note, last_message, ai_role, ai_name FROM pbx_extensions WHERE user_id = ? ORDER BY number").all(user.id) as Extension[];
   const hours = getDb().prepare("SELECT name, open_time, close_time, last_message FROM pbx_departments WHERE user_id = ?").get(user.id) as { name: string; open_time: string; close_time: string; last_message: string } | undefined;
   const profile = getDb().prepare("SELECT business_name FROM users WHERE id = ?").get(user.id) as { business_name: string } | undefined;
   const lines = getDb().prepare("SELECT status FROM phone_lines WHERE user_id = ?").all(user.id) as { status: string }[];
@@ -62,7 +62,7 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
         last: row.last_name,
         email: row.email,
         status: row.status,
-        welcome: row.welcome_note,
+        welcome: row.status === "failed" && row.last_message ? extensionCustomerMessage(row.last_message) : row.welcome_note,
         aiRole: row.ai_role,
         aiName: row.ai_name,
       }))}
@@ -85,6 +85,7 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
       needsCode={Boolean(user.mfa_secret) || accountNeedsMfa(user)}
       hasAuthenticator={Boolean(user.mfa_secret)}
       notice={notice}
+      noticeError={Boolean(params.error)}
     />
   );
 }

@@ -52,7 +52,7 @@ export default async function AccountAiPage({ searchParams }: { searchParams: Pr
         <p>{plan ? `${plan.name} includes ${included.length} of ${systems.length} AI systems.` : "Choose a plan before an AI system can be configured."} An administrator chooses which systems each plan includes. Saving settings does not place a call or change routing.</p>
       </header>
       {notice ? <p className="form-feedback">{notice}</p> : null}
-      {query.error ? <p className="form-feedback">{query.error}</p> : null}
+      {query.error ? <p className="form-feedback form-error" role="alert">{query.error}</p> : null}
       {included.length > 0 ? (
         <section className="ai-included">
           <h2>On this plan</h2>

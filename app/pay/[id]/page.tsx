@@ -32,7 +32,7 @@ export default async function PayPage({ params, searchParams }: { params: Promis
         <section className="section">
           <div className="wrap" style={{ maxWidth: 720 }}>
             <div className="contact-form">
-              {query.error ? <p className="form-feedback">{customerMessage(query.error, "Payment could not be started. Please try again, or contact support.")}</p> : null}
+              {query.error ? <p className="form-feedback form-error" role="alert">{customerMessage(query.error, "Payment could not be started. Please try again, or contact support.")}</p> : null}
               <p>Status: {attempt.status === "paid" ? "Paid" : attempt.status === "cancelled" ? "Cancelled" : attempt.status === "failed" ? "Could not start" : "Waiting for payment"}</p>
               {attempt.status === "pending" && attempt.checkout_url ? <a className="btn btn-primary" href={attempt.checkout_url}>Continue to payment</a> : null}
               {attempt.status === "paid" ? <p>Payment received. This charge will not be taken again.{attempt.product_minutes > 0 ? ` ${attempt.product_minutes} outbound minutes are on the account.` : ""}</p> : null}

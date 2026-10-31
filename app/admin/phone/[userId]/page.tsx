@@ -158,7 +158,7 @@ export default async function CompanyPhonePage({ params, searchParams }: { param
           <CompanyJump companies={companyChoices()} current={companyId} />
           <Link className="btn btn-secondary" href="/admin/phone/numbering">Global numbering settings</Link>
         </div>
-        {query.error ? <p className="form-feedback">{query.error}</p> : null}
+        {query.error ? <p className="form-feedback form-error" role="alert">{query.error}</p> : null}
         {query.saved === "removed" ? <p className="form-feedback">Removed from the phone system. The SautiCall record was kept.</p> : null}
         {query.saved === "email" ? <p className="form-feedback">The setup email was sent. The extension was not created again.</p> : null}
         {query.saved === "recorded" ? <p className="form-feedback">The administrator’s note was recorded. The phone system was not rechecked.</p> : null}

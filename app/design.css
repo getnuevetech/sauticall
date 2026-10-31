@@ -175,3 +175,6 @@ body{background:#fff}
 .auth-guide li strong{color:#202b42}
 .site-header{backdrop-filter:none;-webkit-backdrop-filter:none}
 a,button{touch-action:manipulation}
+.form-feedback{font-size:1rem;line-height:1.45}
+.form-error,.form-feedback.form-error,p.form-error{color:#9f1239;background:#fff1f2;border:1px solid #fecdd3;border-radius:12px;padding:12px 14px;font-size:1rem;font-weight:600;line-height:1.45}
+p.form-error{color:#9f1239}

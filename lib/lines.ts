@@ -10,6 +10,7 @@ import { extensionRange, paidPlan, readExtensionPlan } from "./pbx";
 import { firstListedId, idFromPbx } from "./pbx-id";
 import { manualTrunkNote, mentionsDelta, readTrunkIdentity, redactProvisioning, trunkDialedNumber, trunkGroupBody, trunkPassthroughBody, trunkProvisionVerdict, trunkTemplateName, wrapCollections } from "./trunk-body";
 import { shownAccountName } from "./pbx-user";
+import { carrierDidRef, numberIsBought, orderTimedOut } from "./number-order";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
 
@@ -246,6 +247,45 @@ export async function linkManualTrunk(lineId: number, trunkId: number) {
   return attachTrunk(line.id);
 }
 
+export function ensureCustomerLine(userId: number, requestId: number, did: string) {
+  const ref = carrierDidRef(did);
+  const ten = ref.startsWith("voipms:") ? ref.slice("voipms:".length) : "";
+  if (!ten || !requestId) return 0;
+  const database = getDb();
+  const byRequest = database.prepare("SELECT id, status FROM phone_lines WHERE request_id = ?").get(requestId) as { id: number; status: string } | undefined;
+  if (byRequest) {
+    if (byRequest.status === "not_on_carrier") {
+      database.prepare("UPDATE phone_lines SET user_id = ?, did = ?, status = 'ordered', last_message = ? WHERE id = ?").run(userId, ten, "This number is on the phone-company account.", byRequest.id);
+    }
+    return byRequest.id;
+  }
+  const byDid = database.prepare("SELECT id, status FROM phone_lines WHERE user_id = ? AND did = ?").get(userId, ten) as { id: number; status: string } | undefined;
+  if (byDid) {
+    if (byDid.status === "not_on_carrier") {
+      database.prepare("UPDATE phone_lines SET status = 'ordered', last_message = ? WHERE id = ?").run("This number is on the phone-company account.", byDid.id);
+    }
+    return byDid.id;
+  }
+  const info = database.prepare(
+    "INSERT INTO phone_lines (user_id, request_id, did, status, trunk_id, last_message, created_at) VALUES (?, ?, ?, 'ordered', 0, '', ?)",
+  ).run(userId, requestId, ten, new Date().toISOString());
+  return Number(info.lastInsertRowid);
+}
+
+export function publishBoughtNumbers(userId: number) {
+  const rows = getDb().prepare("SELECT id, payload, status, provider_ref FROM account_requests WHERE user_id = ? AND kind = 'number' AND status IN ('ordered', 'completed')").all(userId) as { id: number; payload: string; status: string; provider_ref: string }[];
+  for (const row of rows) {
+    let did = "";
+    try {
+      did = String((JSON.parse(row.payload) as { did?: string }).did || "");
+    } catch {
+      did = "";
+    }
+    if (!numberIsBought(row.status, row.provider_ref, did)) continue;
+    ensureCustomerLine(userId, row.id, did);
+  }
+}
+
 function storedMonthly(requestId: number, fallback: string) {
   const row = getDb().prepare("SELECT payload FROM account_requests WHERE id = ?").get(requestId) as { payload: string } | undefined;
   try {
@@ -299,19 +339,21 @@ export async function purchaseNumber(input: { requestId: number; userId: number;
         chargedOnOrder = false;
         tries.push(`orderDID ${mainRouting}: ${ordered.message}`);
       }
+      if (!ordered.ok && orderTimedOut(ordered.message)) {
+        const again = await lookupOwnedDid(input.did);
+        tries.push(`getDIDsInfo after a slow order ${input.did}: ${again.ok ? (again.owned ? "owned" : "not listed") : again.message}`);
+        if (again.ok && again.owned) {
+          ordered = { ...ordered, ok: true, message: "The number is on the phone-company account." };
+          chargedOnOrder = true;
+        }
+      }
       if (!ordered.ok) return stop("The phone company did not buy this number. The balance and line account need another look.", tries.join(" | "));
       sent = true;
     } else {
       sent = true;
     }
-    const existing = getDb().prepare("SELECT id FROM phone_lines WHERE request_id = ?").get(input.requestId) as { id: number } | undefined;
-    let lineId = existing?.id || 0;
-    if (!lineId) {
-      const info = getDb().prepare(
-        "INSERT INTO phone_lines (user_id, request_id, did, status, trunk_id, last_message, created_at) VALUES (?, ?, ?, 'ordered', 0, '', ?)",
-      ).run(input.userId, input.requestId, input.did, new Date().toISOString());
-      lineId = Number(info.lastInsertRowid);
-    }
+    const lineId = ensureCustomerLine(input.userId, input.requestId, input.did);
+    if (!lineId) return stop("The number was bought, but it could not be added to this account.", `No phone line was saved for ${input.did}.`);
     const linked = await billDidToClient(input.did, sub.account, fees, chargedOnOrder);
     if (linked) {
       recordFailure({ area: "number", userId: input.userId, subject: input.did, detail: `connectDID ${input.did} to ${sub.account} returned ${linked}.` });

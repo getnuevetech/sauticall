@@ -227,6 +227,40 @@ export async function fundPaidPlan(userId: number, planName: string) {
   return { ok: true as const, message };
 }
 
+export async function fundBundlePayment(userId: number, paymentId: number) {
+  const row = getDb().prepare("SELECT amount_cents, bundle_name, product_kind, status, carrier_funded FROM payment_attempts WHERE id = ?").get(paymentId) as { amount_cents: number; bundle_name: string; product_kind: string; status: string; carrier_funded: number } | undefined;
+  if (!row || row.status !== "paid" || row.product_kind !== "bundle") return { ok: true as const, message: "Not a paid minute bundle." };
+  if (row.carrier_funded === 1) return { ok: true as const, message: "This payment was already added to the phone-company account." };
+  if (!flagOn("billing.fund_client")) return { ok: true as const, message: "Funding client accounts is turned off." };
+  const amount = row.amount_cents / 100;
+  if (!(amount > 0)) return { ok: false as const, message: "This payment has no amount to add." };
+  const claim = getDb().prepare("UPDATE payment_attempts SET carrier_funded = 2 WHERE id = ? AND carrier_funded = 0").run(paymentId);
+  if (!claim.changes) return { ok: true as const, message: "This payment is already being added to the phone-company account." };
+  const description = `SautiCall ${row.bundle_name || "minute bundle"}`.slice(0, 120);
+  const client = await ensureVoipClient(userId);
+  if (!client.ok) {
+    getDb().prepare("UPDATE payment_attempts SET carrier_funded = 0 WHERE id = ? AND carrier_funded = 2").run(paymentId);
+    recordFailure({ area: "client", userId, subject: `bundle ${paymentId}`, detail: client.message });
+    return client;
+  }
+  const paid = await callVoipms("addPayment", {
+    client: client.clientId,
+    payment: amount.toFixed(2),
+    description,
+  }, VOIPMS_WRITE_MS);
+  if (!paid.ok) {
+    getDb().prepare("UPDATE payment_attempts SET carrier_funded = 0 WHERE id = ? AND carrier_funded = 2").run(paymentId);
+    const message = `VoIP.ms did not add the $${amount.toFixed(2)} minute bundle (${paid.message}). The minutes stay on this account.`;
+    note(userId, message);
+    recordFailure({ area: "client", userId, subject: `bundle ${paymentId}`, detail: message });
+    return { ok: false as const, message };
+  }
+  getDb().prepare("UPDATE payment_attempts SET carrier_funded = 1 WHERE id = ?").run(paymentId);
+  const message = `Client ${client.clientId} received $${amount.toFixed(2)} for ${row.bundle_name || "a minute bundle"}.`;
+  note(userId, message);
+  return { ok: true as const, message };
+}
+
 export async function fundPaidPlanWithRetry(userId: number, planName: string) {
   const first = await fundPaidPlan(userId, planName).catch((error: unknown) => ({
     ok: false as const,

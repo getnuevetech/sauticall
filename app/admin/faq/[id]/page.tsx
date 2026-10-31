@@ -17,7 +17,7 @@ export default async function FaqEditorPage({ params, searchParams }: { params: 
       <span className="eyebrow">FAQ blog</span>
       <h2>{creating ? "New article" : "Edit article"}</h2>
       <p>Use a blank line between paragraphs. Start a line with # for a heading, ## for a smaller heading, or - for a bullet. **Bold** and [links](https://example.com) work.</p>
-      {query.error ? <p className="form-feedback">{query.error}</p> : null}
+      {query.error ? <p className="form-feedback form-error" role="alert">{query.error}</p> : null}
       <form className="contact-form" action={saveFaq}>
         {post ? <input type="hidden" name="id" value={post.id} /> : null}
         <label>Title <input name="title" defaultValue={post?.title || ""} required /></label>

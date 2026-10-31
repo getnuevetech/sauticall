@@ -1,6 +1,7 @@
 import { PhoneNumbers } from "@/components/account/PhoneNumbers";
 import { guardAccount } from "@/lib/guard";
 import { flagOn, getDb } from "@/lib/db";
+import { publishBoughtNumbers } from "@/lib/lines";
 import { paidPlan } from "@/lib/pbx";
 import { planAllows } from "@/lib/plan-features";
 import { inventoryReady } from "@/lib/carriers";
@@ -26,7 +27,9 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
   const open = flagOn("numbers.search");
   const included = planAllows(paidPlan(user.id), "numbers");
   const address = getEmergency(user.id);
+  publishBoughtNumbers(user.id);
   const verified = getDb().prepare("SELECT phone_verified_at FROM users WHERE id = ?").get(user.id) as { phone_verified_at: string } | undefined;
+  const smsRequired = flagOn("auth.verify_sms");
   const rows = getDb().prepare("SELECT id, payload, status, provider_ref, created_at FROM account_requests WHERE user_id = ? AND kind = 'number' ORDER BY id DESC").all(user.id) as { id: number; payload: string; status: string; provider_ref: string; created_at: string }[];
   const lines = getDb().prepare("SELECT did, status, e911_status FROM phone_lines WHERE user_id = ? ORDER BY id DESC").all(user.id) as { did: string; status: string; e911_status: string }[];
   const notice = params.error
@@ -47,7 +50,8 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
   return (
     <PhoneNumbers
       initialTab={params.saved ? "mine" : "find"}
-      phoneVerified={Boolean(verified?.phone_verified_at)}
+      phoneVerified={!smsRequired || Boolean(verified?.phone_verified_at)}
+      noticeError={Boolean(params.error)}
       live={open && flagOn("numbers.live_search") && inventoryReady()}
       included={included}
       closed={!open}

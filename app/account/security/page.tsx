@@ -61,6 +61,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
       mfaOn={Boolean(user.mfa_secret)}
       mfaRequired={required}
       notice={notice}
+      noticeError={Boolean(params.error)}
       addressLine={address ? formatAddress(address) : ""}
       address={{
         full_name: address?.full_name || user.name,

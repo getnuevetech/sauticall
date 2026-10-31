@@ -64,7 +64,7 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
         <p>Track number purchases and inbound transfers.</p>
         <p className="ops-banner">{intro}</p>
         {buying ? <RefreshWhileBuying /> : null}
-        {params.error ? <p className="form-feedback">{params.error}</p> : null}
+        {params.error ? <p className="form-feedback form-error" role="alert">{params.error}</p> : null}
         <nav className="ops-tabs">
           <Link href="/admin/requests?kind=all" data-current={!params.kind || params.kind === "all" ? "true" : undefined}>All requests</Link>
           <Link href="/admin/requests?kind=number" data-current={params.kind === "number" ? "true" : undefined}>Purchases</Link>

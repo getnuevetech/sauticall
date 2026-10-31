@@ -14,7 +14,7 @@ export default async function NewTicketPage({ searchParams }: { searchParams: Pr
       <p><Link href="/admin/tickets">Ticket desk</Link></p>
       <h2>New ticket</h2>
       <p>Search a registered customer by email, give the case a title, and choose what it is about. The ticket number is assigned when you save it, in the form SC-1.</p>
-      {params.error ? <p className="form-feedback">{params.error}</p> : null}
+      {params.error ? <p className="form-feedback form-error" role="alert">{params.error}</p> : null}
       {topics.length === 0 ? <p>Add a category under Queues and email before opening a ticket.</p> : (
         <form className="contact-form" action={createAdminTicket}>
           <CustomerEmailPicker />

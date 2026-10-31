@@ -14,6 +14,15 @@ export function carrierDidRef(did: string) {
   return ten ? `voipms:${ten}` : "";
 }
 
+export function orderTimedOut(message: string) {
+  return /did not answer within/i.test(message);
+}
+
+export function orderRecord(result: { ok: boolean; pending?: boolean }, did: string) {
+  const placed = Boolean(result.ok || result.pending);
+  return { status: placed ? "ordered" as const : "exception" as const, providerRef: placed ? carrierDidRef(did) : "" };
+}
+
 export function numberIsBought(status: string, providerRef: string, did: string) {
   const ref = carrierDidRef(did);
   return (status === "ordered" || status === "completed") && Boolean(ref) && providerRef === ref;

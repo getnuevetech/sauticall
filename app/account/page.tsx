@@ -14,6 +14,8 @@ export default async function AccountHome() {
   const user = await guardAccount();
   const usage = accountUsage(user.id);
   const plan = usage.plan;
+  const { publishBoughtNumbers } = await import("@/lib/lines");
+  publishBoughtNumbers(user.id);
   const lines = getDb().prepare("SELECT status FROM phone_lines WHERE user_id = ?").all(user.id) as Line[];
   const numbers = lines.filter((line) => line.status !== "not_on_carrier").length;
   const people = (getDb().prepare("SELECT COUNT(*) AS n FROM pbx_extensions WHERE user_id = ? AND status != 'removed'").get(user.id) as { n: number }).n;
@@ -36,7 +38,7 @@ export default async function AccountHome() {
   const created = getDb().prepare("SELECT created_at FROM users WHERE id = ?").get(user.id) as { created_at: string } | undefined;
   const requests = getDb().prepare("SELECT kind, status, created_at FROM account_requests WHERE user_id = ? ORDER BY id DESC LIMIT 4").all(user.id) as { kind: string; status: string; created_at: string }[];
   const check = verificationStatus(user.id);
-  const missing = [check.emailVerified ? "" : "email", check.phoneVerified ? "" : "mobile number", check.addressSaved ? "" : "address"].filter(Boolean);
+  const missing = [check.emailRequired && !check.emailVerified ? "email" : "", check.smsRequired && !check.phoneVerified ? "mobile number" : "", check.addressSaved ? "" : "address"].filter(Boolean);
   const activity: Activity[] = [
     { title: "Account created", detail: "Your workspace is ready to set up.", at: created?.created_at || "" },
     ...requests.map((request) => ({ title: request.kind === "number" ? "Number request" : request.kind === "port" ? "Number transfer" : "Request saved", detail: request.status, at: request.created_at })),

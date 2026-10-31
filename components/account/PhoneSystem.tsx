@@ -53,6 +53,7 @@ export function PhoneSystem({
   needsCode,
   hasAuthenticator,
   notice,
+  noticeError = false,
 }: {
   initialTab: string;
   company: string;
@@ -77,6 +78,7 @@ export function PhoneSystem({
   needsCode: boolean;
   hasAuthenticator: boolean;
   notice: string;
+  noticeError?: boolean;
 }) {
   const tabs = ["users", "routing", "rings", "queues", "devices", "settings"];
   const [tab, setTab] = useState(tabs.includes(initialTab) ? initialTab : "users");
@@ -117,7 +119,7 @@ export function PhoneSystem({
           <p>Manage your team, extensions, and how calls reach your business.</p>
         </div>
       </header>
-      {notice ? <p className="form-feedback">{notice}</p> : null}
+      {notice ? <p className={noticeError ? "form-feedback form-error" : "form-feedback"} role={noticeError ? "alert" : "status"}>{notice}</p> : null}
       {!hasPlan ? (
         <section className="num-card"><p>Choose a plan before people can be added. <Link href="/account/billing/plan">View plans</Link></p></section>
       ) : (
@@ -257,7 +259,7 @@ export function PhoneSystem({
                             <p><span>AI extension</span><strong>{selected.aiRole ? `${selected.aiName || "Named on the AI page"} · ${aiChoices.find((item) => item.code === selected.aiRole)?.label || selected.aiRole}` : "Ordinary extension"}</strong></p>
                           </>
                         )}
-                        {selected.welcome ? <p>{selected.welcome}</p> : null}
+                        {selected.welcome ? <p className={selected.status === "failed" ? "form-error" : undefined} role={selected.status === "failed" ? "alert" : undefined}>{selected.welcome}</p> : null}
                         {!connected ? <div className="pbx-callout"><Icon name="phone" size={16} /> External calling requires an active business number.</div> : null}
                         {selected.status !== "removed" ? (
                           <div className="pbx-panel-actions">

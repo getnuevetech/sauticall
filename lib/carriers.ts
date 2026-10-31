@@ -60,6 +60,7 @@ function voipmsEndpoint(value: string) {
 
 export const VOIPMS_READ_MS = 12000;
 export const VOIPMS_WRITE_MS = 20000;
+export const VOIPMS_ORDER_MS = 60000;
 
 export async function callVoipms(method: string, params: Record<string, string>, timeoutMs = 5000) {
   try {
@@ -185,7 +186,7 @@ export async function orderDid(did: string, routingOverride?: string, resellerAc
     dialtime,
     cnam: connection.public.cnam === "1" ? "1" : "0",
     billing_type: connection.public.billing_type === "2" ? "2" : "1",
-  }, VOIPMS_WRITE_MS).then((result) => result.ok || pop === savedPop ? result : { ...result, message: `${result.message} (POP ${savedPop} sent as ${pop})` });
+  }, VOIPMS_ORDER_MS).then((result) => result.ok || pop === savedPop ? result : { ...result, message: `${result.message} (POP ${savedPop} sent as ${pop})` });
 }
 
 export async function submitPort(params: Record<string, string>) {
