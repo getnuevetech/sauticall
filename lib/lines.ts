@@ -12,7 +12,9 @@ import { manualTrunkNote, mentionsDelta, readTrunkIdentity, redactProvisioning, 
 import { shownAccountName } from "./pbx-user";
 import { carrierDidRef, numberIsBought, orderTimedOut } from "./number-order";
 import { automaticStopNote, trunkMayAutoTry } from "./trunk-tries";
-import { inboundRuleFound, outboundRuleFound, portNumbers } from "./trunk-routes";
+import { inboundRuleAttempts, trunkRoutePatch, trunkStatusNote } from "./trunk-route";
+import { ensureTrunkDefaults } from "./trunk-prereq";
+import { inboundRuleFound, outboundAssignedToDepartment, outboundRuleFound, outboundRuleId, portNumbers, trunkDepartmentLimit } from "./trunk-routes";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
 
@@ -33,9 +35,33 @@ function hideSecret(message: string, secret: string) {
   return redactProvisioning(message, [secret]);
 }
 
-function saveWaiting(lineId: number, trunkId: number, trunkNumber: string, routes: boolean, note: string) {
-  getDb().prepare("UPDATE phone_lines SET trunk_id = ?, trunk_number = ?, trunk_routes = ?, status = 'trunk_waiting', last_message = ? WHERE id = ?")
-    .run(trunkId, trunkNumber, routes ? 1 : 0, note.slice(0, 2000), lineId);
+function saveTrunkState(lineId: number, input: {
+  trunkId: number;
+  trunkNumber: string;
+  inbound: boolean;
+  outbound: boolean;
+  departmentLimited: boolean;
+  ruleGroup: boolean;
+  routeLabel: string;
+  note: string;
+}) {
+  const routes = input.inbound && input.outbound && input.departmentLimited && input.ruleGroup ? 1 : 0;
+  getDb().prepare(
+    `UPDATE phone_lines
+     SET trunk_id = ?, trunk_number = ?, trunk_routes = ?, trunk_inbound = ?, trunk_outbound = ?, trunk_department = ?, trunk_rule_group = ?, route_label = ?, status = 'trunk_waiting', last_message = ?
+     WHERE id = ?`,
+  ).run(
+    input.trunkId,
+    input.trunkNumber,
+    routes,
+    input.inbound ? 1 : 0,
+    input.outbound ? 1 : 0,
+    input.departmentLimited ? 1 : 0,
+    input.ruleGroup ? 1 : 0,
+    input.routeLabel.slice(0, 120),
+    input.note.slice(0, 2000),
+    lineId,
+  );
 }
 
 function openTask(lineId: number, userId: number, did: string, note: string) {
@@ -59,30 +85,77 @@ function extensionSpan(userId: number) {
   return { from: String(range.from), to: String(range.to) };
 }
 
-async function addOutboundRule(input: { name: string; trunkId: number; callerId: string; from: string; to: string }) {
+async function addOutboundRule(input: { name: string; trunkId: number; callerId: string; from: string; to: string; groupId?: number }) {
   const listed = await pbxRequest("OutboundRules?$select=Priority&$top=100");
   const ruleBody = outboundRuleBody({ ...input, priority: nextOutboundPriority(listed.body) });
-  let created = await pbxWrite("OutboundRules", {
-    method: "POST",
-    body: ruleBody,
-  });
+  let created = await pbxWrite("OutboundRules", { method: "POST", body: ruleBody });
   if (!created.ok && mentionsDelta(created.message || "")) {
     created = await pbxWrite("OutboundRules", {
       method: "POST",
-      body: wrapCollections(ruleBody, ["Routes", "DNRanges"]),
+      body: wrapCollections(ruleBody, ["Routes", "DNRanges", "GroupIds"]),
     });
+  }
+  if (!created.ok && input.groupId) {
+    const { GroupIds: _groupIds, ...withoutGroup } = ruleBody;
+    created = await pbxWrite("OutboundRules", { method: "POST", body: withoutGroup });
+    if (!created.ok && mentionsDelta(created.message || "")) {
+      created = await pbxWrite("OutboundRules", { method: "POST", body: wrapCollections(withoutGroup, ["Routes", "DNRanges"]) });
+    }
   }
   const id = idFromPbx(created.body, created.location);
   if (!created.ok && /duplicate|already exists/i.test(created.message || "")) {
-    return { ok: true, message: "An outbound rule for this number is already on the phone system. Its extension limit was not changed." };
+    const listedRules = await pbxRequest("OutboundRules?$top=100");
+    const existingId = listedRules.ok ? outboundRuleId(listedRules.body, input.trunkId, input.from, input.to) : 0;
+    let assigned = false;
+    if (existingId && input.groupId) {
+      let patched = await pbxWrite(`OutboundRules(${existingId})`, { method: "PATCH", body: { GroupIds: [input.groupId] } });
+      if (!patched.ok && mentionsDelta(patched.message || "")) {
+        patched = await pbxWrite(`OutboundRules(${existingId})`, {
+          method: "PATCH",
+          body: { GroupIds: { "@odata.type": "#Collection(Int32)", delta: [input.groupId] } },
+        });
+      }
+      assigned = patched.ok;
+    }
+    return {
+      ok: true,
+      assigned,
+      message: assigned
+        ? "An outbound rule for this number is already on the phone system. It is assigned to the department."
+        : "An outbound rule for this number is already on the phone system. Its department assignment was not changed.",
+    };
   }
-  if (!created.ok || !id) return { ok: false, message: created.message || "3CX did not add the outbound rule." };
+  if (!created.ok || !id) return { ok: false, assigned: false, message: created.message || "3CX did not add the outbound rule." };
   const read = await pbxRequest(`OutboundRules(${id})`);
   if (outboundScopeVerdict(read.ok ? read.body : created.body, input.from, input.to) !== "scoped") {
     await pbxRequest(`OutboundRules(${id})`, { method: "DELETE" });
-    return { ok: false, message: `3CX did not confirm the outbound rule is limited to extensions ${input.from}–${input.to}. The rule was removed.` };
+    return { ok: false, assigned: false, message: `3CX did not confirm the outbound rule is limited to extensions ${input.from}–${input.to}. The rule was removed.` };
   }
-  return { ok: true, message: `Outbound calls for extensions ${input.from}–${input.to} use this number.` };
+  let assigned = Boolean(input.groupId) && outboundAssignedToDepartment(read.ok ? read.body : created.body, input.trunkId, input.from, input.to, input.groupId || 0);
+  if (input.groupId && !assigned) {
+    let patched = await pbxWrite(`OutboundRules(${id})`, { method: "PATCH", body: { GroupIds: [input.groupId] } });
+    if (!patched.ok && mentionsDelta(patched.message || "")) {
+      patched = await pbxWrite(`OutboundRules(${id})`, {
+        method: "PATCH",
+        body: { GroupIds: { "@odata.type": "#Collection(Int32)", delta: [input.groupId] } },
+      });
+    }
+    assigned = patched.ok;
+  }
+  const scope = `Outbound calls for extensions ${input.from}–${input.to} use this number.`;
+  const groupNote = !input.groupId ? "" : assigned ? " The outbound rule is assigned to the department." : " The outbound rule is not assigned to the department yet.";
+  return { ok: true, assigned, message: `${scope}${groupNote}` };
+}
+
+async function addInboundRule(input: { name: string; did: string; trunkId: number; to: "Extension" | "RingGroup"; number: string }) {
+  let last = "3CX did not add the inbound route.";
+  for (const body of inboundRuleAttempts(input)) {
+    const rule = await pbxWrite("InboundRules", { method: "POST", body });
+    if (rule.ok) return { ok: true, message: "The inbound route is on 3CX." };
+    if (/duplicate|already exists/i.test(`${rule.message} ${rule.code || ""}`)) return { ok: true, message: "The inbound route is already on the phone system." };
+    last = rule.message || last;
+  }
+  return { ok: false, message: last };
 }
 
 function trunkSeed(body: unknown) {
@@ -96,23 +169,34 @@ export async function attachTrunk(lineId: number) {
   const line = getDb().prepare("SELECT * FROM phone_lines WHERE id = ?").get(lineId) as Line | undefined;
   if (!line) return { ok: false, message: "That line was not found." };
   if (line.status === "trunk_live" && line.trunk_id) return { ok: true, message: "This number is already a trunk on the phone system." };
-  const sub = getSubaccount(line.user_id);
-  const span = extensionSpan(line.user_id);
-  if (!sub) {
-    const note = `VoIP.ms has no SIP account for this customer, so the number cannot be routed yet. Create the line account, then add the 3CX trunk, inbound route to extension ${extensionFor(line.user_id)}, and an outbound rule for extensions ${span.from}–${span.to}.`;
+  const prepared = await ensureTrunkDefaults(line.user_id);
+  if (!prepared.ok) {
+    const note = line.trunk_id
+      ? `${prepared.message} 3CX trunk id ${line.trunk_id}${line.trunk_number ? `, internal number ${line.trunk_number}` : ""} is already saved. Routing was not changed.`
+      : `${prepared.message} The trunk was not added.`;
     openTask(line.id, line.user_id, line.did, note);
-    return { ok: false, message: note };
+    recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
+    return { ok: false, message: note.slice(0, 500) };
+  }
+  const sub = getSubaccount(line.user_id);
+  const span = { from: prepared.from, to: prepared.to };
+  const extension = prepared.extensionNumber;
+  const company = prepared.departmentName;
+  const routeLabel = prepared.target.label;
+  if (!sub) {
+    const note = `Department ${company} is on 3CX. ${routeLabel} is ready. VoIP.ms has no SIP account for this customer, so the trunk was not added. After the SIP account exists, add the trunk, set the default route to ${routeLabel} for office hours and after hours, limit the trunk to ${company}, and add an outbound rule for extensions ${span.from}–${span.to} assigned to ${company}.`;
+    openTask(line.id, line.user_id, line.did, note);
+    getDb().prepare("UPDATE phone_lines SET route_label = ? WHERE id = ?").run(routeLabel.slice(0, 120), line.id);
+    return { ok: false, message: note.slice(0, 500) };
   }
   if (!flagOn("pbx.live_trunk")) {
-    const note = `Adding trunks on the phone system is turned off. VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"} is ready. Add this number as a SIP trunk on the 3CX server, route inbound to extension ${extensionFor(line.user_id)}, and add an outbound rule limited to extensions ${span.from}–${span.to}.`;
+    const note = `Adding trunks on the phone system is turned off. Department ${company} is on 3CX and ${routeLabel} is ready. VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"} is ready. Add the SIP trunk, set the default route to ${routeLabel} for office hours and after hours, limit the trunk to ${company}, and add an outbound rule for extensions ${span.from}–${span.to} assigned to ${company}.`;
     openTask(line.id, line.user_id, line.did, note);
-    return { ok: false, message: note };
+    getDb().prepare("UPDATE phone_lines SET route_label = ? WHERE id = ?").run(routeLabel.slice(0, 120), line.id);
+    return { ok: false, message: note.slice(0, 500) };
   }
   const template = trunkTemplateName(getConnection("3cx").public.trunk_template || "");
   const number = trunkDialedNumber(line.did);
-  const department = getDb().prepare("SELECT xapi_id, name FROM pbx_departments WHERE user_id = ?").get(line.user_id) as { xapi_id: number; name: string } | undefined;
-  const extension = extensionFor(line.user_id);
-  const company = department?.name || departmentName(line.user_id);
   const gatewayName = `${company || "SautiCall"} - VoIP.ms ${number}`.replace(/'/g, "").slice(0, 80);
   let trunkId = line.trunk_id || 0;
   if (trunkId) {
@@ -137,6 +221,7 @@ export async function attachTrunk(lineId: number) {
       to: span.to,
       account: sub.account,
       host: sub.sip_host || "",
+      routeLabel,
       reason: [kind, reason, posted].filter(Boolean).join(" "),
     }), sub.password);
     openTask(line.id, line.user_id, line.did, note);
@@ -171,66 +256,94 @@ export async function attachTrunk(lineId: number) {
   const createdIdentity = readTrunkIdentity(created.body);
   if (!created.ok || !trunkId) return handoff(created.message || "3CX did not add the trunk.", postedBody || undefined);
   let trunkNumber = createdIdentity.number || line.trunk_number || "";
-  let departmentNote = "";
-  if (department?.xapi_id) {
-    const group = trunkGroupBody(department.xapi_id);
-    let grouped = await pbxWrite(`Trunks(${trunkId})`, { method: "PATCH", body: group });
-    if (!grouped.ok && grouped.status === 400) {
-      grouped = await pbxWrite(`Trunks(${trunkId})`, {
-        method: "PATCH",
-        body: { Groups: { "@odata.type": "#Collection(Pbx.UserGroup)", delta: group.Groups } },
-      });
-    }
-    if (!grouped.ok) departmentNote = ` The trunk is not limited to ${department.name} yet.`;
+  const group = trunkGroupBody(prepared.departmentId);
+  let grouped = await pbxWrite(`Trunks(${trunkId})`, { method: "PATCH", body: group });
+  if (!grouped.ok && (grouped.status === 400 || mentionsDelta(grouped.message || ""))) {
+    grouped = await pbxWrite(`Trunks(${trunkId})`, {
+      method: "PATCH",
+      body: { Groups: { "@odata.type": "#Collection(Pbx.UserGroup)", delta: group.Groups } },
+    });
   }
-  let rule = await pbxWrite("InboundRules", {
-    method: "POST",
-    body: {
-      Name: `SautiCall ${line.did}`,
-      DID: number,
-      TrunkId: trunkId,
-      OfficeHoursDestination: { To: "Extension", Number: extension, External: "" },
-      OutOfOfficeHoursDestination: { To: "VoiceMail", Number: extension, External: "" },
-    },
+  const departmentLimited = grouped.ok;
+  const routed = await pbxWrite(`Trunks(${trunkId})`, {
+    method: "PATCH",
+    body: trunkRoutePatch({ did: number, to: prepared.target.to, number: prepared.target.number }),
   });
-  if (!rule.ok && /duplicate|already exists/i.test(`${rule.message} ${rule.code || ""}`)) {
-    rule = { ...rule, ok: true, message: "The inbound route is already on the phone system." };
-  }
-  if (!rule.ok) {
-    const note = `3CX trunk id ${trunkId}${trunkNumber ? `, internal number ${trunkNumber}` : ""}. Inbound calls to extension ${extension} and outbound calls for extensions ${span.from}–${span.to} still need to be finished. VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"}. ${hideSecret(rule.message, sub.password)}`;
-    saveWaiting(line.id, trunkId, trunkNumber, false, note);
-    openTask(line.id, line.user_id, line.did, note);
-    recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
-    return { ok: false, message: "The trunk exists, but inbound and outbound still need a person." };
-  }
-  const outbound = await addOutboundRule({ name: `SautiCall ${line.did}`, trunkId, callerId: number, from: span.from, to: span.to });
-  if (!outbound.ok) {
-    const note = `3CX trunk id ${trunkId}${trunkNumber ? `, internal number ${trunkNumber}` : ""}. Inbound calls go to extension ${extension}. ${outbound.message} VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"}.`;
-    saveWaiting(line.id, trunkId, trunkNumber, false, note);
-    openTask(line.id, line.user_id, line.did, note);
-    recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
-    return { ok: false, message: "Inbound is connected. Outbound still needs the team." };
-  }
-  const detail = await pbxRequest(`Trunks(${trunkId})?$select=Id,Number,IsOnline`);
+  const routeOnTrunk = routed.ok || /duplicate|already exists/i.test(routed.message || "");
+  const inbound = await addInboundRule({
+    name: `SautiCall ${line.did}`,
+    did: number,
+    trunkId,
+    to: prepared.target.to,
+    number: prepared.target.number,
+  });
+  const inboundOnPbx = inbound.ok || routeOnTrunk;
+  const outbound = await addOutboundRule({
+    name: `SautiCall ${line.did}`,
+    trunkId,
+    callerId: number,
+    from: span.from,
+    to: span.to,
+    groupId: prepared.departmentId,
+  });
+  const detail = await pbxRequest(`Trunks(${trunkId})?$select=Id,Number,IsOnline,Groups`);
   const identity = readTrunkIdentity(detail.ok ? detail.body : created.body);
   if (identity.number) trunkNumber = identity.number;
-  const verdict = trunkProvisionVerdict({ registered: identity.registered, inbound: true, outbound: true, callsConfirmed: false });
-  const note = `3CX trunk id ${trunkId}${trunkNumber ? `, internal number ${trunkNumber}` : ""}. ${outbound.message}${departmentNote} ${verdict.reason}`;
-  saveWaiting(line.id, trunkId, trunkNumber, true, note);
+  const limitRead = detail.ok ? trunkDepartmentLimit(detail.body, prepared.departmentId) : "unknown";
+  const limited = limitRead === "yes" || (limitRead === "unknown" && departmentLimited);
+  const verdict = trunkProvisionVerdict({ registered: identity.registered, inbound: inboundOnPbx, outbound: outbound.ok, callsConfirmed: false });
+  const detailText = [
+    routeOnTrunk ? "The trunk default route is saved." : `The trunk default route was not saved. ${routed.message || ""}`.trim(),
+    inbound.ok ? inbound.message : `The DID inbound route was not saved. ${inbound.message}`,
+    outbound.ok ? outbound.message : outbound.message,
+    limited ? "" : grouped.message || `The trunk is not limited to ${company}.`,
+    verdict.reason,
+  ].filter(Boolean).join(" ");
+  const note = hideSecret(trunkStatusNote({
+    trunkId,
+    trunkNumber,
+    departmentName: company,
+    departmentOnPbx: true,
+    extension,
+    extensionOnPbx: true,
+    routeLabel,
+    routeOnPbx: true,
+    inboundOnPbx,
+    outboundOnPbx: outbound.ok,
+    outboundAssigned: outbound.ok && outbound.assigned,
+    departmentLimited: limited,
+    from: span.from,
+    to: span.to,
+    account: sub.account,
+    host: sub.sip_host || "",
+    detail: detailText,
+  }), sub.password);
+  saveTrunkState(line.id, {
+    trunkId,
+    trunkNumber,
+    inbound: inboundOnPbx,
+    outbound: outbound.ok,
+    departmentLimited: limited,
+    ruleGroup: outbound.ok && outbound.assigned,
+    routeLabel,
+    note,
+  });
   openTask(line.id, line.user_id, line.did, note);
-  return { ok: true, message: note.slice(0, 500) };
+  const complete = inboundOnPbx && outbound.ok && outbound.assigned && limited;
+  if (!complete) recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
+  return { ok: complete, message: note.slice(0, 500) };
 }
 
 export async function confirmTrunkCalls(lineId: number) {
   const line = getDb().prepare("SELECT * FROM phone_lines WHERE id = ?").get(lineId) as Line | undefined;
   if (!line) return { ok: false, message: "That line was not found." };
   if (!line.trunk_id) return { ok: false, message: "Save the 3CX trunk before recording test calls." };
-  if (!line.trunk_routes) return { ok: false, message: "Inbound and outbound are not both saved yet." };
+  if (!line.trunk_routes) return { ok: false, message: "The inbound route, the outbound rule assigned to the department, and the department limit are not all saved yet." };
   const detail = await pbxRequest(`Trunks(${line.trunk_id})?$select=Id,Number,IsOnline`);
   const identity = readTrunkIdentity(detail.ok ? detail.body : null);
   if (!detail.ok || !identity.registered) {
     const note = redactProvisioning(detail.message || "3CX does not show this trunk as registered.", []);
-    saveWaiting(line.id, line.trunk_id, identity.number || line.trunk_number || "", true, `3CX trunk id ${line.trunk_id} is not registered. ${note} Test calls were not recorded.`);
+    getDb().prepare("UPDATE phone_lines SET trunk_number = ?, status = 'trunk_waiting', last_message = ? WHERE id = ?").run(identity.number || line.trunk_number || "", `3CX trunk id ${line.trunk_id} is not registered. ${note} Test calls were not recorded.`.slice(0, 2000), line.id);
     return { ok: false, message: "3CX does not show this trunk as registered. Test calls were not recorded, and provisioning stays incomplete." };
   }
   const trunkNumber = identity.number || line.trunk_number || "";
@@ -412,30 +525,74 @@ export async function connectOwnedNumbers(userId: number, sourceRequestId: numbe
 }
 
 export async function checkTrunkRouting(lineId: number) {
-  const line = getDb().prepare("SELECT * FROM phone_lines WHERE id = ?").get(lineId) as Line | undefined;
+  const line = getDb().prepare("SELECT * FROM phone_lines WHERE id = ?").get(lineId) as (Line & { trunk_department: number; trunk_rule_group: number; route_label: string }) | undefined;
   if (!line) return { ok: false, message: "That line was not found." };
   if (!line.trunk_id) return { ok: false, message: "Save the 3CX trunk before checking routes." };
-  const span = extensionSpan(line.user_id);
-  const detail = await pbxRequest(`Trunks(${line.trunk_id})?$select=Id,Number,IsOnline`);
+  const department = getDb().prepare("SELECT name, xapi_id, number_from, number_to FROM pbx_departments WHERE user_id = ?").get(line.user_id) as { name: string; xapi_id: number; number_from: string; number_to: string } | undefined;
+  const extension = getDb().prepare("SELECT number, xapi_id, ai_role FROM pbx_extensions WHERE user_id = ? AND status != 'removed' ORDER BY id LIMIT 1").get(line.user_id) as { number: string; xapi_id: number; ai_role: string } | undefined;
+  const ring = getDb().prepare("SELECT name, number, xapi_id FROM call_groups WHERE user_id = ? AND kind = 'ring' AND xapi_id != 0 ORDER BY answers DESC, id LIMIT 1").get(line.user_id) as { name: string; number: string; xapi_id: number } | undefined;
+  const span = department?.number_from && department.number_to ? { from: department.number_from, to: department.number_to } : extensionSpan(line.user_id);
+  const detail = await pbxRequest(`Trunks(${line.trunk_id})?$select=Id,Number,IsOnline,Groups,RoutingRules`);
   const identity = readTrunkIdentity(detail.ok ? detail.body : null);
   const inbound = await pbxRequest("InboundRules?$top=100");
   const outbound = await pbxRequest("OutboundRules?$top=100");
-  const inboundFound = inbound.ok && inboundRuleFound(inbound.body, line.trunk_id, line.did);
+  const inboundFound = (inbound.ok && inboundRuleFound(inbound.body, line.trunk_id, line.did)) || (detail.ok && inboundRuleFound(detail.body, line.trunk_id, line.did));
   const outboundFound = outbound.ok && outboundRuleFound(outbound.body, line.trunk_id, span.from, span.to);
+  const assigned = Boolean(outbound.ok && department?.xapi_id && outboundAssignedToDepartment(outbound.body, line.trunk_id, span.from, span.to, department.xapi_id));
+  const limit = detail.ok && department?.xapi_id ? trunkDepartmentLimit(detail.body, department.xapi_id) : "unknown";
+  const departmentLimited = limit === "yes" || (limit === "unknown" && line.trunk_department === 1);
+  const outboundAssigned = outbound.ok ? assigned : line.trunk_rule_group === 1;
+  const routeLabel = line.route_label || (extension?.ai_role === "receptionist" && extension.number ? `AI receptionist extension ${extension.number}` : ring ? `Ring group ${ring.name} · ${ring.number}` : "");
   const registered = Boolean(detail.ok && identity.registered);
-  const parts = [
+  const readDetail = [
     detail.ok ? (registered ? `3CX trunk ${line.trunk_id} is registered.` : `3CX trunk ${line.trunk_id} is not registered.`) : `3CX did not confirm trunk ${line.trunk_id}. ${detail.message}`,
-    inbound.ok ? (inboundFound ? "The inbound route is on 3CX." : "3CX did not return an inbound route for this number.") : `Inbound rules could not be read. ${inbound.message}`,
-    outbound.ok ? (outboundFound ? `The outbound rule for extensions ${span.from}–${span.to} is on 3CX.` : "3CX did not return an outbound rule for this trunk and extension range.") : `Outbound rules could not be read. ${outbound.message}`,
+    inbound.ok || detail.ok ? (inboundFound ? "The inbound route was read from 3CX." : "3CX did not return an inbound route for this number.") : `Inbound rules could not be read. ${inbound.message}`,
+    outbound.ok ? (outboundFound ? `The outbound rule for extensions ${span.from}–${span.to} was read from 3CX.` : "3CX did not return an outbound rule for this trunk and extension range.") : `Outbound rules could not be read. ${outbound.message}`,
     "No call was placed.",
-  ];
-  const note = redactProvisioning(parts.join(" "), []);
+  ].join(" ");
+  const note = redactProvisioning(trunkStatusNote({
+    trunkId: line.trunk_id,
+    trunkNumber: identity.number || line.trunk_number || "",
+    departmentName: department?.name || departmentName(line.user_id),
+    departmentOnPbx: Boolean(department?.xapi_id),
+    extension: extension?.number || extensionFor(line.user_id),
+    extensionOnPbx: Boolean(extension?.xapi_id),
+    routeLabel,
+    routeOnPbx: Boolean((extension?.ai_role === "receptionist" && extension.xapi_id) || ring?.xapi_id),
+    inboundOnPbx: inboundFound,
+    outboundOnPbx: outboundFound,
+    outboundAssigned,
+    departmentLimited,
+    from: span.from,
+    to: span.to,
+    account: "",
+    host: "",
+    detail: readDetail,
+  }), []);
   if (line.status === "trunk_live" || line.status === "trunk_done") {
-    getDb().prepare("UPDATE phone_lines SET trunk_number = ?, last_message = ? WHERE id = ?").run(identity.number || line.trunk_number || "", note, line.id);
-    return { ok: registered && inboundFound && outboundFound, message: note };
+    getDb().prepare("UPDATE phone_lines SET trunk_number = ?, trunk_inbound = ?, trunk_outbound = ?, trunk_department = ?, trunk_rule_group = ?, route_label = ?, last_message = ? WHERE id = ?").run(
+      identity.number || line.trunk_number || "",
+      inboundFound ? 1 : 0,
+      outboundFound ? 1 : 0,
+      departmentLimited ? 1 : 0,
+      outboundAssigned ? 1 : 0,
+      routeLabel.slice(0, 120),
+      note,
+      line.id,
+    );
+    return { ok: registered && inboundFound && outboundFound && outboundAssigned && departmentLimited, message: note };
   }
-  saveWaiting(line.id, line.trunk_id, identity.number || line.trunk_number || "", inboundFound && outboundFound, note);
-  return { ok: registered && inboundFound && outboundFound, message: note };
+  saveTrunkState(line.id, {
+    trunkId: line.trunk_id,
+    trunkNumber: identity.number || line.trunk_number || "",
+    inbound: inboundFound,
+    outbound: outboundFound,
+    departmentLimited,
+    ruleGroup: outboundAssigned,
+    routeLabel,
+    note,
+  });
+  return { ok: registered && inboundFound && outboundFound && outboundAssigned && departmentLimited, message: note };
 }
 
 function storedMonthly(requestId: number, fallback: string) {

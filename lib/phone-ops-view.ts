@@ -37,6 +37,62 @@ export function personState(status: string) {
   return { label: "Pending", tone: "muted" as const, detail: "Not on the phone system yet" };
 }
 
+export function trunkProgress(input: {
+  hasAccount: boolean;
+  departmentOnPbx: boolean;
+  extensionOnPbx: boolean;
+  routeLabel: string;
+  routeOnPbx: boolean;
+  trunkId: number;
+  status: string;
+  inboundOnPbx: boolean;
+  outboundOnPbx: boolean;
+  outboundAssigned: boolean;
+  departmentLimited: boolean;
+}) {
+  const provider = input.hasAccount ? "Ready" : "Not ready";
+  const department = input.departmentOnPbx ? "On 3CX" : "Not on 3CX";
+  const extension = input.extensionOnPbx ? "On 3CX" : "Not on 3CX";
+  const route = input.routeOnPbx ? (input.routeLabel || "On 3CX") : "Not created";
+  let trunk = "Not started";
+  if (input.status === "trunk_live") trunk = "Registered";
+  else if (input.status === "trunk_done") trunk = "Recorded manually";
+  else if (input.trunkId) trunk = "Saved";
+  else if (input.status === "trunk_waiting") trunk = "Not created";
+  const inbound = input.inboundOnPbx ? "On 3CX" : "Not on 3CX";
+  const outbound = !input.outboundOnPbx ? "Not on 3CX" : input.outboundAssigned ? "On 3CX, assigned to the department" : "On 3CX, not assigned to the department";
+  const limit = input.departmentLimited ? "Limited to the department" : "Not limited to the department";
+  return { provider, department, extension, route, trunk, inbound, outbound, limit };
+}
+
+export function trunkTone(label: string) {
+  if (
+    label === "Ready"
+    || label === "Registered"
+    || label === "On 3CX"
+    || label === "Limited to the department"
+    || label === "On 3CX, assigned to the department"
+    || label.startsWith("Ring group")
+    || label.startsWith("AI receptionist")
+  ) return "ok" as const;
+  if (label === "Saved" || label === "Recorded manually") return "muted" as const;
+  return "bad" as const;
+}
+
+export function trunkAdminSummary(input: ReturnType<typeof trunkProgress>) {
+  const missing: string[] = [];
+  if (input.department !== "On 3CX") missing.push("the department");
+  if (input.extension !== "On 3CX") missing.push("the default extension");
+  if (input.route === "Not created") missing.push("the ring group or AI receptionist");
+  if (input.trunk === "Not created" || input.trunk === "Not started" || input.trunk === "Failed") missing.push("the 3CX trunk");
+  if (input.inbound !== "On 3CX") missing.push("the inbound route");
+  if (input.outbound === "Not on 3CX") missing.push("the outbound rule");
+  if (input.outbound.startsWith("On 3CX, not assigned")) missing.push("the outbound rule assignment");
+  if (input.limit !== "Limited to the department") missing.push("the department limit");
+  if (!missing.length) return "Department, default route, inbound route, and outbound rule are on 3CX. The trunk stays incomplete until it is registered and an administrator records the test calls.";
+  return `Still missing: ${missing.join(", ")}.`;
+}
+
 export function trunkStep(input: { hasAccount: boolean; trunkId: number; status: string }) {
   const provider = input.hasAccount ? "Ready" : "Not ready";
   if (input.status === "trunk_live") return { provider, trunk: "Ready", routing: "Saved, not verified" };

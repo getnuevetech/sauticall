@@ -7,7 +7,7 @@ import { paidPlan } from "./pbx";
 import { shownAccountName } from "./pbx-user";
 import { trunkSubjectMatchesLine } from "./trunk-tries";
 
-export { companyMatches, formatDid, lineStatusLabel, maskCredential, personState, setupEmailState, setupLabel, setupStatus, trunkStep } from "./phone-ops-view";
+export { companyMatches, formatDid, lineStatusLabel, maskCredential, personState, setupEmailState, setupLabel, setupStatus, trunkAdminSummary, trunkProgress, trunkStep, trunkTone } from "./phone-ops-view";
 import { formatDid, lineStatusLabel, personState, setupStatus } from "./phone-ops-view";
 
 type Count = { user_id: number; status: string; n: number };
@@ -215,6 +215,14 @@ export type LineView = {
   extension: string;
   from: string;
   to: string;
+  routeLabel: string;
+  departmentOnPbx: boolean;
+  extensionOnPbx: boolean;
+  routeOnPbx: boolean;
+  inboundOnPbx: boolean;
+  outboundOnPbx: boolean;
+  outboundAssigned: boolean;
+  departmentLimited: boolean;
   sipUser: string;
   sipHost: string;
   hasAccount: boolean;
@@ -238,13 +246,17 @@ export type LoggedTrunkAttempt = {
 
 export function listLines(query = "", company = 0, status = "") {
   const rows = getDb().prepare(
-    `SELECT l.id, l.user_id, l.request_id, u.email, u.name, u.business_name, l.did, l.status, l.trunk_id, l.trunk_number, l.trunk_attempts, l.trunk_routes, l.last_message,
+    `SELECT l.id, l.user_id, l.request_id, u.email, u.name, u.business_name, l.did, l.status, l.trunk_id, l.trunk_number, l.trunk_attempts, l.trunk_routes, l.trunk_inbound, l.trunk_outbound, l.trunk_department, l.trunk_rule_group, l.route_label, l.last_message,
             l.e911_status, l.e911_message,
-            COALESCE(d.name, '') AS department, COALESCE(d.number_from, '') AS number_from, COALESCE(d.number_to, '') AS number_to,
+            COALESCE(d.name, '') AS department, COALESCE(d.xapi_id, 0) AS department_xapi, COALESCE(d.number_from, '') AS number_from, COALESCE(d.number_to, '') AS number_to,
             COALESCE(t.extension_number, '') AS extension_number, COALESCE(t.sip_user, '') AS sip_user, COALESCE(t.sip_host, '') AS sip_host,
             COALESCE(t.status, '') AS task_status, COALESCE(t.note, '') AS task_note,
             CASE WHEN s.user_id IS NULL THEN 0 ELSE 1 END AS has_account,
-            COALESCE(s.username, '') AS sub_user, COALESCE(s.sip_host, '') AS sub_host
+            COALESCE(s.username, '') AS sub_user, COALESCE(s.sip_host, '') AS sub_host,
+            COALESCE((SELECT number FROM pbx_extensions WHERE user_id = l.user_id AND status != 'removed' ORDER BY id LIMIT 1), '') AS owned_extension,
+            COALESCE((SELECT xapi_id FROM pbx_extensions WHERE user_id = l.user_id AND status != 'removed' ORDER BY id LIMIT 1), 0) AS extension_xapi,
+            COALESCE((SELECT ai_role FROM pbx_extensions WHERE user_id = l.user_id AND status != 'removed' ORDER BY id LIMIT 1), '') AS ai_role,
+            COALESCE((SELECT name || ' · ' || number FROM call_groups WHERE user_id = l.user_id AND kind = 'ring' AND xapi_id != 0 ORDER BY answers DESC, id LIMIT 1), '') AS ring_label
      FROM phone_lines l
      JOIN users u ON u.id = l.user_id
      LEFT JOIN pbx_departments d ON d.user_id = l.user_id
@@ -252,10 +264,12 @@ export function listLines(query = "", company = 0, status = "") {
      LEFT JOIN voip_subaccounts s ON s.user_id = l.user_id
      ORDER BY l.id DESC`,
   ).all() as {
-    id: number; user_id: number; request_id: number; email: string; name: string; business_name: string; did: string; status: string; trunk_id: number; trunk_number: string; trunk_attempts: number; trunk_routes: number; last_message: string;
-    e911_status: string; e911_message: string; department: string; number_from: string; number_to: string; extension_number: string;
+    id: number; user_id: number; request_id: number; email: string; name: string; business_name: string; did: string; status: string; trunk_id: number; trunk_number: string; trunk_attempts: number; trunk_routes: number; trunk_inbound: number; trunk_outbound: number; trunk_department: number; trunk_rule_group: number; route_label: string; last_message: string;
+    e911_status: string; e911_message: string; department: string; department_xapi: number; number_from: string; number_to: string; extension_number: string;
     sip_user: string; sip_host: string; task_status: string; task_note: string; has_account: number; sub_user: string; sub_host: string;
+    owned_extension: string; extension_xapi: number; ai_role: string; ring_label: string;
   }[];
+  const plan = readExtensionPlan();
   const needle = query.trim().toLowerCase();
   const visible = rows.filter((row) => {
     if (company && row.user_id !== company) return false;
@@ -275,9 +289,17 @@ export function listLines(query = "", company = 0, status = "") {
     trunkNumber: row.trunk_number || "",
     message: row.last_message || row.task_note,
     department: shownAccountName(row.department, row.business_name || "", row.name) || "Company name not set",
-    extension: row.extension_number,
-    from: row.number_from,
-    to: row.number_to,
+    extension: row.owned_extension || row.extension_number,
+    from: row.number_from || String(extensionRange(row.user_id, plan).from),
+    to: row.number_to || String(extensionRange(row.user_id, plan).to),
+    routeLabel: row.route_label || (row.ai_role === "receptionist" && row.owned_extension ? `AI receptionist extension ${row.owned_extension}` : row.ring_label ? `Ring group ${row.ring_label}` : ""),
+    departmentOnPbx: Number(row.department_xapi) > 0,
+    extensionOnPbx: Number(row.extension_xapi) > 0,
+    routeOnPbx: (row.ai_role === "receptionist" && Number(row.extension_xapi) > 0) || Boolean(row.ring_label),
+    inboundOnPbx: row.trunk_inbound === 1 || row.trunk_routes === 1,
+    outboundOnPbx: row.trunk_outbound === 1 || row.trunk_routes === 1,
+    outboundAssigned: row.trunk_rule_group === 1 || row.trunk_routes === 1,
+    departmentLimited: row.trunk_department === 1,
     sipUser: row.sip_user || row.sub_user,
     sipHost: row.sip_host || row.sub_host,
     hasAccount: row.has_account === 1,

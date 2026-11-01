@@ -1,10 +1,11 @@
-export function outboundRuleBody(input: { name: string; trunkId: number; callerId: string; from: string; to: string; priority: number }) {
+export function outboundRuleBody(input: { name: string; trunkId: number; callerId: string; from: string; to: string; priority: number; groupId?: number }) {
   return {
     Name: input.name,
     Prefix: "",
     Priority: input.priority,
     Routes: [{ TrunkId: input.trunkId, StripDigits: 0, Prepend: "", Append: "", CallerID: input.callerId }],
     DNRanges: [{ From: input.from, To: input.to }],
+    ...(input.groupId ? { GroupIds: [input.groupId] } : {}),
   };
 }
 
