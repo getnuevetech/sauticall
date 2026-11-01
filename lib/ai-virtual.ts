@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import type Database from "better-sqlite3";
+import { previewConversation } from "./ai-platform.ts";
 
 export const AI_ENGINES = ["SAUTICALL_PROGRAMMABLE", "THREE_CX_NATIVE"] as const;
 export type AiEngine = (typeof AI_ENGINES)[number];
@@ -221,7 +222,68 @@ export function ensureVirtualSchema(database: Database.Database) {
       verification_status TEXT NOT NULL DEFAULT 'open',
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS ai_prompt_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL UNIQUE,
+      role TEXT NOT NULL,
+      industry TEXT NOT NULL,
+      language TEXT NOT NULL,
+      body TEXT NOT NULL,
+      published INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS ai_knowledge_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      agent_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      origin TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ai_knowledge_chunks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      source_id INTEGER NOT NULL,
+      body TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ai_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      agent_id INTEGER NOT NULL,
+      prompt_version_id INTEGER NOT NULL DEFAULT 0,
+      pbx_call_id TEXT NOT NULL DEFAULT '',
+      state TEXT NOT NULL,
+      media_open INTEGER NOT NULL DEFAULT 0 CHECK (media_open = 0),
+      place_call INTEGER NOT NULL DEFAULT 0 CHECK (place_call = 0),
+      outcome TEXT NOT NULL DEFAULT '',
+      started_at TEXT NOT NULL,
+      ended_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS ai_tool_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      tool TEXT NOT NULL,
+      outcome TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ai_usage_ledger (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      session_id INTEGER NOT NULL UNIQUE,
+      billable_seconds INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
   `);
+  const agentCols = new Set((database.prepare("PRAGMA table_info(ai_agents)").all() as { name: string }[]).map((column) => column.name));
+  if (agentCols.size && !agentCols.has("business_summary")) database.exec("ALTER TABLE ai_agents ADD COLUMN business_summary TEXT NOT NULL DEFAULT ''");
+  if (agentCols.size && !agentCols.has("tone")) database.exec("ALTER TABLE ai_agents ADD COLUMN tone TEXT NOT NULL DEFAULT ''");
+  if (agentCols.size && !agentCols.has("voice_label")) database.exec("ALTER TABLE ai_agents ADD COLUMN voice_label TEXT NOT NULL DEFAULT ''");
+  if (agentCols.size && !agentCols.has("after_hours")) database.exec("ALTER TABLE ai_agents ADD COLUMN after_hours TEXT NOT NULL DEFAULT ''");
+  const template = database.prepare("INSERT INTO ai_prompt_templates (code, role, industry, language, body, published) VALUES (?, 'receptionist', ?, 'en-US', ?, 1) ON CONFLICT(code) DO NOTHING");
+  template.run("general_business", "General business", "Greeting: Thank you for calling. Ask the caller's name and reason. Answer only from approved company information. Offer an approved person when asked.");
+  template.run("after_hours", "After hours", "Greeting: Thank you for calling. The office is closed. Take a message or offer the after-hours destination. Do not promise a callback time that is not in the saved hours.");
   const insert = database.prepare("INSERT INTO pbx_capabilities (capability, status, observed_build, verified_at, evidence) VALUES (?, 'unverified', '', '', '') ON CONFLICT(capability) DO NOTHING");
   for (const capability of VIRTUAL_CAPABILITIES) insert.run(capability);
 }
@@ -260,6 +322,10 @@ export function saveVirtualAgent(database: Database.Database, input: {
   did: string;
   language: string;
   allowedTransfers: string[];
+  businessSummary?: string;
+  tone?: string;
+  voiceLabel?: string;
+  afterHours?: string;
   now: string;
 }) {
   ensureVirtualSchema(database);
@@ -281,15 +347,15 @@ export function saveVirtualAgent(database: Database.Database, input: {
   const existing = database.prepare("SELECT id FROM ai_agents WHERE user_id = ? AND name = ?").get(input.userId, name) as { id: number } | undefined;
   if (existing) {
     database.prepare(
-      `UPDATE ai_agents SET agent_type = ?, execution_engine = ?, language = ?, greeting = ?, instructions = ?, fallback_label = ?, did = ?, updated_at = ?, config_revision = config_revision + 1
+      `UPDATE ai_agents SET agent_type = ?, execution_engine = ?, language = ?, greeting = ?, instructions = ?, fallback_label = ?, did = ?, business_summary = ?, tone = ?, voice_label = ?, after_hours = ?, updated_at = ?, config_revision = config_revision + 1
        WHERE id = ? AND user_id = ? AND status != 'ACTIVE'`,
-    ).run(input.agentType, input.engine, input.language || "en-US", input.greeting.trim().slice(0, 1500), input.instructions.trim().slice(0, 4000), ringLabel(database, input.userId), did, input.now, existing.id, input.userId);
+    ).run(input.agentType, input.engine, input.language || "en-US", input.greeting.trim().slice(0, 1500), input.instructions.trim().slice(0, 4000), ringLabel(database, input.userId), did, (input.businessSummary || "").trim().slice(0, 1500), (input.tone || "").trim().slice(0, 40), (input.voiceLabel || "").trim().slice(0, 40), (input.afterHours || "").trim().slice(0, 200), input.now, existing.id, input.userId);
     return { ok: true as const, id: existing.id, agentType: input.agentType as AiAgentType, engine: input.engine as AiEngine };
   }
   const info = database.prepare(
-    `INSERT INTO ai_agents (user_id, name, agent_type, execution_engine, status, language, greeting, instructions, fallback_label, did, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(input.userId, name, input.agentType, input.engine, input.language || "en-US", input.greeting.trim().slice(0, 1500), input.instructions.trim().slice(0, 4000), ringLabel(database, input.userId), did, input.now, input.now);
+    `INSERT INTO ai_agents (user_id, name, agent_type, execution_engine, status, language, greeting, instructions, fallback_label, did, business_summary, tone, voice_label, after_hours, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(input.userId, name, input.agentType, input.engine, input.language || "en-US", input.greeting.trim().slice(0, 1500), input.instructions.trim().slice(0, 4000), ringLabel(database, input.userId), did, (input.businessSummary || "").trim().slice(0, 1500), (input.tone || "").trim().slice(0, 40), (input.voiceLabel || "").trim().slice(0, 40), (input.afterHours || "").trim().slice(0, 200), input.now, input.now);
   return { ok: true as const, id: Number(info.lastInsertRowid), agentType: input.agentType as AiAgentType, engine: input.engine as AiEngine };
 }
 
@@ -392,5 +458,62 @@ export function recordVirtualBinding(database: Database.Database, input: { userI
     certified: liveVirtualRoute({ status: route.binding_status, routeTarget: route.route_target, label: "" }).number !== "",
     message: customerAgentMessage("AWAITING_READBACK"),
   };
+}
+
+export function listPromptTemplates(database: Database.Database) {
+  ensureVirtualSchema(database);
+  return database.prepare("SELECT code, industry, body FROM ai_prompt_templates WHERE published = 1 ORDER BY id").all() as { code: string; industry: string; body: string }[];
+}
+
+export function saveKnowledge(database: Database.Database, input: { userId: number; agentId: number; body: string; now: string }) {
+  ensureVirtualSchema(database);
+  const owned = database.prepare("SELECT id FROM ai_agents WHERE id = ? AND user_id = ?").get(input.agentId, input.userId) as { id: number } | undefined;
+  if (!owned) return { ok: false as const, message: "That AI extension was not found on this account." };
+  const body = input.body.replace(/\0/g, "").trim().slice(0, 4000);
+  if (!body) return { ok: false as const, message: "Add the company information this receptionist may use." };
+  const source = database.prepare(
+    "INSERT INTO ai_knowledge_sources (user_id, agent_id, kind, origin, body, status, created_at) VALUES (?, ?, 'faq', 'customer', ?, 'approved', ?)",
+  ).run(input.userId, input.agentId, body, input.now);
+  database.prepare("INSERT INTO ai_knowledge_chunks (user_id, source_id, body) VALUES (?, ?, ?)").run(input.userId, Number(source.lastInsertRowid), body);
+  return { ok: true as const };
+}
+
+export function listKnowledge(database: Database.Database, userId: number, agentId: number) {
+  ensureVirtualSchema(database);
+  return database.prepare("SELECT id, body, created_at FROM ai_knowledge_sources WHERE user_id = ? AND agent_id = ? ORDER BY id DESC").all(userId, agentId) as { id: number; body: string; created_at: string }[];
+}
+
+export function pauseVirtualAgent(database: Database.Database, input: { userId: number; agentId: number; paused: boolean; now: string }) {
+  ensureVirtualSchema(database);
+  const agent = database.prepare("SELECT id, status FROM ai_agents WHERE id = ? AND user_id = ?").get(input.agentId, input.userId) as { id: number; status: string } | undefined;
+  if (!agent) return { ok: false as const, message: "That AI extension was not found on this account." };
+  const status = input.paused ? "PAUSED" : agent.status === "PAUSED" ? "REQUIRES_ADMIN_ACTION" : agent.status;
+  database.prepare("UPDATE ai_agents SET status = ?, updated_at = ? WHERE id = ?").run(status, input.now, agent.id);
+  database.prepare("UPDATE ai_did_assignments SET state = ? WHERE agent_id = ?").run(input.paused ? "fallback" : "held", agent.id);
+  return { ok: true as const, status, routeMoved: false };
+}
+
+export function previewVirtualAgent(database: Database.Database, input: { userId: number; agentId: number; utterance: string; now: string }) {
+  ensureVirtualSchema(database);
+  const agent = database.prepare("SELECT id, business_summary, published_version_id, instructions FROM ai_agents WHERE id = ? AND user_id = ?").get(input.agentId, input.userId) as { id: number; business_summary: string; published_version_id: number; instructions: string } | undefined;
+  if (!agent) return { ok: false as const, message: "That AI extension was not found on this account." };
+  const chunks = database.prepare(
+    "SELECT c.user_id AS tenantId, c.body FROM ai_knowledge_chunks c JOIN ai_knowledge_sources s ON s.id = c.source_id WHERE s.user_id = ? AND s.agent_id = ?",
+  ).all(input.userId, input.agentId) as { tenantId: number; body: string }[];
+  const transfers = (agent.instructions.match(/\b\d{3,5}\b/g) || []).slice(0, 20);
+  const preview = previewConversation({ tenantId: input.userId, chunks, summary: agent.business_summary, utterance: input.utterance, allowedTransfers: transfers });
+  const session = database.prepare(
+    "INSERT INTO ai_sessions (user_id, agent_id, prompt_version_id, state, media_open, place_call, outcome, started_at, ended_at) VALUES (?, ?, ?, 'COMPLETED', 0, 0, ?, ?, ?)",
+  ).run(input.userId, input.agentId, agent.published_version_id, "text preview", input.now, input.now);
+  database.prepare("INSERT INTO ai_usage_ledger (user_id, session_id, billable_seconds, created_at) VALUES (?, ?, 0, ?)").run(input.userId, Number(session.lastInsertRowid), input.now);
+  if (preview.transfer) {
+    database.prepare("INSERT INTO ai_tool_audit (session_id, user_id, tool, outcome, created_at) VALUES (?, ?, 'transfer_to_approved_destination', 'allowed', ?)").run(Number(session.lastInsertRowid), input.userId, input.now);
+  }
+  return { ok: true as const, text: preview.text, mediaOpen: preview.mediaOpen, placeCall: preview.placeCall };
+}
+
+export function listAgentSessions(database: Database.Database, userId: number, agentId: number) {
+  ensureVirtualSchema(database);
+  return database.prepare("SELECT id, state, outcome, media_open, place_call, started_at FROM ai_sessions WHERE user_id = ? AND agent_id = ? ORDER BY id DESC LIMIT 20").all(userId, agentId) as { id: number; state: string; outcome: string; media_open: number; place_call: number; started_at: string }[];
 }
 

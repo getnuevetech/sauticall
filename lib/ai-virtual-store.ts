@@ -89,4 +89,4 @@ export function listManualTasks() {
   }[];
 }
 
-export { publishVirtualAgent, recordVirtualBinding, saveVirtualAgent } from "./ai-virtual";
+export { listAgentSessions, listKnowledge, listPromptTemplates, pauseVirtualAgent, previewVirtualAgent, publishVirtualAgent, recordVirtualBinding, saveKnowledge, saveVirtualAgent } from "./ai-virtual";

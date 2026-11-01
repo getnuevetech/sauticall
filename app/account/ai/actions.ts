@@ -110,6 +110,10 @@ export async function createVirtualAgentForm(formData: FormData) {
     did: String(formData.get("did") || ""),
     language: String(formData.get("language") || "en-US"),
     allowedTransfers: String(formData.get("transfers") || "").split(",").map((item) => item.trim()).filter(Boolean),
+    businessSummary: String(formData.get("business_summary") || ""),
+    tone: String(formData.get("tone") || ""),
+    voiceLabel: String(formData.get("voice") || ""),
+    afterHours: String(formData.get("after_hours") || ""),
     now,
   });
   if (!saved.ok) redirect(`${next}${next.includes("?") ? "&" : "?"}error=${encodeURIComponent(saved.message)}`);
@@ -121,6 +125,42 @@ export async function createVirtualAgentForm(formData: FormData) {
   });
   if (!published.ok) redirect(`${next}${next.includes("?") ? "&" : "?"}error=${encodeURIComponent(published.message)}`);
   redirect(`${next}${next.includes("?") ? "&" : "?"}saved=extension`);
+}
+
+export async function saveKnowledgeForm(formData: FormData) {
+  const user = await guardAccount();
+  if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
+  const agentId = Number(formData.get("agent_id") || 0);
+  const { getDb } = await import("@/lib/db");
+  const { saveKnowledge } = await import("@/lib/ai-virtual");
+  const result = saveKnowledge(getDb(), { userId: user.id, agentId, body: String(formData.get("body") || ""), now: new Date().toISOString() });
+  const next = `/account/ai/extensions/${agentId}?tab=knowledge`;
+  if (!result.ok) redirect(`${next}&error=${encodeURIComponent(result.message)}`);
+  redirect(`${next}&saved=knowledge`);
+}
+
+export async function pauseVirtualAgentForm(formData: FormData) {
+  const user = await guardAccount();
+  if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
+  const agentId = Number(formData.get("agent_id") || 0);
+  const { getDb } = await import("@/lib/db");
+  const { pauseVirtualAgent } = await import("@/lib/ai-virtual");
+  const result = pauseVirtualAgent(getDb(), { userId: user.id, agentId, paused: formData.get("paused") === "on", now: new Date().toISOString() });
+  const next = `/account/ai/extensions/${agentId}?tab=settings`;
+  if (!result.ok) redirect(`${next}&error=${encodeURIComponent(result.message)}`);
+  redirect(`${next}&saved=paused`);
+}
+
+export async function previewVirtualAgentForm(formData: FormData) {
+  const user = await guardAccount();
+  if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
+  const agentId = Number(formData.get("agent_id") || 0);
+  const { getDb } = await import("@/lib/db");
+  const { previewVirtualAgent } = await import("@/lib/ai-virtual");
+  const result = previewVirtualAgent(getDb(), { userId: user.id, agentId, utterance: String(formData.get("utterance") || ""), now: new Date().toISOString() });
+  const next = `/account/ai/extensions/${agentId}?tab=test`;
+  if (!result.ok) redirect(`${next}&error=${encodeURIComponent(result.message)}`);
+  redirect(`${next}&saved=preview&line=${encodeURIComponent(result.text)}`);
 }
 
 export async function setAiService(formData: FormData) {

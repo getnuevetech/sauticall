@@ -67,7 +67,7 @@ export default async function AccountAiPage({ searchParams }: { searchParams: Pr
           <li>SautiCall AI uses those instructions through a programmable route on 3CX. 3CX Native is created in 3CX, and the prompt stays here until 3CX confirms it.</li>
           <li>No desk phone or softphone is assigned. A normal extension is not created for the receptionist.</li>
           <li>The phone number keeps ringing the Main ring group. Saving this configuration does not move that route and does not place a call.</li>
-          <li>An administrator connects the 3CX destination and records its identifier. The number moves to the AI only after 3CX confirms that destination.</li>
+          <li>An administrator connects the 3CX destination and records its identifier. The number moves to the AI only after 3CX confirms that destination. Live audio stays blocked until that confirmation, because programmable call control is not verified on this phone system.</li>
         </ol>
         {virtualChoices.length === 0 ? (
           <p>This plan does not include an AI receptionist. <Link className="text-link" href="/account/billing/plan">See plans</Link></p>
@@ -105,8 +105,12 @@ export default async function AccountAiPage({ searchParams }: { searchParams: Pr
                   {numbers.length === 0 ? <option value="">Buy a number first</option> : numbers.map((item) => <option key={item.did} value={item.did}>{item.did}</option>)}
                 </select>
               </label>
+              <label>Business summary <textarea name="business_summary" rows={3} placeholder="What this company does, in words the receptionist may repeat." /></label>
+              <label>Tone <input name="tone" placeholder="Professional and brief" /></label>
+              <label>Voice <input name="voice" placeholder="Clear English" /></label>
               <label>Greeting <input name="greeting" placeholder="Thank you for calling. How can I help you today?" /></label>
               <label>Instructions <textarea name="instructions" rows={6} placeholder="Business hours, questions to ask, and who a caller may reach." /></label>
+              <label>After hours <input name="after_hours" placeholder="Take a message" /></label>
               <label>Approved transfers <input name="transfers" placeholder="516, Main" /></label>
               <p>Saving prepares the virtual destination. The live number stays on the ring group until 3CX certifies it.</p>
               <button className="ws-btn primary" type="submit" disabled={numbers.length === 0}>Save configuration</button>

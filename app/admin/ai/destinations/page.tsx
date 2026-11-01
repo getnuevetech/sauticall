@@ -16,7 +16,7 @@ export default async function AiDestinationsPage({ searchParams }: { searchParam
         <p className="ops-kicker">AI System / Virtual destinations</p>
         <h1>Virtual destinations</h1>
         <AiSectionNav current="destinations" />
-        <p>AI extensions are virtual destinations. A phone-system user is not created for them, and a recorded Client ID is not treated as certified. The customer number stays on the ring group until a 3CX read-back confirms the destination. Nothing on this page places a call.</p>
+        <p>AI extensions are virtual destinations. A phone-system user is not created for them, and a recorded Client ID is not treated as certified. The customer number stays on the ring group until a 3CX read-back confirms the destination. Live audio is blocked because programmable call control is not verified on this phone system. Nothing on this page places a call.</p>
         {query.saved ? <p className="form-feedback">Identifier recorded. The route was not moved and the destination was not certified.</p> : null}
         {query.error ? <p className="ops-alert">{query.error}</p> : null}
         <h2>Capabilities</h2>
