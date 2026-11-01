@@ -522,7 +522,7 @@ export async function completeTrunk(formData: FormData) {
   if (trunkId < 0) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent("Enter the trunk id shown in 3CX.")}`);
   const note = String(formData.get("note") || "");
   const { markTrunkDone } = await import("@/lib/lines");
-  const result = markTrunkDone(id, note, trunkId);
+  const result = await markTrunkDone(id, note, trunkId);
   audit(user.email, "trunk.done", `${id}:${trunkId || "none"}`);
   if (!result.ok) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent(result.message)}`);
   redirect(`/admin/lines?line=${id}&saved=recorded`);

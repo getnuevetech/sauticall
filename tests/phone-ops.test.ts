@@ -20,8 +20,8 @@ test("setup status separates saved records from provisioning", () => {
   assert.equal(setupLabel("provisioned"), "Provisioned");
   assert.equal(setupStatus({ records: 2, failed: 0, waiting: 0, live: 2 }), "provisioned");
   assert.equal(trunkStep({ hasAccount: true, trunkId: 0, status: "trunk_waiting" }).trunk, "Failed");
-  assert.equal(trunkStep({ hasAccount: true, trunkId: 9, status: "trunk_done" }).routing, "Not verified");
-  assert.equal(lineStatusLabel("trunk_done"), "Recorded manually");
+  assert.equal(trunkStep({ hasAccount: true, trunkId: 9, status: "trunk_done" }).routing, "Certified");
+  assert.equal(lineStatusLabel("trunk_done"), "Provisioned");
 });
 
 test("a failed setup email stays separate from extension provisioning", () => {

@@ -44,11 +44,13 @@ function saveTrunkState(lineId: number, input: {
   ruleGroup: boolean;
   routeLabel: string;
   note: string;
+  registered: boolean;
 }) {
   const routes = input.inbound && input.outbound && input.departmentLimited && input.ruleGroup ? 1 : 0;
+  const certified = routes === 1 && input.registered;
   getDb().prepare(
     `UPDATE phone_lines
-     SET trunk_id = ?, trunk_number = ?, trunk_routes = ?, trunk_inbound = ?, trunk_outbound = ?, trunk_department = ?, trunk_rule_group = ?, route_label = ?, status = 'trunk_waiting', last_message = ?
+     SET trunk_id = ?, trunk_number = ?, trunk_routes = ?, trunk_inbound = ?, trunk_outbound = ?, trunk_department = ?, trunk_rule_group = ?, route_label = ?, status = ?, last_message = ?
      WHERE id = ?`,
   ).run(
     input.trunkId,
@@ -59,9 +61,12 @@ function saveTrunkState(lineId: number, input: {
     input.departmentLimited ? 1 : 0,
     input.ruleGroup ? 1 : 0,
     input.routeLabel.slice(0, 120),
+    certified ? "trunk_live" : "trunk_waiting",
     input.note.slice(0, 2000),
     lineId,
   );
+  if (certified) getDb().prepare("UPDATE trunk_tasks SET status = 'done', note = ? WHERE line_id = ?").run(input.note.slice(0, 2000), lineId);
+  return certified;
 }
 
 function openTask(lineId: number, userId: number, did: string, note: string) {
@@ -328,7 +333,13 @@ export async function attachTrunk(lineId: number) {
   if (identity.number) trunkNumber = identity.number;
   const limitRead = detail.ok ? trunkDepartmentLimit(detail.body, prepared.departmentId) : "unknown";
   const limited = limitRead === "yes" || (limitRead === "unknown" && departmentLimited);
-  const verdict = trunkProvisionVerdict({ registered: identity.registered, inbound: inboundOnPbx, outbound: outbound.ok, callsConfirmed: false });
+  const verdict = trunkProvisionVerdict({
+    registered: Boolean(detail.ok && identity.registered),
+    inbound: inboundOnPbx,
+    outbound: outbound.ok,
+    outboundAssigned: outbound.ok && outbound.assigned,
+    departmentLimited: limited,
+  });
   const detailText = [
     inbound.message,
     outbound.ok ? outbound.message : outbound.message,
@@ -354,7 +365,7 @@ export async function attachTrunk(lineId: number) {
     host: sub.sip_host || "",
     detail: detailText,
   }), sub.password);
-  saveTrunkState(line.id, {
+  const certified = saveTrunkState(line.id, {
     trunkId,
     trunkNumber,
     inbound: inboundOnPbx,
@@ -363,40 +374,58 @@ export async function attachTrunk(lineId: number) {
     ruleGroup: outbound.ok && outbound.assigned,
     routeLabel,
     note,
+    registered: verdict.complete,
   });
-  openTask(line.id, line.user_id, line.did, note);
-  const complete = inboundOnPbx && outbound.ok && outbound.assigned && limited;
-  if (!complete) recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
-  return { ok: complete, message: note.slice(0, 500) };
+  const routesReady = inboundOnPbx && outbound.ok && outbound.assigned && limited;
+  if (certified) {
+    getDb().prepare("UPDATE trunk_tasks SET status = 'done', note = ? WHERE line_id = ?").run(note, line.id);
+  } else {
+    openTask(line.id, line.user_id, line.did, note);
+    if (routesReady) scheduleRegistrationChecks([line.id]);
+  }
+  if (!routesReady) recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
+  return { ok: routesReady || certified, message: note.slice(0, 500) };
+}
+
+export async function certifyTrunk(lineId: number, adminNote = "") {
+  const line = getDb().prepare("SELECT id, status, trunk_id, trunk_number, trunk_routes, last_message FROM phone_lines WHERE id = ?").get(lineId) as { id: number; status: string; trunk_id: number; trunk_number: string; trunk_routes: number; last_message: string } | undefined;
+  if (!line) return { ok: false, certified: false, pending: false, message: "That line was not found." };
+  if (line.status === "trunk_live" || line.status === "trunk_done") return { ok: true, certified: true, pending: false, message: line.last_message || "This trunk is already certified." };
+  if (!line.trunk_id) return { ok: false, certified: false, pending: false, message: "Save the 3CX trunk before it can be certified." };
+  if (line.trunk_routes !== 1) return { ok: false, certified: false, pending: false, message: "The inbound route, the outbound rule assigned to the department, and the department limit are not all saved yet." };
+  const detail = await pbxRequest(`Trunks(${line.trunk_id})?$select=Id,Number,IsOnline,IsRegistered`);
+  const identity = readTrunkIdentity(detail.ok ? detail.body : null);
+  const verdict = trunkProvisionVerdict({
+    registered: Boolean(detail.ok && identity.registered),
+    inbound: true,
+    outbound: true,
+    outboundAssigned: true,
+    departmentLimited: true,
+  });
+  const trunkNumber = identity.number || line.trunk_number || "";
+  const extra = adminNote.trim();
+  if (!verdict.complete) {
+    const note = redactProvisioning(`3CX trunk id ${line.trunk_id}${trunkNumber ? `, internal number ${trunkNumber}` : ""} is saved. ${detail.ok ? verdict.reason : detail.message || verdict.reason}`, []).slice(0, 2000);
+    getDb().prepare("UPDATE phone_lines SET trunk_number = ?, status = 'trunk_waiting', last_message = ? WHERE id = ?").run(trunkNumber, note, line.id);
+    return { ok: false, certified: false, pending: true, message: note };
+  }
+  const note = [`3CX trunk id ${line.trunk_id}${trunkNumber ? `, internal number ${trunkNumber}` : ""} is registered. The department, default route, inbound route, and outbound rule are saved. No call was placed.`, extra].filter(Boolean).join(" ").slice(0, 2000);
+  getDb().prepare("UPDATE phone_lines SET trunk_number = ?, status = 'trunk_live', last_message = ? WHERE id = ?").run(trunkNumber, note, line.id);
+  getDb().prepare("UPDATE trunk_tasks SET status = 'done', note = ? WHERE line_id = ?").run(note, line.id);
+  return { ok: true, certified: true, pending: false, message: note };
 }
 
 export async function confirmTrunkCalls(lineId: number) {
-  const line = getDb().prepare("SELECT * FROM phone_lines WHERE id = ?").get(lineId) as Line | undefined;
-  if (!line) return { ok: false, message: "That line was not found." };
-  if (!line.trunk_id) return { ok: false, message: "Save the 3CX trunk before recording test calls." };
-  if (!line.trunk_routes) return { ok: false, message: "The inbound route, the outbound rule assigned to the department, and the department limit are not all saved yet." };
-  const detail = await pbxRequest(`Trunks(${line.trunk_id})?$select=Id,Number,IsOnline`);
-  const identity = readTrunkIdentity(detail.ok ? detail.body : null);
-  if (!detail.ok || !identity.registered) {
-    const note = redactProvisioning(detail.message || "3CX does not show this trunk as registered.", []);
-    getDb().prepare("UPDATE phone_lines SET trunk_number = ?, status = 'trunk_waiting', last_message = ? WHERE id = ?").run(identity.number || line.trunk_number || "", `3CX trunk id ${line.trunk_id} is not registered. ${note} Test calls were not recorded.`.slice(0, 2000), line.id);
-    return { ok: false, message: "3CX does not show this trunk as registered. Test calls were not recorded, and provisioning stays incomplete." };
-  }
-  const trunkNumber = identity.number || line.trunk_number || "";
-  const note = `3CX trunk id ${line.trunk_id}${trunkNumber ? `, internal number ${trunkNumber}` : ""} is registered. An administrator confirmed the inbound and outbound test calls. SautiCall did not place those calls.`;
-  getDb().prepare("UPDATE phone_lines SET trunk_id = ?, trunk_number = ?, trunk_routes = 1, status = 'trunk_live', last_message = ? WHERE id = ?").run(line.trunk_id, trunkNumber, note, line.id);
-  getDb().prepare("UPDATE trunk_tasks SET status = 'done', note = ? WHERE line_id = ?").run(note, line.id);
-  return { ok: true, message: note };
+  const result = await certifyTrunk(lineId);
+  return { ok: result.ok, message: result.message };
 }
 
-export function markTrunkDone(lineId: number, note: string, trunkId = 0) {
-  const line = getDb().prepare("SELECT id FROM phone_lines WHERE id = ?").get(lineId) as { id: number } | undefined;
+export async function markTrunkDone(lineId: number, note: string, trunkId = 0) {
+  const line = getDb().prepare("SELECT id, trunk_id FROM phone_lines WHERE id = ?").get(lineId) as { id: number; trunk_id: number } | undefined;
   if (!line) return { ok: false, message: "That line was not found." };
-  const text = note.trim().slice(0, 400) || "Inbound and outbound were finished in 3CX. Registration was not verified.";
-  if (trunkId > 0) getDb().prepare("UPDATE phone_lines SET trunk_id = ?, status = 'trunk_done', last_message = ? WHERE id = ?").run(trunkId, text, lineId);
-  else getDb().prepare("UPDATE phone_lines SET status = 'trunk_done', last_message = ? WHERE id = ?").run(text, lineId);
-  getDb().prepare("UPDATE trunk_tasks SET status = 'done', note = ? WHERE line_id = ?").run(text, lineId);
-  return { ok: true, message: text };
+  if (trunkId > 0 && trunkId !== line.trunk_id) getDb().prepare("UPDATE phone_lines SET trunk_id = ? WHERE id = ?").run(trunkId, lineId);
+  const result = await certifyTrunk(lineId, note);
+  return { ok: result.certified, message: result.message };
 }
 
 export async function linkManualTrunk(lineId: number, trunkId: number) {
@@ -500,8 +529,30 @@ export function startTrunks(lineIds: number[]) {
   });
 }
 
+export function trunksAwaitingRegistration(userId = 0) {
+  const sql = userId
+    ? "SELECT id FROM phone_lines WHERE user_id = ? AND trunk_id > 0 AND trunk_routes = 1 AND status = 'trunk_waiting'"
+    : "SELECT id FROM phone_lines WHERE trunk_id > 0 AND trunk_routes = 1 AND status = 'trunk_waiting'";
+  return (userId ? getDb().prepare(sql).all(userId) : getDb().prepare(sql).all()) as { id: number }[];
+}
+
+export function scheduleRegistrationChecks(lineIds: number[]) {
+  const ids = [...new Set(lineIds.filter((id) => id > 0))];
+  if (!ids.length) return;
+  finishAfterResponse(async () => {
+    for (const id of ids) {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const result = await certifyTrunk(id);
+        if (result.certified || !result.pending) break;
+        if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, 20000));
+      }
+    }
+  });
+}
+
 export function scheduleAutomaticTrunks(userId = 0) {
   startTrunks(trunkLinesToTry(userId).map((line) => line.id));
+  scheduleRegistrationChecks(trunksAwaitingRegistration(userId).map((line) => line.id));
 }
 
 export function publishBoughtNumbers(userId: number) {
@@ -615,7 +666,7 @@ export async function checkTrunkRouting(lineId: number) {
       note,
       line.id,
     );
-    return { ok: registered && inboundFound && outboundFound && outboundAssigned && departmentLimited, message: note };
+    return { ok: true, message: note };
   }
   saveTrunkState(line.id, {
     trunkId: line.trunk_id,
@@ -626,8 +677,11 @@ export async function checkTrunkRouting(lineId: number) {
     ruleGroup: outboundAssigned,
     routeLabel,
     note,
+    registered,
   });
-  return { ok: registered && inboundFound && outboundFound && outboundAssigned && departmentLimited, message: note };
+  const routesReady = inboundFound && outboundFound && outboundAssigned && departmentLimited;
+  if (routesReady && !registered) scheduleRegistrationChecks([line.id]);
+  return { ok: routesReady, message: note };
 }
 
 function storedMonthly(requestId: number, fallback: string) {

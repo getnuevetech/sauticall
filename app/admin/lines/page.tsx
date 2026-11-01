@@ -81,7 +81,7 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
           </ol>
         </div>
       ) : null}
-      {line.status === "trunk_done" ? <p className="ops-muted">An administrator recorded this as complete. Registration was not verified.</p> : null}
+      {line.status === "trunk_live" || line.status === "trunk_done" ? <p className="ops-muted">This trunk is registered and certified. No call was placed from SautiCall.</p> : null}
       <details className="ops-details" open={Boolean(line.message)}>
         <summary>Technical response</summary>
         <p>{line.message || "No technical response is saved."}</p>
@@ -121,13 +121,13 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
         <input type="hidden" name="id" value={line.id} />
         <input type="hidden" name="company" value={line.userId} />
         <button className="btn btn-secondary" type="submit">Check trunk and routes in 3CX</button>
-        <p className="ops-muted">Reads the department, registration, the inbound route, and the outbound rule from 3CX, then updates this line. It does not place a call and does not mark the trunk finished.</p>
+        <p className="ops-muted">Reads registration, the inbound route, and the outbound rule from 3CX. When the trunk is registered and those routes are saved, this certifies it. It does not place a call.</p>
       </form>
       <form action={confirmTrunkCalls}>
         <input type="hidden" name="id" value={line.id} />
         <input type="hidden" name="company" value={line.userId} />
-        <button className="btn btn-secondary" type="submit">Record successful test calls</button>
-        <p className="ops-muted">Available after the department limit, inbound route, and outbound rule are saved. 3CX must show the trunk registered. This does not place a call.</p>
+        <button className="btn btn-secondary" type="submit">Verify registration and certify</button>
+        <p className="ops-muted">Reads registration from 3CX. A registered trunk with its routes saved is certified for the customer. This does not place a call.</p>
       </form>
       <form action={linkTrunk} className="ops-stack">
         <input type="hidden" name="id" value={line.id} />
@@ -140,9 +140,9 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
         <input type="hidden" name="id" value={line.id} />
         <input type="hidden" name="company" value={line.userId} />
         <input type="hidden" name="trunk_id" value={line.trunkId || ""} />
-        <label>Note <input name="note" placeholder="Inbound and outbound finished in 3CX" /></label>
-        <button className="btn btn-secondary" type="submit">Record that routing was finished in 3CX</button>
-        <p className="ops-muted">Use this after the inbound route and outbound rule exist in 3CX. Registration is not verified from here.</p>
+        <label>Note <input name="note" placeholder="Optional note" /></label>
+        <button className="btn btn-secondary" type="submit">Certify this trunk</button>
+        <p className="ops-muted">Certifies the trunk when 3CX shows it registered and the routes are saved. The customer then sees the number as connected. This does not place a call.</p>
       </form>
       {line.requestId ? <p><Link href={`/admin/requests?request=${line.requestId}`}>Open the number request</Link></p> : <p>No number request is linked to this line.</p>}
       <details className="ops-details">
@@ -192,10 +192,9 @@ export default async function LinesPage({ searchParams }: { searchParams: Promis
         </div>
         <p className="ops-muted">{reading ? "Reading call minutes is on." : "Reading call minutes is off."} {trunks ? "Adding a 3CX trunk from here is on. A retry uses the customer's SIP account and does not place a call." : "Adding trunks from here is off, so a retry records the waiting step."} Each bought number gets 3 automatic trunk tries, then it waits here. An administrator can retry without that limit, check the routes in 3CX, or save a trunk created by hand. {flagOn("pbx.voipms_backup") ? "VoIP.ms backup is on for a confirmed trunk failure, and it uses that customer's client." : "VoIP.ms backup is off. Only an administrator can turn it on in Platform controls."}</p>
         {params.error ? <p className="form-feedback form-error" role="alert">{params.error}</p> : null}
-        {params.saved === "recorded" ? <p className="form-feedback">The note was recorded. Registration was not verified.</p> : null}
-        {params.saved === "calls" ? <p className="form-feedback">Test calls were recorded. The trunk was registered on 3CX. SautiCall did not place the calls.</p> : null}
+        {params.saved === "recorded" || params.saved === "calls" ? <p className="form-feedback">This trunk is registered and certified. No call was placed.</p> : null}
         {params.saved === "linked" ? <p className="form-feedback">The trunk was read from 3CX and routing was saved. No call was placed.</p> : null}
-        {params.saved === "checked" ? <p className="form-feedback">The trunk and routes were read from 3CX. No call was placed.</p> : null}
+        {params.saved === "checked" ? <p className="form-feedback">Registration and routes were read from 3CX. A registered trunk with its routes saved is certified. No call was placed.</p> : null}
         {params.saved === "1" ? <p className="form-feedback">Call minutes were updated.</p> : null}
         <nav className="ops-tabs">
           <Link href="/admin/lines?tab=trunks" data-current={tab === "trunks" ? "true" : undefined}>Trunks</Link>
@@ -214,7 +213,7 @@ export default async function LinesPage({ searchParams }: { searchParams: Promis
             <option value="trunk_waiting">Needs attention</option>
             <option value="ordered">Pending</option>
             <option value="trunk_live">Provisioned</option>
-            <option value="trunk_done">Recorded manually</option>
+            <option value="trunk_done">Certified</option>
           </select>
           <button className="btn btn-secondary" type="submit">Search</button>
         </form>

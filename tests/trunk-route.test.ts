@@ -91,7 +91,7 @@ test("admin status names each missing trunk piece", () => {
   assert.equal(progress.route, "Not created");
   assert.match(trunkAdminSummary(progress), /department/);
   assert.match(trunkAdminSummary(progress), /outbound rule/);
-  const ready = trunkProgress({
+  const saved = {
     hasAccount: true,
     departmentOnPbx: true,
     extensionOnPbx: true,
@@ -103,10 +103,14 @@ test("admin status names each missing trunk piece", () => {
     outboundOnPbx: true,
     outboundAssigned: true,
     departmentLimited: true,
-  });
+  };
+  const ready = trunkProgress(saved);
   assert.equal(ready.route, "Ring group Main · 800");
   assert.equal(ready.outbound, "On 3CX, assigned to the department");
-  assert.match(trunkAdminSummary(ready), /records the test calls/);
+  assert.match(trunkAdminSummary(ready), /not shown this trunk as registered yet/);
+  const registered = trunkProgress({ ...saved, status: "trunk_live" });
+  assert.equal(registered.trunk, "Registered");
+  assert.match(trunkAdminSummary(registered), /registered on 3CX/);
   const note = trunkStatusNote({
     trunkId: 159,
     trunkNumber: "10004",
