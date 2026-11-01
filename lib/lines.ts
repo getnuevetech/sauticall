@@ -13,7 +13,7 @@ import { shownAccountName } from "./pbx-user";
 import { carrierDidRef, numberIsBought, orderTimedOut } from "./number-order";
 import { automaticStopNote, trunkMayAutoTry } from "./trunk-tries";
 import { inboundDestinationUpdate, inboundRuleAttempts, trunkNameFromAccount, trunkRouteAttempts, trunkStatusNote } from "./trunk-route";
-import { ensureTrunkDefaults } from "./trunk-prereq";
+import { ensureTrunkDefaults, savedDefaultRoute } from "./trunk-prereq";
 import { inboundRuleFound, outboundAssignedToDepartment, outboundRuleFound, outboundRuleId, portNumbers, trunkDepartmentLimit, trunkRoutingRules } from "./trunk-routes";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
@@ -147,7 +147,7 @@ async function addOutboundRule(input: { name: string; trunkId: number; callerId:
   return { ok: true, assigned, message: `${scope}${groupNote}` };
 }
 
-async function saveInboundRoute(input: { name: string; did: string; trunkId: number; to: "Extension" | "RingGroup"; number: string }) {
+async function saveInboundRoute(input: { name: string; did: string; trunkId: number; to: "Extension" | "RingGroup"; number: string; label: string }) {
   const listed = await pbxRequest(`Trunks(${input.trunkId})?$expand=RoutingRules`);
   const rules = listed.ok ? trunkRoutingRules(listed.body) : [];
   const failures: string[] = [];
@@ -187,7 +187,8 @@ async function saveInboundRoute(input: { name: string; did: string; trunkId: num
     if (!replaced) failures.push(last);
   }
   if (updated || created || replaced) {
-    const saved = updated ? `The trunk default route now points to ${input.to === "RingGroup" ? "ring group" : "extension"} ${input.number} for office hours and after hours.` : `The inbound route points to ${input.to === "RingGroup" ? "ring group" : "extension"} ${input.number} for office hours and after hours.`;
+    const where = input.label || (input.to === "RingGroup" ? `ring group ${input.number}` : `extension ${input.number}`);
+    const saved = updated ? `The trunk default route now points to ${where} for office hours and after hours.` : `The inbound route points to ${where} for office hours and after hours.`;
     return { ok: true, message: saved };
   }
   return { ok: false, message: failures.filter(Boolean)[0] || "The inbound route is not on 3CX." };
@@ -311,6 +312,7 @@ export async function attachTrunk(lineId: number) {
     trunkId,
     to: prepared.target.to,
     number: prepared.target.number,
+    label: prepared.target.label,
   });
   const inboundOnPbx = inbound.ok;
   const outbound = await addOutboundRule({
@@ -563,8 +565,7 @@ export async function checkTrunkRouting(lineId: number) {
   if (!line) return { ok: false, message: "That line was not found." };
   if (!line.trunk_id) return { ok: false, message: "Save the 3CX trunk before checking routes." };
   const department = getDb().prepare("SELECT name, xapi_id, number_from, number_to FROM pbx_departments WHERE user_id = ?").get(line.user_id) as { name: string; xapi_id: number; number_from: string; number_to: string } | undefined;
-  const extension = getDb().prepare("SELECT number, xapi_id, ai_role FROM pbx_extensions WHERE user_id = ? AND status != 'removed' ORDER BY id LIMIT 1").get(line.user_id) as { number: string; xapi_id: number; ai_role: string } | undefined;
-  const ring = getDb().prepare("SELECT name, number, xapi_id FROM call_groups WHERE user_id = ? AND kind = 'ring' AND xapi_id != 0 ORDER BY answers DESC, id LIMIT 1").get(line.user_id) as { name: string; number: string; xapi_id: number } | undefined;
+  const route = savedDefaultRoute(line.user_id);
   const span = department?.number_from && department.number_to ? { from: department.number_from, to: department.number_to } : extensionSpan(line.user_id);
   const detail = await pbxRequest(`Trunks(${line.trunk_id})?$select=Id,Number,IsOnline,Groups,RoutingRules`);
   const identity = readTrunkIdentity(detail.ok ? detail.body : null);
@@ -576,7 +577,7 @@ export async function checkTrunkRouting(lineId: number) {
   const limit = detail.ok && department?.xapi_id ? trunkDepartmentLimit(detail.body, department.xapi_id) : "unknown";
   const departmentLimited = limit === "yes" || (limit === "unknown" && line.trunk_department === 1);
   const outboundAssigned = outbound.ok ? assigned : line.trunk_rule_group === 1;
-  const routeLabel = line.route_label || (extension?.ai_role === "receptionist" && extension.number ? `AI receptionist extension ${extension.number}` : ring ? `Ring group ${ring.name} · ${ring.number}` : "");
+  const routeLabel = route.label || line.route_label;
   const registered = Boolean(detail.ok && identity.registered);
   const readDetail = [
     detail.ok ? (registered ? `3CX trunk ${line.trunk_id} is registered.` : `3CX trunk ${line.trunk_id} is not registered.`) : `3CX did not confirm trunk ${line.trunk_id}. ${detail.message}`,
@@ -589,10 +590,10 @@ export async function checkTrunkRouting(lineId: number) {
     trunkNumber: identity.number || line.trunk_number || "",
     departmentName: department?.name || departmentName(line.user_id),
     departmentOnPbx: Boolean(department?.xapi_id),
-    extension: extension?.number || extensionFor(line.user_id),
-    extensionOnPbx: Boolean(extension?.xapi_id),
+    extension: route.extensionNumber || extensionFor(line.user_id),
+    extensionOnPbx: route.extensionOnPbx,
     routeLabel,
-    routeOnPbx: Boolean((extension?.ai_role === "receptionist" && extension.xapi_id) || ring?.xapi_id),
+    routeOnPbx: route.onPbx,
     inboundOnPbx: inboundFound,
     outboundOnPbx: outboundFound,
     outboundAssigned,

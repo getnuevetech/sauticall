@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { outboundRuleBody } from "../lib/outbound-rule.ts";
 import { trunkAdminSummary, trunkProgress } from "../lib/phone-ops-view.ts";
-import { extensionReady, inboundRuleAttempts, signupPersonName, trunkNameFromAccount, trunkRouteAttempts, trunkStatusNote } from "../lib/trunk-route.ts";
+import { defaultTrunkDestination, extensionReady, inboundRuleAttempts, receptionistAddress, signupPersonName, trunkNameFromAccount, trunkRouteAttempts, trunkStatusNote } from "../lib/trunk-route.ts";
 import { inboundRuleFound, outboundAssignedToDepartment, outboundRuleId, trunkDepartmentLimit, trunkRoutingRules } from "../lib/trunk-routes.ts";
 
 test("the default extension waits for a paid plan and the required confirmation", () => {
@@ -11,6 +11,20 @@ test("the default extension waits for a paid plan and the required confirmation"
   assert.equal(extensionReady({ paid: true, emailVerified: true, phoneVerified: false, emailRequired: false, smsRequired: false }), true);
   assert.equal(trunkNameFromAccount("577137_I0000003"), "577137_I0000003");
   assert.equal(trunkNameFromAccount("not a name"), "");
+});
+
+test("an AI plan uses the receptionist extension and any other plan uses the ring group", () => {
+  const ai = defaultTrunkDestination({ ai: true, aiExtension: "529", ringName: "Main", ringNumber: "800" });
+  assert.equal(ai?.to, "Extension");
+  assert.equal(ai?.number, "529");
+  assert.equal(ai?.label, "AI receptionist extension 529");
+  assert.equal(defaultTrunkDestination({ ai: true, aiExtension: "", ringName: "Main", ringNumber: "800" }), null);
+  const ring = defaultTrunkDestination({ ai: false, aiExtension: "528", ringName: "Main", ringNumber: "800" });
+  assert.equal(ring?.to, "RingGroup");
+  assert.equal(ring?.number, "800");
+  assert.equal(ring?.label, "Ring group Main · 800");
+  assert.equal(receptionistAddress("ada@example.com", 4), "ada+ai4@example.com");
+  assert.equal(receptionistAddress("ada+other@example.com", 4), "ada+ai4@example.com");
 });
 
 test("a default person name comes from the account name", () => {

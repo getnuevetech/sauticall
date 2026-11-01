@@ -5,10 +5,10 @@ import { createCallGroup, groupMembers, provisionCallGroup, setDaytimeGroup, typ
 import { flagOn, getDb, readDoc } from "./db";
 import { recordFailure } from "./failure-log";
 import { finishAfterResponse } from "./later";
-import { normalizePlan, planAllows } from "./plan-features";
+import { extensionCapacity, normalizePlan, planAllows } from "./plan-features";
 import { accountDepartmentName, departmentNameIssue, accountDisplayName } from "./pbx-user";
 import { allocateExtension, applyDepartmentName, provisionExtension, updateRouting } from "./pbx";
-import { extensionReady, signupPersonName } from "./trunk-route";
+import { defaultTrunkDestination, extensionReady, receptionistAddress, signupPersonName } from "./trunk-route";
 import type { Plan } from "./types";
 
 export type TrunkDefaults = {
@@ -33,16 +33,53 @@ function subscriptionPlan(userId: number) {
   return plan ? normalizePlan(plan) : null;
 }
 
+export function accountIncludesReceptionist(userId: number) {
+  return planAllows(subscriptionPlan(userId), "ai");
+}
+
+export function savedDefaultRoute(userId: number) {
+  const ai = accountIncludesReceptionist(userId);
+  const account = getDb().prepare("SELECT email FROM users WHERE id = ?").get(userId) as { email: string } | undefined;
+  const accountEmail = (account?.email || "").toLowerCase();
+  const person = getDb().prepare(
+    "SELECT number, xapi_id FROM pbx_extensions WHERE user_id = ? AND status != 'removed' AND ai_role != 'receptionist' ORDER BY CASE WHEN lower(email) = ? THEN 0 ELSE 1 END, id LIMIT 1",
+  ).get(userId, accountEmail) as { number: string; xapi_id: number } | undefined;
+  const receptionist = getDb().prepare(
+    "SELECT number, xapi_id, email FROM pbx_extensions WHERE user_id = ? AND status != 'removed' AND ai_role = 'receptionist' ORDER BY id LIMIT 1",
+  ).get(userId) as { number: string; xapi_id: number; email: string } | undefined;
+  const dedicated = receptionist && receptionist.email.toLowerCase() !== accountEmail ? receptionist : undefined;
+  const ring = getDb().prepare(
+    "SELECT name, number, xapi_id FROM call_groups WHERE user_id = ? AND kind = 'ring' AND xapi_id != 0 ORDER BY CASE WHEN name = 'Main' THEN 0 ELSE 1 END, id LIMIT 1",
+  ).get(userId) as { name: string; number: string; xapi_id: number } | undefined;
+  const chosen = defaultTrunkDestination({
+    ai,
+    aiExtension: dedicated?.number || "",
+    ringName: ring?.name || "",
+    ringNumber: ring?.number || "",
+  });
+  if (ai) {
+    return {
+      ai: true,
+      extensionNumber: dedicated?.number || "",
+      extensionOnPbx: Boolean(dedicated?.xapi_id),
+      label: chosen?.label || "",
+      onPbx: Boolean(dedicated?.xapi_id && chosen),
+    };
+  }
+  return {
+    ai: false,
+    extensionNumber: person?.number || "",
+    extensionOnPbx: Boolean(person?.xapi_id),
+    label: chosen?.label || "",
+    onPbx: Boolean(ring?.xapi_id && chosen),
+  };
+}
+
 function defaultsSettled(userId: number) {
   const department = getDb().prepare("SELECT xapi_id, number_from, number_to FROM pbx_departments WHERE user_id = ?").get(userId) as { xapi_id: number; number_from: string; number_to: string } | undefined;
   if (!department?.xapi_id || !/^\d+$/.test(department.number_from) || !/^\d+$/.test(department.number_to)) return false;
-  const extension = getDb().prepare("SELECT id, xapi_id, ai_role FROM pbx_extensions WHERE user_id = ? AND status != 'removed' ORDER BY id LIMIT 1").get(userId) as { id: number; xapi_id: number; ai_role: string } | undefined;
-  if (!extension?.xapi_id) return false;
-  if (planAllows(subscriptionPlan(userId), "ai")) return extension.ai_role === "receptionist";
-  const ring = getDb().prepare(
-    "SELECT g.id FROM call_groups g JOIN call_group_members m ON m.group_id = g.id WHERE g.user_id = ? AND g.kind = 'ring' AND g.xapi_id != 0 AND m.extension_id = ? LIMIT 1",
-  ).get(userId, extension.id) as { id: number } | undefined;
-  return Boolean(ring);
+  const route = savedDefaultRoute(userId);
+  return route.extensionOnPbx && route.onPbx;
 }
 
 function quietDefaultMessage(message: string) {
@@ -57,33 +94,48 @@ function usedNumbers() {
   ].map((row) => row.number);
 }
 
-async function ensureExtension(userId: number, user: { name: string; email: string }) {
+async function ensureExtension(userId: number, identity: { first: string; last: string; email: string; accountEmail: string; receptionist: boolean }, plan: ReturnType<typeof subscriptionPlan>) {
   const database = getDb();
-  let row = database.prepare(
-    "SELECT id, number, first_name, xapi_id, ai_name FROM pbx_extensions WHERE user_id = ? AND status != 'removed' ORDER BY id LIMIT 1",
-  ).get(userId) as { id: number; number: string; first_name: string; xapi_id: number; ai_name: string } | undefined;
+  const accountEmail = identity.accountEmail.toLowerCase();
+  let row = identity.receptionist
+    ? database.prepare(
+      `SELECT id, number, first_name, xapi_id, ai_name, email FROM pbx_extensions
+       WHERE user_id = ? AND status != 'removed' AND (lower(email) = lower(?) OR (ai_role = 'receptionist' AND lower(email) != ?))
+       ORDER BY CASE WHEN lower(email) = lower(?) THEN 0 ELSE 1 END, id LIMIT 1`,
+    ).get(userId, identity.email, accountEmail, identity.email) as { id: number; number: string; first_name: string; xapi_id: number; ai_name: string; email: string } | undefined
+    : database.prepare(
+      "SELECT id, number, first_name, xapi_id, ai_name, email FROM pbx_extensions WHERE user_id = ? AND status != 'removed' AND ai_role != 'receptionist' ORDER BY CASE WHEN lower(email) = ? THEN 0 ELSE 1 END, id LIMIT 1",
+    ).get(userId, accountEmail) as { id: number; number: string; first_name: string; xapi_id: number; ai_name: string; email: string } | undefined;
+  if (row && identity.receptionist && row.email.toLowerCase() === accountEmail) row = undefined;
   if (!row) {
-    const person = signupPersonName(user.name, user.email);
-    const taken = database.prepare("SELECT id FROM pbx_extensions WHERE lower(email) = lower(?) AND status != 'removed'").get(user.email) as { id: number } | undefined;
-    if (taken) return { ok: false as const, message: `The account email ${user.email} is already used on another extension, so the default extension was not created.` };
+    const taken = database.prepare("SELECT id FROM pbx_extensions WHERE lower(email) = lower(?) AND status != 'removed'").get(identity.email) as { id: number } | undefined;
+    if (taken) {
+      const which = identity.receptionist ? "AI receptionist" : "default extension";
+      return { ok: false as const, message: `The ${which} email ${identity.email} is already used on another extension, so it was not created.` };
+    }
+    const count = database.prepare("SELECT COUNT(*) AS n FROM pbx_extensions WHERE user_id = ? AND status != 'removed'").get(userId) as { n: number };
+    if (plan && count.n >= extensionCapacity(plan)) {
+      return { ok: false as const, message: identity.receptionist ? "This plan has no room for the AI receptionist extension." : "This plan has no room for the default extension." };
+    }
     const { persistNewExtensionRanges, planExtensionRanges } = await import("./extension-plan");
     const reserved = planExtensionRanges();
     persistNewExtensionRanges(reserved.ranges);
     const allocated = await allocateExtension(userId, usedNumbers(), reserved.plan, reserved.ranges);
-    if (!allocated.ok) return { ok: false as const, message: `The default extension was not created. ${allocated.message}` };
+    if (!allocated.ok) return { ok: false as const, message: `${identity.receptionist ? "The AI receptionist extension" : "The default extension"} was not created. ${allocated.message}` };
     const info = database.prepare(
       "INSERT INTO pbx_extensions (user_id, number, first_name, last_name, email, status, access_password, created_at) VALUES (?, ?, ?, ?, ?, 'waiting', ?, ?)",
-    ).run(userId, allocated.number, person.first, person.last, user.email, appPassword(), new Date().toISOString());
-    row = { id: Number(info.lastInsertRowid), number: allocated.number, first_name: person.first, xapi_id: 0, ai_name: "" };
+    ).run(userId, allocated.number, identity.first, identity.last, identity.email, appPassword(), new Date().toISOString());
+    row = { id: Number(info.lastInsertRowid), number: allocated.number, first_name: identity.first, xapi_id: 0, ai_name: "", email: identity.email };
   }
   if (!row.xapi_id) {
     const result = await provisionExtension(row.id);
     const refreshed = database.prepare(
-      "SELECT id, number, first_name, xapi_id, ai_name FROM pbx_extensions WHERE id = ?",
-    ).get(row.id) as { id: number; number: string; first_name: string; xapi_id: number; ai_name: string } | undefined;
+      "SELECT id, number, first_name, xapi_id, ai_name, email FROM pbx_extensions WHERE id = ?",
+    ).get(row.id) as { id: number; number: string; first_name: string; xapi_id: number; ai_name: string; email: string } | undefined;
     if (!result.ok || !refreshed?.xapi_id) {
       const detail = "detail" in result && result.detail ? String(result.detail) : result.message;
-      return { ok: false as const, message: `The default extension was not created on 3CX. ${detail}` };
+      const which = identity.receptionist ? "AI receptionist extension" : "default extension";
+      return { ok: false as const, message: `The ${which} was not created on 3CX. ${detail}` };
     }
     row = refreshed;
   }
@@ -143,15 +195,20 @@ export async function ensureTrunkDefaults(userId: number): Promise<TrunkDefaults
   if (!/^\d+$/.test(department.number_from) || !/^\d+$/.test(department.number_to)) {
     return { ok: false, message: `Department ${company} has no extension range, so the outbound rule was not created.` };
   }
-  const extension = await ensureExtension(userId, user);
-  if (!extension.ok) return extension;
   const from = department.number_from;
   const to = department.number_to;
   const plan = subscriptionPlan(userId);
   if (plan && planAllows(plan, "ai")) {
-    const assigned = assignExtensionAi(userId, plan, extension.id, "receptionist", extension.aiName || `${extension.first} receptionist`.trim());
+    const email = receptionistAddress(user.email, userId);
+    if (!email) return { ok: false, message: "The account has no email, so the AI receptionist extension was not created." };
+    const extension = await ensureExtension(userId, { first: "AI", last: "Receptionist", email, accountEmail: user.email, receptionist: true }, plan);
+    if (!extension.ok) return extension;
+    const assigned = assignExtensionAi(userId, plan, extension.id, "receptionist", extension.aiName || "AI Receptionist");
     if (!assigned.ok) return { ok: false, message: `${assigned.message} The AI receptionist was not saved, so the trunk was left unchanged.` };
+    getDb().prepare("UPDATE call_groups SET answers = 0 WHERE user_id = ?").run(userId);
     await updateRouting(userId);
+    const target = defaultTrunkDestination({ ai: true, aiExtension: extension.number, ringName: "", ringNumber: "" });
+    if (!target) return { ok: false, message: "The AI receptionist extension was not created, so the trunk was left unchanged." };
     return {
       ok: true,
       departmentId: department.xapi_id,
@@ -159,11 +216,16 @@ export async function ensureTrunkDefaults(userId: number): Promise<TrunkDefaults
       from,
       to,
       extensionNumber: extension.number,
-      target: { to: "Extension", number: extension.number, label: `AI receptionist extension ${extension.number}`, kind: "ai" },
+      target,
     };
   }
+  const person = signupPersonName(user.name, user.email);
+  const extension = await ensureExtension(userId, { first: person.first, last: person.last, email: user.email, accountEmail: user.email, receptionist: false }, plan);
+  if (!extension.ok) return extension;
   const ring = await ensureRing(userId, extension.id);
   if (!ring.ok) return { ok: false, message: `Extension ${extension.number} is on 3CX. ${ring.message}` };
+  const target = defaultTrunkDestination({ ai: false, aiExtension: "", ringName: ring.name, ringNumber: ring.number });
+  if (!target) return { ok: false, message: `Extension ${extension.number} is on 3CX. The ring group was not created, so the trunk was left unchanged.` };
   return {
     ok: true,
     departmentId: department.xapi_id,
@@ -171,7 +233,7 @@ export async function ensureTrunkDefaults(userId: number): Promise<TrunkDefaults
     from,
     to,
     extensionNumber: extension.number,
-    target: { to: "RingGroup", number: ring.number, label: `Ring group ${ring.name} · ${ring.number}`, kind: "ring" },
+    target,
   };
 }
 

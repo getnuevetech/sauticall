@@ -10,6 +10,25 @@ export function trunkNameFromAccount(account: string) {
   return /^[A-Za-z0-9_]{3,40}$/.test(name) ? name : "";
 }
 
+export function receptionistAddress(email: string, userId: number) {
+  const trimmed = email.trim();
+  const at = trimmed.lastIndexOf("@");
+  if (at < 1 || !userId) return "";
+  const local = trimmed.slice(0, at).split("+")[0].replace(/[^\w.-]/g, "") || "receptionist";
+  const domain = trimmed.slice(at + 1).trim();
+  if (!domain.includes(".")) return "";
+  return `${local.slice(0, 40)}+ai${userId}@${domain}`.slice(0, 120);
+}
+
+export function defaultTrunkDestination(input: { ai: boolean; aiExtension: string; ringName: string; ringNumber: string }) {
+  if (input.ai) {
+    if (!input.aiExtension) return null;
+    return { to: "Extension" as const, number: input.aiExtension, label: `AI receptionist extension ${input.aiExtension}`, kind: "ai" as const };
+  }
+  if (!input.ringNumber) return null;
+  return { to: "RingGroup" as const, number: input.ringNumber, label: `Ring group ${input.ringName || "Main"} · ${input.ringNumber}`, kind: "ring" as const };
+}
+
 export function signupPersonName(full: string, email: string) {
   const cleaned = full.trim().replace(/\s+/g, " ");
   const parts = cleaned.split(" ").filter(Boolean);

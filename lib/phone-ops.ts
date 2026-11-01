@@ -6,6 +6,7 @@ import { extensionCapacity } from "./plan-features";
 import { paidPlan } from "./pbx";
 import { shownAccountName } from "./pbx-user";
 import { trunkSubjectMatchesLine } from "./trunk-tries";
+import { savedDefaultRoute } from "./trunk-prereq";
 
 export { companyMatches, formatDid, lineStatusLabel, maskCredential, personState, setupEmailState, setupLabel, setupStatus, trunkAdminSummary, trunkProgress, trunkStep, trunkTone } from "./phone-ops-view";
 import { formatDid, lineStatusLabel, personState, setupStatus } from "./phone-ops-view";
@@ -277,7 +278,9 @@ export function listLines(query = "", company = 0, status = "") {
     const text = `${row.name} ${row.business_name || ""} ${row.email} ${row.did} ${row.department}`.toLowerCase();
     return !needle || text.includes(needle) || formatDid(row.did).toLowerCase().includes(needle);
   });
-  return visible.map((row) => ({
+  return visible.map((row) => {
+    const route = savedDefaultRoute(row.user_id);
+    return {
     id: row.id,
     userId: row.user_id,
     requestId: row.request_id,
@@ -289,13 +292,13 @@ export function listLines(query = "", company = 0, status = "") {
     trunkNumber: row.trunk_number || "",
     message: row.last_message || row.task_note,
     department: shownAccountName(row.department, row.business_name || "", row.name) || "Company name not set",
-    extension: row.owned_extension || row.extension_number,
+    extension: route.extensionNumber || row.owned_extension || row.extension_number,
     from: row.number_from || String(extensionRange(row.user_id, plan).from),
     to: row.number_to || String(extensionRange(row.user_id, plan).to),
-    routeLabel: row.route_label || (row.ai_role === "receptionist" && row.owned_extension ? `AI receptionist extension ${row.owned_extension}` : row.ring_label ? `Ring group ${row.ring_label}` : ""),
+    routeLabel: route.label || row.route_label,
     departmentOnPbx: Number(row.department_xapi) > 0,
-    extensionOnPbx: Number(row.extension_xapi) > 0,
-    routeOnPbx: (row.ai_role === "receptionist" && Number(row.extension_xapi) > 0) || Boolean(row.ring_label),
+    extensionOnPbx: route.extensionOnPbx,
+    routeOnPbx: route.onPbx,
     inboundOnPbx: row.trunk_inbound === 1 || row.trunk_routes === 1,
     outboundOnPbx: row.trunk_outbound === 1 || row.trunk_routes === 1,
     outboundAssigned: row.trunk_rule_group === 1 || row.trunk_routes === 1,
@@ -310,7 +313,8 @@ export function listLines(query = "", company = 0, status = "") {
     attempts: row.trunk_attempts || 0,
     routes: row.trunk_routes === 1,
     siblings: rows.filter((other) => other.user_id === row.user_id && other.id !== row.id).map((other) => ({ id: other.id, did: other.did, trunkId: other.trunk_id })),
-  }));
+  };
+  });
 }
 
 export function unmatchedTrunkLogs(query = "", company = 0): LoggedTrunkAttempt[] {
