@@ -611,10 +611,16 @@ export async function connectOwnedNumbers(userId: number, sourceRequestId: numbe
   return { lineIds, waiting };
 }
 
-export async function checkTrunkRouting(lineId: number) {
+export async function reportTrunkCheck(lineId: number) {
+  const read = await readTrunkCheck(lineId);
+  if (!read.ok) return read;
+  return { ok: true, message: `Test only. Nothing was changed. ${read.note}`.slice(0, 1800) };
+}
+
+async function readTrunkCheck(lineId: number) {
   const line = getDb().prepare("SELECT * FROM phone_lines WHERE id = ?").get(lineId) as (Line & { trunk_department: number; trunk_rule_group: number; route_label: string }) | undefined;
-  if (!line) return { ok: false, message: "That line was not found." };
-  if (!line.trunk_id) return { ok: false, message: "Save the 3CX trunk before checking routes." };
+  if (!line) return { ok: false as const, message: "That line was not found." };
+  if (!line.trunk_id) return { ok: false as const, message: "Save the 3CX trunk before checking routes." };
   const department = getDb().prepare("SELECT name, xapi_id, number_from, number_to FROM pbx_departments WHERE user_id = ?").get(line.user_id) as { name: string; xapi_id: number; number_from: string; number_to: string } | undefined;
   const route = savedDefaultRoute(line.user_id);
   const span = department?.number_from && department.number_to ? { from: department.number_from, to: department.number_to } : extensionSpan(line.user_id);
@@ -655,9 +661,27 @@ export async function checkTrunkRouting(lineId: number) {
     host: "",
     detail: readDetail,
   }), []);
+  return {
+    ok: true as const,
+    line,
+    note,
+    registered,
+    inboundFound,
+    outboundFound,
+    outboundAssigned,
+    departmentLimited,
+    routeLabel,
+    trunkNumber: identity.number || line.trunk_number || "",
+  };
+}
+
+export async function checkTrunkRouting(lineId: number) {
+  const read = await readTrunkCheck(lineId);
+  if (!read.ok) return read;
+  const { line, note, registered, inboundFound, outboundFound, outboundAssigned, departmentLimited, routeLabel, trunkNumber } = read;
   if (line.status === "trunk_live" || line.status === "trunk_done") {
     getDb().prepare("UPDATE phone_lines SET trunk_number = ?, trunk_inbound = ?, trunk_outbound = ?, trunk_department = ?, trunk_rule_group = ?, route_label = ?, last_message = ? WHERE id = ?").run(
-      identity.number || line.trunk_number || "",
+      trunkNumber,
       inboundFound ? 1 : 0,
       outboundFound ? 1 : 0,
       departmentLimited ? 1 : 0,
@@ -670,7 +694,7 @@ export async function checkTrunkRouting(lineId: number) {
   }
   saveTrunkState(line.id, {
     trunkId: line.trunk_id,
-    trunkNumber: identity.number || line.trunk_number || "",
+    trunkNumber,
     inbound: inboundFound,
     outbound: outboundFound,
     departmentLimited,

@@ -8,8 +8,8 @@ import { shownAccountName } from "./pbx-user";
 import { trunkSubjectMatchesLine } from "./trunk-tries";
 import { savedDefaultRoute } from "./trunk-prereq";
 
-export { companyMatches, formatDid, lineStatusLabel, maskCredential, personState, setupEmailState, setupLabel, setupStatus, trunkAdminSummary, trunkProgress, trunkStep, trunkTone } from "./phone-ops-view";
-import { formatDid, lineStatusLabel, personState, setupStatus } from "./phone-ops-view";
+export { companyMatches, formatDid, lineStatusLabel, maskCredential, personState, setupEmailState, setupLabel, setupStatus, trunkAdminSummary, trunkProgress, trunkRepairsOpen, trunkStep, trunkTone } from "./phone-ops-view";
+import { formatDid, lineStatusLabel, personState, setupStatus, trunkProgress, trunkRepairsOpen } from "./phone-ops-view";
 
 type Count = { user_id: number; status: string; n: number };
 
@@ -315,6 +315,24 @@ export function listLines(query = "", company = 0, status = "") {
     siblings: rows.filter((other) => other.user_id === row.user_id && other.id !== row.id).map((other) => ({ id: other.id, did: other.did, trunkId: other.trunk_id })),
   };
   });
+}
+
+export function lineRepairsOpen(lineId: number) {
+  const row = listLines().find((line) => line.id === lineId);
+  if (!row) return true;
+  return trunkRepairsOpen(trunkProgress({
+    hasAccount: row.hasAccount,
+    departmentOnPbx: row.departmentOnPbx,
+    extensionOnPbx: row.extensionOnPbx,
+    routeLabel: row.routeLabel,
+    routeOnPbx: row.routeOnPbx,
+    trunkId: row.trunkId,
+    status: row.status,
+    inboundOnPbx: row.inboundOnPbx,
+    outboundOnPbx: row.outboundOnPbx,
+    outboundAssigned: row.outboundAssigned,
+    departmentLimited: row.departmentLimited,
+  }));
 }
 
 export function unmatchedTrunkLogs(query = "", company = 0): LoggedTrunkAttempt[] {

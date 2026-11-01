@@ -79,6 +79,18 @@ export function trunkTone(label: string) {
   return "bad" as const;
 }
 
+export function trunkRepairsOpen(input: ReturnType<typeof trunkProgress>) {
+  if (input.provider !== "Ready") return true;
+  if (input.department !== "On 3CX") return true;
+  if (input.extension !== "On 3CX") return true;
+  if (input.route === "Not created") return true;
+  if (input.trunk !== "Registered" && input.trunk !== "Certified") return true;
+  if (input.inbound !== "On 3CX") return true;
+  if (input.outbound !== "On 3CX, assigned to the department") return true;
+  if (input.limit !== "Limited to the department") return true;
+  return false;
+}
+
 export function trunkAdminSummary(input: ReturnType<typeof trunkProgress>) {
   const missing: string[] = [];
   if (input.department !== "On 3CX") missing.push("the department");
