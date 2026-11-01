@@ -99,12 +99,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
                     <select name="billing_type" defaultValue={config.billing_type || "1"}><option value="1">Per minute</option><option value="2">One monthly price</option></select>
                   </label>
                   <label className="check-option"><input type="checkbox" name="cnam" defaultChecked={config.cnam === "1"} /> Show the caller’s name</label>
-                  <p className="ops-muted">A line account is created as an ATA device, IP Phone or Softphone.</p>
-                  <label>International route
-                    <select name="international_route" defaultValue={config.international_route || "1"}><option value="1">Value</option><option value="2">Premium</option></select>
-                  </label>
-                  <label className="check-option"><input type="checkbox" name="lock_international" defaultChecked={config.lock_international === "1"} /> Block international calls on new line accounts</label>
-                  <label>Hold music <input name="music_on_hold" defaultValue={config.music_on_hold || "default"} /></label>
+                  <p className="ops-muted">Every line account uses the same VoIP.ms setup: SIP, a username and password, an ATA device, IP phone or softphone, the customer’s number as caller ID, Canada routing Premium, international route Value, international calls off, *225 off, no hold music, and call recording off.</p>
                   <label>Codecs <input name="allowed_codecs" defaultValue={lineCodecs(config.allowed_codecs || "")} placeholder="ulaw;g729;gsm" /></label>
                   <p className="ops-muted">VoIP.ms accepts ulaw, g729, gsm, or all. Other names are left out before a line account is created.</p>
                   <label>DTMF <input name="dtmf_mode" defaultValue={config.dtmf_mode || "auto"} /></label>

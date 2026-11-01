@@ -30,7 +30,7 @@ export const LINE_VARIABLES: LineVariable[] = [
   {
     key: "lock_international",
     label: "Block international calls",
-    detail: "1 blocks international calls on a new line account. 0 allows them. A value here replaces the switch on Phone connections.",
+    detail: "The VoIP.ms line template blocks international calls. A value here is not sent.",
     adminValue: "",
     audience: "admin",
     kind: "text",
@@ -38,7 +38,7 @@ export const LINE_VARIABLES: LineVariable[] = [
   {
     key: "international_route",
     label: "International route",
-    detail: "1 is the value route. 2 is premium. A value here replaces the route on Phone connections.",
+    detail: "The VoIP.ms line template uses the Value international route. A value here is not sent.",
     adminValue: "",
     audience: "admin",
     kind: "text",
@@ -46,7 +46,7 @@ export const LINE_VARIABLES: LineVariable[] = [
   {
     key: "music_on_hold",
     label: "Hold music",
-    detail: "Sent when a line account is created. A value here replaces the hold music on Phone connections.",
+    detail: "The VoIP.ms line template uses no hold music. A value here is not sent.",
     adminValue: "",
     audience: "admin",
     kind: "text",

@@ -17,6 +17,36 @@ export const TRUNK_SIP_DEFAULTS: Record<string, string> = {
   rtp_hold_timeout: "600",
 };
 
+export const LINE_TEMPLATE_KEYS = [
+  "protocol",
+  "device_type",
+  "lock_international",
+  "international_route",
+  "canada_routing",
+  "music_on_hold",
+  "allow225",
+  "record_calls",
+  "language",
+  "sip_traffic",
+  "max_expiry",
+  "rtp_timeout",
+  "rtp_hold_timeout",
+] as const;
+
+export function applyLineTemplate(settings: Record<string, string>, did = "") {
+  const next = { ...settings };
+  for (const key of LINE_TEMPLATE_KEYS) next[key] = TRUNK_SIP_DEFAULTS[key];
+  const caller = callerIdDigits(did);
+  if (caller) next.callerid_number = caller;
+  return next;
+}
+
+export function lineTemplateDrift(stored: Record<string, string>, did = "") {
+  const wanted = applyLineTemplate(stored, did);
+  if (LINE_TEMPLATE_KEYS.some((key) => (stored[key] || "") !== wanted[key])) return true;
+  return Boolean(wanted.callerid_number) && stored.callerid_number !== wanted.callerid_number;
+}
+
 export function sipUsernameCandidates(code: string) {
   const compact = code.replace(/[^A-Za-z0-9]/g, "").slice(0, 12);
   return /^[A-Za-z0-9]{1,12}$/.test(compact) ? [compact] : [];

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { callerIdDigits, sipUsernameCandidates, TRUNK_SIP_DEFAULTS } from "../lib/sip-account.ts";
+import { applyLineTemplate, callerIdDigits, lineTemplateDrift, sipUsernameCandidates, TRUNK_SIP_DEFAULTS } from "../lib/sip-account.ts";
 import { choosePlanPackage } from "../lib/reseller-package.ts";
 
 test("a SIP username uses the customer ID and stays within 12 characters", () => {
@@ -20,6 +20,19 @@ test("a new line account uses an ATA device, IP phone, or softphone", () => {
   assert.equal(TRUNK_SIP_DEFAULTS.allowed_codecs, "ulaw;g729");
   assert.equal(TRUNK_SIP_DEFAULTS.nat, "yes");
   assert.equal(TRUNK_SIP_DEFAULTS.sip_traffic, "0");
+  assert.equal(TRUNK_SIP_DEFAULTS.music_on_hold, "none");
+  assert.equal(TRUNK_SIP_DEFAULTS.record_calls, "0");
+  assert.equal(TRUNK_SIP_DEFAULTS.allow225, "0");
+  assert.equal(TRUNK_SIP_DEFAULTS.international_route, "1");
+  const drifted = { device_type: "1", lock_international: "0", music_on_hold: "default", callerid_number: "" };
+  assert.equal(lineTemplateDrift(drifted, "3345397005"), true);
+  const fixed = applyLineTemplate(drifted, "3345397005");
+  assert.equal(fixed.device_type, "2");
+  assert.equal(fixed.lock_international, "1");
+  assert.equal(fixed.canada_routing, "2");
+  assert.equal(fixed.music_on_hold, "none");
+  assert.equal(fixed.callerid_number, "3345397005");
+  assert.equal(lineTemplateDrift(fixed, "3345397005"), false);
 });
 
 test("the paid plan picks its package, and a missing package uses Default", () => {

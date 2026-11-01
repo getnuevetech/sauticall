@@ -7,7 +7,7 @@ import { readOutboundCalls, type CdrCall } from "./minute-math";
 import { appPassword, paidPlan } from "./pbx";
 import { ensureCustomerCode } from "./customer-code-store";
 import { choosePlanPackage, chooseResellerPackage } from "./reseller-package";
-import { callerIdDigits, sipUsernameCandidates, TRUNK_SIP_DEFAULTS } from "./sip-account";
+import { applyLineTemplate, callerIdDigits, lineTemplateDrift, sipUsernameCandidates, TRUNK_SIP_DEFAULTS } from "./sip-account";
 import { matchListedSubaccount, readCreatedSubaccount, readListedSubaccounts, subaccountDigits, subaccountUpdateParams } from "./subaccount-ref";
 
 export type Subaccount = {
@@ -52,34 +52,35 @@ function settingsFromConnection(userId = 0): Settings {
   const config = getConnection("voipms").public;
   const settings: Settings = {
     ...TRUNK_SIP_DEFAULTS,
-    lock_international: configured(config.lock_international, TRUNK_SIP_DEFAULTS.lock_international),
-    international_route: configured(config.international_route, TRUNK_SIP_DEFAULTS.international_route),
-    canada_routing: configured(config.canada_routing, TRUNK_SIP_DEFAULTS.canada_routing),
-    music_on_hold: configured(config.music_on_hold, TRUNK_SIP_DEFAULTS.music_on_hold),
     allowed_codecs: lineCodecs(configured(config.allowed_codecs, TRUNK_SIP_DEFAULTS.allowed_codecs)),
     dtmf_mode: configured(config.dtmf_mode, TRUNK_SIP_DEFAULTS.dtmf_mode),
     nat: configured(config.nat, TRUNK_SIP_DEFAULTS.nat),
   };
-  if (!userId) return settings;
-  for (const key of ["lock_international", "international_route", "canada_routing", "music_on_hold", "allowed_codecs", "dtmf_mode", "nat"]) {
+  if (!userId) return applyLineTemplate(settings);
+  for (const key of ["allowed_codecs", "dtmf_mode", "nat"]) {
     const value = resolvedLineValue(userId, key);
     if (value.trim() === "") continue;
     settings[key] = key === "allowed_codecs" ? lineCodecs(lineOverride(settings[key] || "", value)) : lineOverride(settings[key] || "", value);
   }
-  return settings;
+  return applyLineTemplate(settings);
 }
 
-function readSettings(raw: string): Settings {
+function readStoredSettings(raw: string): Settings {
   try {
     const value = JSON.parse(raw) as Record<string, unknown>;
-    return forLine(Object.fromEntries(Object.entries(value).map(([key, item]) => [key, String(item ?? "")])));
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, String(item ?? "")]));
   } catch {
-    return settingsFromConnection();
+    return {};
   }
 }
 
-function forLine(settings: Settings): Settings {
-  const next: Settings = { ...settings, allowed_codecs: lineCodecs(settings.allowed_codecs || ""), device_type: TRUNK_SIP_DEFAULTS.device_type };
+function readSettings(raw: string): Settings {
+  const stored = readStoredSettings(raw);
+  return Object.keys(stored).length ? forLine(stored) : settingsFromConnection();
+}
+
+function forLine(settings: Settings, did = ""): Settings {
+  const next: Settings = applyLineTemplate({ ...settings, allowed_codecs: lineCodecs(settings.allowed_codecs || "") }, did);
   if (!next.reseller_client || !next.reseller_package) {
     delete next.reseller_client;
     delete next.reseller_package;
@@ -169,14 +170,14 @@ export async function linkSubaccountClient(userId: number, clientId: string) {
   return { ok: true, message: "" };
 }
 
-async function ensurePhoneDevice(userId: number) {
+async function ensureLineTemplate(userId: number, did = "") {
   const row = getSubaccount(userId);
   if (!row?.account) return { ok: true as const, message: "" };
-  const stored = readSettings(row.settings_json);
-  if (stored.device_type === TRUNK_SIP_DEFAULTS.device_type) return { ok: true as const, message: "" };
+  const stored = readStoredSettings(row.settings_json);
+  if (!lineTemplateDrift(stored, did)) return { ok: true as const, message: "" };
   const id = await lineAccountId(userId, row.account, row.provider_id);
-  if (!id) return { ok: false as const, message: "VoIP.ms did not return a numeric id for this line account, so the phone type was not changed." };
-  const settings = forLine(stored);
+  if (!id) return { ok: false as const, message: "VoIP.ms did not return a numeric id for this line account, so the line settings were not updated." };
+  const settings = forLine({ ...settingsFromConnection(userId), ...stored }, did);
   const result = await callVoipms("setSubAccount", subaccountUpdateParams(id, {
     ...settings,
     description: accountLabel(userId),
@@ -184,7 +185,7 @@ async function ensurePhoneDevice(userId: number) {
     password: row.locked ? "" : row.password,
     ...(row.locked ? { ip: "203.0.113.1" } : {}),
   }), VOIPMS_WRITE_MS);
-  if (!result.ok) return { ok: false as const, message: `VoIP.ms did not set the line account to an ATA device, IP Phone or Softphone (${result.message || result.status}).` };
+  if (!result.ok) return { ok: false as const, message: `VoIP.ms did not apply the line account template (${result.message || result.status}).` };
   getDb().prepare("UPDATE voip_subaccounts SET settings_json = ? WHERE user_id = ?").run(JSON.stringify(settings), userId);
   return { ok: true as const, message: "" };
 }
@@ -193,7 +194,7 @@ export async function ensureSubaccount(userId: number, resellerClient = "", did 
   const existing = getSubaccount(userId);
   if (existing?.account && existing.password) {
     let warning = "";
-    const device = await ensurePhoneDevice(userId);
+    const device = await ensureLineTemplate(userId, did);
     if (!device.ok) warning = device.message;
     if (resellerClient) {
       const linked = await linkSubaccountClient(userId, resellerClient);

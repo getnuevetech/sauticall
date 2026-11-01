@@ -5,7 +5,11 @@ export function ensureLineVariables() {
   const insert = getDb().prepare(
     "INSERT INTO line_variables (key, label, detail, admin_value, audience, kind) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(key) DO NOTHING",
   );
-  for (const item of LINE_VARIABLES) insert.run(item.key, item.label, item.detail, item.adminValue, item.audience, item.kind);
+  const refresh = getDb().prepare("UPDATE line_variables SET label = ?, detail = ? WHERE key = ?");
+  for (const item of LINE_VARIABLES) {
+    insert.run(item.key, item.label, item.detail, item.adminValue, item.audience, item.kind);
+    refresh.run(item.label, item.detail, item.key);
+  }
 }
 
 export function listLineVariables(): LineVariable[] {
