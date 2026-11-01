@@ -50,6 +50,19 @@ function groupIdOf(value: unknown) {
   return Number(record.GroupId || record.Id) || 0;
 }
 
+export function trunkRoutingRules(body: unknown) {
+  const rules: { id: number; data: string; condition: string }[] = [];
+  const seen = new Set<number>();
+  for (const record of records(body)) {
+    const id = Number(record.Id);
+    if (!Number.isInteger(id) || id < 1 || seen.has(id)) continue;
+    if (!("OfficeHoursDestination" in record || "RuleName" in record || "Condition" in record)) continue;
+    seen.add(id);
+    rules.push({ id, data: String(record.Data || record.DID || ""), condition: String(record.Condition || "") });
+  }
+  return rules;
+}
+
 export function inboundRuleFound(body: unknown, trunkId: number, did: string) {
   const digits = trunkDigits(did);
   return records(body).some((record) => {

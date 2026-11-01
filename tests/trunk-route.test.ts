@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { outboundRuleBody } from "../lib/outbound-rule.ts";
 import { trunkAdminSummary, trunkProgress } from "../lib/phone-ops-view.ts";
-import { inboundRuleAttempts, signupPersonName, trunkRoutePatch, trunkStatusNote } from "../lib/trunk-route.ts";
-import { inboundRuleFound, outboundAssignedToDepartment, outboundRuleId, trunkDepartmentLimit } from "../lib/trunk-routes.ts";
+import { inboundRuleAttempts, signupPersonName, trunkRouteAttempts, trunkStatusNote } from "../lib/trunk-route.ts";
+import { inboundRuleFound, outboundAssignedToDepartment, outboundRuleId, trunkDepartmentLimit, trunkRoutingRules } from "../lib/trunk-routes.ts";
 
 test("a default person name comes from the account name", () => {
   assert.deepEqual(signupPersonName("IFe Esi", "tech@nuevetech.io"), { first: "IFe", last: "Esi" });
@@ -14,13 +14,21 @@ test("the trunk default route uses the same destination for office hours and aft
   const [primary] = inboundRuleAttempts({ name: "SautiCall 9708430420", did: "9708430420", trunkId: 159, to: "RingGroup", number: "800" });
   assert.equal(primary.RuleName, "SautiCall 9708430420");
   assert.equal(primary.Data, "9708430420");
-  assert.equal(primary.TrunkDN.Id, 159);
-  assert.equal(primary.OfficeHoursDestination.To, "RingGroup");
-  assert.equal(primary.OutOfOfficeHoursDestination.Number, "800");
-  assert.equal(primary.HolidaysDestination.To, "RingGroup");
-  const patch = trunkRoutePatch({ did: "9708430420", to: "Extension", number: "545" });
-  assert.equal(patch.RoutingRules.delta[0].OfficeHoursDestination.To, "Extension");
-  assert.equal(patch.RoutingRules.delta[0].OutOfOfficeHoursDestination.Number, "545");
+  assert.equal(primary.Condition, "BasedOnDID");
+  assert.equal((primary.TrunkDN as { Id: number; Type: string }).Id, 159);
+  assert.equal((primary.TrunkDN as { Type: string }).Type, "ExternalLine");
+  assert.equal((primary.OfficeHoursDestination as { To: string }).To, "RingGroup");
+  assert.equal((primary.OutOfOfficeHoursDestination as { Number: string }).Number, "800");
+  assert.equal((primary.HolidaysDestination as { To: string }).To, "RingGroup");
+  assert.equal("@odata.type" in (primary.OfficeHoursDestination as object), false);
+  const [arrayForm, deltaForm] = trunkRouteAttempts({ did: "9708430420", to: "Extension", number: "545" });
+  const arrayRule = (arrayForm.RoutingRules as { To?: string; OfficeHoursDestination: { To: string; Number: string }; TrunkDN?: unknown }[])[0];
+  assert.equal(arrayRule.OfficeHoursDestination.To, "Extension");
+  assert.equal(arrayRule.OfficeHoursDestination.Number, "545");
+  assert.equal(arrayRule.TrunkDN, undefined);
+  const deltaRule = (deltaForm.RoutingRules as { delta: { OfficeHoursDestination: { Tags: { delta: unknown[] } } }[] }).delta[0];
+  assert.deepEqual(deltaRule.OfficeHoursDestination.Tags.delta, []);
+  assert.deepEqual(trunkRoutingRules({ RoutingRules: [{ Id: 9, RuleName: "Main", Condition: "ForwardAll", Data: "" }] }), [{ id: 9, data: "", condition: "ForwardAll" }]);
 });
 
 test("an outbound rule is limited to the department extension range and assigned to that department", () => {
