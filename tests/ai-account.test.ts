@@ -23,7 +23,7 @@ test("an extension can become an AI extension only for a system on the plan", ()
   const ordinary = validateAiExtension({ role: "", name: "", allowed });
   assert.equal(ordinary.ok && ordinary.role, "");
   const named = validateAiExtension({ role: "receptionist", name: "Front desk", allowed });
-  assert.equal(named.ok && named.name, "Front desk");
+  assert.equal(named.ok, false);
   const missing = validateAiExtension({ role: "notifications", name: "Notices", allowed });
   assert.equal(missing.ok, false);
   const unnamed = validateAiExtension({ role: "receptionist", name: " ", allowed });
@@ -33,8 +33,8 @@ test("an extension can become an AI extension only for a system on the plan", ()
 test("live calls stay off even after an AI extension is named", () => {
   const ready = aiConnectionStatus({ included: true, named: true, extensionNumber: "510", onPhoneSystem: true });
   assert.equal(ready.configured, "Configured");
-  assert.match(ready.phone, /510/);
-  assert.match(ready.live, /Off/);
+  assert.match(ready.phone, /does not answer/);
+  assert.match(ready.live, /ring group/);
   const closed = aiConnectionStatus({ included: false, named: false, extensionNumber: "", onPhoneSystem: false });
   assert.equal(closed.configured, "Not on this plan");
 });

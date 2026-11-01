@@ -30,6 +30,9 @@ export function systemsForPlan(features: readonly string[]) {
 export function validateAiExtension(input: { role: string; name: string; allowed: readonly string[] }) {
   const role = input.role.trim();
   if (!role) return { ok: true as const, role: "", name: "" };
+  if (role === "receptionist" || role === "personal_assistant") {
+    return { ok: false as const, message: "Create this AI extension under AI. A phone extension does not answer calls for it." };
+  }
   if (!knownAccountAi(role) || !input.allowed.includes(role)) return { ok: false as const, message: "That AI system is not included on this plan." };
   const name = input.name.trim().slice(0, 40);
   if (!name) return { ok: false as const, message: "Name this AI extension." };
@@ -47,11 +50,9 @@ export function aiConnectionStatus(input: { included: boolean; named: boolean; e
   }
   return {
     configured: input.named ? "Configured" : "Needs a name",
-    phone: input.extensionNumber
-      ? input.onPhoneSystem
-        ? `Extension ${input.extensionNumber} is on the phone system`
-        : `Extension ${input.extensionNumber} is saved here. It is not on the phone system yet.`
-      : "No extension assigned",
-    live: "Off. This account does not answer or place a call from this page.",
+    phone: input.onPhoneSystem
+      ? "A phone extension does not answer as this AI service."
+      : "No phone is assigned. A virtual destination answers when 3CX certifies it.",
+    live: "Off. Calls stay on the ring group until a virtual destination is certified.",
   };
 }

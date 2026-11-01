@@ -74,9 +74,9 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
           <ol className="ops-steps">
             <li>Create department {line.department} on 3CX{line.from && line.to ? ` for extensions ${line.from}–${line.to}` : ""}.</li>
             <li>Create the default extension{line.extension ? ` ${line.extension}` : ""} from the account name and email.</li>
-            <li>{line.routeLabel.startsWith("AI") ? `Use ${line.routeLabel} as the default route.` : "Create a ring group for that extension and use it as the default route."}</li>
+            <li>Create a ring group for that extension and use it as the default route. An AI receptionist is a virtual destination under AI, not a phone extension.</li>
             <li>Create a SIP trunk for {line.company}. Use registrar {line.sipHost || "the saved POP"}. The SIP user and password are below.</li>
-            <li>Set the trunk default route for office hours and after hours to {line.routeLabel || "the ring group or AI receptionist"}.</li>
+            <li>Set the trunk default route for office hours and after hours to {line.routeLabel && !line.routeLabel.startsWith("AI receptionist") ? line.routeLabel : "the ring group"}.</li>
             <li>Add an outbound rule for extensions {line.from && line.to ? `${line.from}–${line.to}` : "the company’s reserved range"} and assign that rule to {line.department}.</li>
             <li>Limit the trunk to {line.department}.</li>
           </ol>

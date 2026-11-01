@@ -1,8 +1,9 @@
 import Link from "next/link";
 
-export function AiSectionNav({ current }: { current: "system" | "terms" | "access" | "audio" | "notify" | "route" }) {
+export function AiSectionNav({ current }: { current: "system" | "terms" | "access" | "audio" | "notify" | "route" | "destinations" }) {
   const links = [
     ["system", "/admin/ai", "Engines"],
+    ["destinations", "/admin/ai/destinations", "Virtual destinations"],
     ["terms", "/admin/ai/terms", "Agreements"],
     ["access", "/admin/ai/access", "Customer access"],
     ["audio", "/admin/ai/audio", "Audio"],

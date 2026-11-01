@@ -34,7 +34,8 @@ test("the next action follows plan, name, instructions, extension, then enableme
   const named = nextSetupStep("receptionist", { ...open, named: true }, "Team");
   assert.equal(named.href, "/account/ai/services/receptionist?tab=instructions");
   const written = nextSetupStep("receptionist", { ...open, named: true, hasInstructions: true }, "Team");
-  assert.equal(written.label, "Assign an extension");
+  assert.equal(written.label, "Create AI extension");
+  assert.equal(written.href, "/account/ai/extensions");
   const assigned = nextSetupStep("tts", { ...open, named: true, hasInstructions: true }, "Team");
   assert.equal(assigned.href, "/account/ai/services/tts?tab=activity");
   assert.match(assigned.summary, /Live calls stay off/);
