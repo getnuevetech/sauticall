@@ -67,7 +67,7 @@ export default async function AccountAiPage({ searchParams }: { searchParams: Pr
           <li>SautiCall AI uses those instructions through a programmable route on 3CX. 3CX Native is created in 3CX, and the prompt stays here until 3CX confirms it.</li>
           <li>No desk phone or softphone is assigned. A normal extension is not created for the receptionist.</li>
           <li>The phone number keeps ringing the Main ring group. Saving this configuration does not move that route and does not place a call.</li>
-          <li>An administrator connects the 3CX destination and records its identifier. The number moves to the AI only after 3CX confirms that destination. Live audio stays blocked until that confirmation, because programmable call control is not verified on this phone system.</li>
+          <li>An internal call reaches the receptionist by dialing the existing 3CX Service Principal Client ID. The phone number stays on the ring group until that route is confirmed. This page does not place a call.</li>
         </ol>
         {virtualChoices.length === 0 ? (
           <p>This plan does not include an AI receptionist. <Link className="text-link" href="/account/billing/plan">See plans</Link></p>

@@ -39,7 +39,7 @@ export default async function AiExtensionPage({ params, searchParams }: { params
       {query.saved && query.saved !== "preview" ? <p className="form-feedback">Saved. The phone number was not moved, and no call was placed.</p> : null}
       {tab === "overview" ? (
         <article className="contact-form">
-          <p>Live answering is blocked until 3CX confirms a programmable route that can carry audio. Until then, this number stays on the ring group.</p>
+          <p>This number stays on the ring group. An internal test dials the existing 3CX Service Principal Client ID. No desk phone is registered for the receptionist.</p>
           <p><span>Number</span> {agent.did || "None"}</p>
           <p><span>Route</span> {agent.assignment_state === "fallback" ? "Backup destination. The AI is paused." : `Unchanged. Previous route: ${agent.previous_route || "the ring group"}.`}</p>
           <p><span>Fallback</span> {agent.fallback_label || "Ring group"}</p>
@@ -76,12 +76,12 @@ export default async function AiExtensionPage({ params, searchParams }: { params
       {tab === "voice" ? (
         <article className="contact-form">
           <p>Answering mode: {engineLabel(agent.execution_engine)}.</p>
-          <p>A voice is not played on a live call until the 3CX media path is confirmed. Text preview does not open a phone call.</p>
+          <p>The saved voice is used when the existing 3CX connection is carrying live audio. Text preview does not open a phone call.</p>
         </article>
       ) : null}
       {tab === "test" ? (
         <article className="contact-form">
-          <p>This is a text preview. It does not dial, answer, or move the phone number. A live test call waits on a confirmed 3CX programmable route.</p>
+          <p>This is a text preview. It does not dial, answer, or move the phone number. A live test is an internal call to the existing Service Principal.</p>
           <form action={previewVirtualAgentForm}>
             <input type="hidden" name="agent_id" value={agent.id} />
             <label>What the caller says <input name="utterance" required placeholder="What does this company do?" /></label>

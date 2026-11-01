@@ -66,7 +66,7 @@ export function provisionDecision(input: { engine: AiEngine; capabilities: Recor
     moveRoute: false,
     promptSync: programmable ? "" : "NOT_SYNCED_NATIVE",
     task: programmable
-      ? "In 3CX, open Admin, Integrations, API, and create a Service Principal for this company. Record the Client ID here. Do not assign a desk phone or softphone."
+      ? "Use the Service Principal already stored on the 3CX connection. Enable Call Control on that principal if the check says it is missing, then record its Client ID here. Do not assign a desk phone, a softphone, or a new trunk."
       : "Create the native 3CX AI agent in the 3CX console for this company. Record its identifier here. SautiCall does not treat the prompt as live on 3CX until that sync is verified.",
     reason: verified
       ? "Automatic creation is marked verified, and this server still has no confirmed 3CX request for that object. An administrator records the destination. The phone number stays on the ring group."
@@ -254,7 +254,7 @@ export function ensureVirtualSchema(database: Database.Database) {
       prompt_version_id INTEGER NOT NULL DEFAULT 0,
       pbx_call_id TEXT NOT NULL DEFAULT '',
       state TEXT NOT NULL,
-      media_open INTEGER NOT NULL DEFAULT 0 CHECK (media_open = 0),
+      media_open INTEGER NOT NULL DEFAULT 0 CHECK (media_open IN (0, 1)),
       place_call INTEGER NOT NULL DEFAULT 0 CHECK (place_call = 0),
       outcome TEXT NOT NULL DEFAULT '',
       started_at TEXT NOT NULL,
@@ -286,6 +286,57 @@ export function ensureVirtualSchema(database: Database.Database) {
   template.run("after_hours", "After hours", "Greeting: Thank you for calling. The office is closed. Take a message or offer the after-hours destination. Do not promise a callback time that is not in the saved hours.");
   const insert = database.prepare("INSERT INTO pbx_capabilities (capability, status, observed_build, verified_at, evidence) VALUES (?, 'unverified', '', '', '') ON CONFLICT(capability) DO NOTHING");
   for (const capability of VIRTUAL_CAPABILITIES) insert.run(capability);
+  relaxSessionMedia(database);
+}
+
+function relaxSessionMedia(database: Database.Database) {
+  const row = database.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ai_sessions'").get() as { sql: string } | undefined;
+  if (!row?.sql.includes("CHECK (media_open = 0)")) return;
+  database.exec(`
+    CREATE TABLE ai_sessions_next (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      agent_id INTEGER NOT NULL,
+      prompt_version_id INTEGER NOT NULL DEFAULT 0,
+      pbx_call_id TEXT NOT NULL DEFAULT '',
+      state TEXT NOT NULL,
+      media_open INTEGER NOT NULL DEFAULT 0 CHECK (media_open IN (0, 1)),
+      place_call INTEGER NOT NULL DEFAULT 0 CHECK (place_call = 0),
+      outcome TEXT NOT NULL DEFAULT '',
+      started_at TEXT NOT NULL,
+      ended_at TEXT NOT NULL DEFAULT ''
+    );
+    INSERT INTO ai_sessions_next (id, user_id, agent_id, prompt_version_id, pbx_call_id, state, media_open, place_call, outcome, started_at, ended_at)
+    SELECT id, user_id, agent_id, prompt_version_id, pbx_call_id, state, 0, 0, outcome, started_at, ended_at FROM ai_sessions;
+    DROP TABLE ai_sessions;
+    ALTER TABLE ai_sessions_next RENAME TO ai_sessions;
+  `);
+}
+
+export function noteCapability(database: Database.Database, input: { capability: string; status: CapabilityStatus; build: string; evidence: string; now: string }) {
+  ensureVirtualSchema(database);
+  database.prepare(
+    "UPDATE pbx_capabilities SET status = ?, observed_build = ?, verified_at = ?, evidence = ? WHERE capability = ?",
+  ).run(input.status, input.build.slice(0, 80), input.now, input.evidence.slice(0, 500), input.capability);
+}
+
+export function recordLiveSession(database: Database.Database, input: {
+  userId: number;
+  agentId: number;
+  promptVersionId: number;
+  pbxCallId: string;
+  state: string;
+  mediaOpen: boolean;
+  outcome: string;
+  startedAt: string;
+  endedAt: string;
+}) {
+  ensureVirtualSchema(database);
+  const session = database.prepare(
+    "INSERT INTO ai_sessions (user_id, agent_id, prompt_version_id, pbx_call_id, state, media_open, place_call, outcome, started_at, ended_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
+  ).run(input.userId, input.agentId, input.promptVersionId, input.pbxCallId.slice(0, 80), input.state, input.mediaOpen ? 1 : 0, input.outcome.slice(0, 300), input.startedAt, input.endedAt);
+  database.prepare("INSERT INTO ai_usage_ledger (user_id, session_id, billable_seconds, created_at) VALUES (?, ?, 0, ?)").run(input.userId, Number(session.lastInsertRowid), input.endedAt);
+  return Number(session.lastInsertRowid);
 }
 
 function digits(value: string) {

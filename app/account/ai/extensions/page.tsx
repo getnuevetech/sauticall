@@ -54,7 +54,7 @@ export default async function AiExtensionsPage({ searchParams }: { searchParams:
               <option value="THREE_CX_NATIVE">3CX Native</option>
             </select>
           </label>
-          <p>SautiCall AI uses the prompts saved here and a programmable route on 3CX. 3CX Native is created in 3CX, and prompt changes stay here until 3CX confirms them. Neither choice assigns a phone.</p>
+          <p>SautiCall AI uses the prompts saved here through the 3CX connection that already provisions trunks and extensions. 3CX Native keeps prompt changes here until 3CX confirms them. Neither choice assigns a phone.</p>
           <label>Phone number
             <select name="did" required defaultValue={numbers[0]?.did || ""}>
               {numbers.length === 0 ? <option value="">Buy a number first</option> : numbers.map((item) => <option key={item.did} value={item.did}>{item.did}</option>)}
