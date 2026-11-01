@@ -8,47 +8,52 @@ export function signupPersonName(full: string, email: string) {
   return { first: (bits[0] || "Owner").slice(0, 40), last: (bits.slice(1).join(" ") || "Account").slice(0, 40) };
 }
 
-export function callDestination(to: "Extension" | "RingGroup", number: string) {
-  return { "@odata.type": "#Pbx.Destination", To: to, Number: number, External: "", Name: "" };
+export function routeDestination(to: "Extension" | "RingGroup", number: string, tags: "omit" | "delta" = "omit") {
+  const destination: Record<string, unknown> = { To: to, Number: number, External: "", Name: "" };
+  if (tags === "delta") destination.Tags = { "@odata.type": "#Collection(Pbx.UserTag)", delta: [] };
+  return destination;
 }
 
-export function inboundRuleAttempts(input: { name: string; did: string; trunkId: number; to: "Extension" | "RingGroup"; number: string }) {
-  const destination = callDestination(input.to, input.number);
-  const plain = { To: input.to, Number: input.number, External: "", Name: "" };
-  const linked = {
-    RuleName: input.name,
-    Data: input.did,
-    TrunkDN: { Id: input.trunkId },
+export function inboundDestinationUpdate(to: "Extension" | "RingGroup", number: string, tags: "omit" | "delta" = "omit") {
+  const destination = routeDestination(to, number, tags);
+  return {
+    AlterDestinationDuringOutOfOfficeHours: true,
+    AlterDestinationDuringHolidays: true,
     OfficeHoursDestination: destination,
     OutOfOfficeHoursDestination: destination,
     HolidaysDestination: destination,
   };
-  const bound = {
-    RuleName: input.name,
-    Data: input.did,
-    "TrunkDN@odata.bind": `Trunks(${input.trunkId})`,
-    OfficeHoursDestination: plain,
-    OutOfOfficeHoursDestination: plain,
-    HolidaysDestination: plain,
-  };
-  return [linked, bound];
 }
 
-export function trunkRoutePatch(input: { did: string; to: "Extension" | "RingGroup"; number: string }) {
-  const destination = callDestination(input.to, input.number);
-  return {
-    RoutingRules: {
-      "@odata.type": "#Collection(Pbx.InboundRule)",
-      delta: [{
-        "@odata.type": "#Pbx.InboundRule",
-        RuleName: "Main",
-        Data: input.did,
-        OfficeHoursDestination: destination,
-        OutOfOfficeHoursDestination: destination,
-        HolidaysDestination: destination,
-      }],
-    },
+function inboundRule(input: { name: string; did: string; trunkId: number; to: "Extension" | "RingGroup"; number: string }, tags: "omit" | "delta") {
+  const destination = routeDestination(input.to, input.number, tags);
+  const rule: Record<string, unknown> = {
+    RuleName: input.name,
+    Data: input.did,
+    Condition: "BasedOnDID",
+    CallType: "AllCalls",
+    TrunkDN: { Id: input.trunkId, Type: "ExternalLine" },
+    OfficeHoursDestination: destination,
+    OutOfOfficeHoursDestination: destination,
+    HolidaysDestination: destination,
   };
+  if (tags === "delta") rule.Hours = { Type: "AllHours", IgnoreHolidays: false, Periods: { "@odata.type": "#Collection(Pbx.Period)", delta: [] } };
+  return rule;
+}
+
+export function inboundRuleAttempts(input: { name: string; did: string; trunkId: number; to: "Extension" | "RingGroup"; number: string }) {
+  return [inboundRule(input, "omit"), inboundRule(input, "delta")];
+}
+
+export function trunkRouteAttempts(input: { did: string; to: "Extension" | "RingGroup"; number: string }) {
+  const plain = inboundRule({ name: "Main", did: input.did, trunkId: 0, to: input.to, number: input.number }, "omit");
+  const tagged = inboundRule({ name: "Main", did: input.did, trunkId: 0, to: input.to, number: input.number }, "delta");
+  delete plain.TrunkDN;
+  delete tagged.TrunkDN;
+  return [
+    { RoutingRules: [plain] },
+    { RoutingRules: { delta: [tagged] } },
+  ];
 }
 
 export function trunkStatusNote(input: {
@@ -73,6 +78,7 @@ export function trunkStatusNote(input: {
   const department = input.departmentName || "this company";
   const parts = [
     input.trunkId ? `3CX trunk id ${input.trunkId}${input.trunkNumber ? `, internal number ${input.trunkNumber}` : ""}.` : "No 3CX trunk was created.",
+    input.detail,
     input.departmentOnPbx ? `Department ${department} is on 3CX.` : `Department ${department} is not on 3CX.`,
     input.extensionOnPbx ? `Extension ${input.extension} is on 3CX.` : `Extension ${input.extension || "for this account"} is not on 3CX.`,
     input.routeOnPbx ? `Default route: ${input.routeLabel}, for office hours and after hours.` : `Default route is not on 3CX${input.routeLabel ? ` (${input.routeLabel})` : ""}.`,
@@ -83,6 +89,5 @@ export function trunkStatusNote(input: {
     input.departmentLimited ? "The trunk is limited to this department." : "The trunk is not limited to this department.",
   ];
   if (input.account) parts.push(`VoIP.ms SIP account ${input.account} at ${input.host || "the saved POP"}.`);
-  if (input.detail) parts.push(input.detail);
-  return parts.join(" ");
+  return parts.filter(Boolean).join(" ");
 }

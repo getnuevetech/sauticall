@@ -12,9 +12,9 @@ import { manualTrunkNote, mentionsDelta, readTrunkIdentity, redactProvisioning, 
 import { shownAccountName } from "./pbx-user";
 import { carrierDidRef, numberIsBought, orderTimedOut } from "./number-order";
 import { automaticStopNote, trunkMayAutoTry } from "./trunk-tries";
-import { inboundRuleAttempts, trunkRoutePatch, trunkStatusNote } from "./trunk-route";
+import { inboundDestinationUpdate, inboundRuleAttempts, trunkRouteAttempts, trunkStatusNote } from "./trunk-route";
 import { ensureTrunkDefaults } from "./trunk-prereq";
-import { inboundRuleFound, outboundAssignedToDepartment, outboundRuleFound, outboundRuleId, portNumbers, trunkDepartmentLimit } from "./trunk-routes";
+import { inboundRuleFound, outboundAssignedToDepartment, outboundRuleFound, outboundRuleId, portNumbers, trunkDepartmentLimit, trunkRoutingRules } from "./trunk-routes";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
 
@@ -147,15 +147,50 @@ async function addOutboundRule(input: { name: string; trunkId: number; callerId:
   return { ok: true, assigned, message: `${scope}${groupNote}` };
 }
 
-async function addInboundRule(input: { name: string; did: string; trunkId: number; to: "Extension" | "RingGroup"; number: string }) {
-  let last = "3CX did not add the inbound route.";
-  for (const body of inboundRuleAttempts(input)) {
-    const rule = await pbxWrite("InboundRules", { method: "POST", body });
-    if (rule.ok) return { ok: true, message: "The inbound route is on 3CX." };
-    if (/duplicate|already exists/i.test(`${rule.message} ${rule.code || ""}`)) return { ok: true, message: "The inbound route is already on the phone system." };
-    last = rule.message || last;
+async function saveInboundRoute(input: { name: string; did: string; trunkId: number; to: "Extension" | "RingGroup"; number: string }) {
+  const listed = await pbxRequest(`Trunks(${input.trunkId})?$expand=RoutingRules`);
+  const rules = listed.ok ? trunkRoutingRules(listed.body) : [];
+  const failures: string[] = [];
+  let updated = 0;
+  for (const rule of rules) {
+    let patched = await pbxWrite(`InboundRules(${rule.id})`, { method: "PATCH", body: inboundDestinationUpdate(input.to, input.number) });
+    if (!patched.ok && mentionsDelta(patched.message || "")) {
+      patched = await pbxWrite(`InboundRules(${rule.id})`, { method: "PATCH", body: inboundDestinationUpdate(input.to, input.number, "delta") });
+    }
+    if (patched.ok) updated += 1;
+    else failures.push(patched.message || `3CX did not update inbound rule ${rule.id}.`);
   }
-  return { ok: false, message: last };
+  let created = false;
+  if (!rules.length || updated === 0) {
+    let last = "3CX did not add the inbound route.";
+    for (const body of inboundRuleAttempts(input)) {
+      const rule = await pbxWrite("InboundRules", { method: "POST", body });
+      if (rule.ok || /duplicate|already exists/i.test(`${rule.message} ${rule.code || ""}`)) {
+        created = true;
+        break;
+      }
+      last = rule.message || last;
+    }
+    if (!created) failures.push(last);
+  }
+  let replaced = false;
+  if (!updated && !created) {
+    let last = "3CX did not save the trunk default route.";
+    for (const body of trunkRouteAttempts({ did: input.did, to: input.to, number: input.number })) {
+      const routed = await pbxWrite(`Trunks(${input.trunkId})`, { method: "PATCH", body });
+      if (routed.ok || /duplicate|already exists/i.test(routed.message || "")) {
+        replaced = true;
+        break;
+      }
+      last = routed.message || last;
+    }
+    if (!replaced) failures.push(last);
+  }
+  if (updated || created || replaced) {
+    const saved = updated ? `The trunk default route now points to ${input.to === "RingGroup" ? "ring group" : "extension"} ${input.number} for office hours and after hours.` : `The inbound route points to ${input.to === "RingGroup" ? "ring group" : "extension"} ${input.number} for office hours and after hours.`;
+    return { ok: true, message: saved };
+  }
+  return { ok: false, message: failures.filter(Boolean)[0] || "The inbound route is not on 3CX." };
 }
 
 function trunkSeed(body: unknown) {
@@ -265,19 +300,14 @@ export async function attachTrunk(lineId: number) {
     });
   }
   const departmentLimited = grouped.ok;
-  const routed = await pbxWrite(`Trunks(${trunkId})`, {
-    method: "PATCH",
-    body: trunkRoutePatch({ did: number, to: prepared.target.to, number: prepared.target.number }),
-  });
-  const routeOnTrunk = routed.ok || /duplicate|already exists/i.test(routed.message || "");
-  const inbound = await addInboundRule({
+  const inbound = await saveInboundRoute({
     name: `SautiCall ${line.did}`,
     did: number,
     trunkId,
     to: prepared.target.to,
     number: prepared.target.number,
   });
-  const inboundOnPbx = inbound.ok || routeOnTrunk;
+  const inboundOnPbx = inbound.ok;
   const outbound = await addOutboundRule({
     name: `SautiCall ${line.did}`,
     trunkId,
@@ -293,8 +323,7 @@ export async function attachTrunk(lineId: number) {
   const limited = limitRead === "yes" || (limitRead === "unknown" && departmentLimited);
   const verdict = trunkProvisionVerdict({ registered: identity.registered, inbound: inboundOnPbx, outbound: outbound.ok, callsConfirmed: false });
   const detailText = [
-    routeOnTrunk ? "The trunk default route is saved." : `The trunk default route was not saved. ${routed.message || ""}`.trim(),
-    inbound.ok ? inbound.message : `The DID inbound route was not saved. ${inbound.message}`,
+    inbound.message,
     outbound.ok ? outbound.message : outbound.message,
     limited ? "" : grouped.message || `The trunk is not limited to ${company}.`,
     verdict.reason,
