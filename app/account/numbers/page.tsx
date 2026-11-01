@@ -4,6 +4,7 @@ import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { guardAccount } from "@/lib/guard";
 import { flagOn, getDb } from "@/lib/db";
 import { publishBoughtNumbers, scheduleAutomaticTrunks } from "@/lib/lines";
+import { scheduleDefaultAccount } from "@/lib/trunk-prereq";
 import { paidPlan } from "@/lib/pbx";
 import { planAllows } from "@/lib/plan-features";
 import { inventoryReady } from "@/lib/carriers";
@@ -29,6 +30,7 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
   const included = planAllows(paidPlan(user.id), "numbers");
   const address = getEmergency(user.id);
   publishBoughtNumbers(user.id);
+  scheduleDefaultAccount(user.id);
   scheduleAutomaticTrunks(user.id);
   const verified = getDb().prepare("SELECT phone_verified_at FROM users WHERE id = ?").get(user.id) as { phone_verified_at: string } | undefined;
   const smsRequired = flagOn("auth.verify_sms");

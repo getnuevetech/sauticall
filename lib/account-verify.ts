@@ -144,10 +144,15 @@ function openChallenge(row: Challenge) {
   return challengeOpen({ expiresAt: row.expires_at, usedAt: row.used_at, attempts: row.attempts });
 }
 
+function queueDefaultAccount(userId: number) {
+  void import("./trunk-prereq").then(({ scheduleDefaultAccount }) => scheduleDefaultAccount(userId));
+}
+
 function finish(row: Challenge, column: "email_verified_at" | "phone_verified_at") {
   const now = new Date().toISOString();
   getDb().prepare("UPDATE verification_challenges SET used_at = ? WHERE id = ?").run(now, row.id);
   getDb().prepare(`UPDATE users SET ${column} = ? WHERE id = ?`).run(now, row.user_id);
+  queueDefaultAccount(row.user_id);
 }
 
 export function confirmEmailToken(token: string) {
@@ -172,6 +177,7 @@ function confirmCode(userId: number, channel: "email" | "sms", code: string) {
     const open = latest(userId, channel);
     if (open && !open.used_at) getDb().prepare("UPDATE verification_challenges SET used_at = ? WHERE id = ?").run(now, open.id);
     getDb().prepare(`UPDATE users SET ${column} = ? WHERE id = ?`).run(now, userId);
+    queueDefaultAccount(userId);
     return { ok: true as const, message: channel === "email" ? "Email confirmed." : "Mobile number confirmed." };
   }
   const row = latest(userId, channel);

@@ -2,8 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { outboundRuleBody } from "../lib/outbound-rule.ts";
 import { trunkAdminSummary, trunkProgress } from "../lib/phone-ops-view.ts";
-import { inboundRuleAttempts, signupPersonName, trunkRouteAttempts, trunkStatusNote } from "../lib/trunk-route.ts";
+import { extensionReady, inboundRuleAttempts, signupPersonName, trunkNameFromAccount, trunkRouteAttempts, trunkStatusNote } from "../lib/trunk-route.ts";
 import { inboundRuleFound, outboundAssignedToDepartment, outboundRuleId, trunkDepartmentLimit, trunkRoutingRules } from "../lib/trunk-routes.ts";
+
+test("the default extension waits for a paid plan and the required confirmation", () => {
+  assert.equal(extensionReady({ paid: false, emailVerified: true, phoneVerified: true, emailRequired: true, smsRequired: true }), false);
+  assert.equal(extensionReady({ paid: true, emailVerified: false, phoneVerified: true, emailRequired: true, smsRequired: false }), false);
+  assert.equal(extensionReady({ paid: true, emailVerified: true, phoneVerified: false, emailRequired: false, smsRequired: false }), true);
+  assert.equal(trunkNameFromAccount("577137_I0000003"), "577137_I0000003");
+  assert.equal(trunkNameFromAccount("not a name"), "");
+});
 
 test("a default person name comes from the account name", () => {
   assert.deepEqual(signupPersonName("IFe Esi", "tech@nuevetech.io"), { first: "IFe", last: "Esi" });
