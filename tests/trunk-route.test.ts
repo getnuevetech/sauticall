@@ -13,16 +13,16 @@ test("the default extension waits for a paid plan and the required confirmation"
   assert.equal(trunkNameFromAccount("not a name"), "");
 });
 
-test("an AI plan uses the receptionist extension and any other plan uses the ring group", () => {
-  const ai = defaultTrunkDestination({ ai: true, aiExtension: "529", ringName: "Main", ringNumber: "800" });
-  assert.equal(ai?.to, "Extension");
-  assert.equal(ai?.number, "529");
-  assert.equal(ai?.label, "AI receptionist extension 529");
-  assert.equal(defaultTrunkDestination({ ai: true, aiExtension: "", ringName: "Main", ringNumber: "800" }), null);
-  const ring = defaultTrunkDestination({ ai: false, aiExtension: "528", ringName: "Main", ringNumber: "800" });
+test("an uncertified AI plan keeps the ring group, and a certified virtual destination can take the route", () => {
+  const ring = defaultTrunkDestination({ ringName: "Main", ringNumber: "800" });
   assert.equal(ring?.to, "RingGroup");
   assert.equal(ring?.number, "800");
   assert.equal(ring?.label, "Ring group Main · 800");
+  assert.equal(defaultTrunkDestination({ ringName: "Main", ringNumber: "" }), null);
+  const certified = defaultTrunkDestination({ certifiedRoute: "app-front-desk", certifiedLabel: "AI virtual destination app-front-desk", ringName: "Main", ringNumber: "800" });
+  assert.equal(certified?.to, "Extension");
+  assert.equal(certified?.number, "app-front-desk");
+  assert.equal(certified?.kind, "virtual");
   assert.equal(receptionistAddress("ada@example.com", 4), "ada+ai4@example.com");
   assert.equal(receptionistAddress("ada+other@example.com", 4), "ada+ai4@example.com");
 });

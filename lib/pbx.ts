@@ -507,11 +507,7 @@ function daytimeDestination(userId: number) {
     .prepare("SELECT kind, number FROM call_groups WHERE user_id = ? AND answers = 1 AND status IN ('created', 'manual') ORDER BY id DESC LIMIT 1")
     .get(userId) as { kind: string; number: string } | undefined;
   if (group?.number) return { number: group.number, to: group.kind === "queue" ? "Queue" as const : "RingGroup" as const };
-  const receptionist = getDb().prepare(
-    "SELECT number FROM pbx_extensions WHERE user_id = ? AND ai_role = 'receptionist' AND xapi_id != 0 AND status != 'removed' ORDER BY id LIMIT 1",
-  ).get(userId) as { number: string } | undefined;
-  if (receptionist?.number) return { number: receptionist.number, to: "Extension" as const };
-  const first = getDb().prepare("SELECT number FROM pbx_extensions WHERE user_id = ? AND xapi_id != 0 AND status != 'removed' ORDER BY id LIMIT 1").get(userId) as { number: string } | undefined;
+  const first = getDb().prepare("SELECT number FROM pbx_extensions WHERE user_id = ? AND xapi_id != 0 AND status != 'removed' AND ai_role != 'receptionist' ORDER BY id LIMIT 1").get(userId) as { number: string } | undefined;
   if (!first) return null;
   return { number: first.number, to: "Extension" as const };
 }

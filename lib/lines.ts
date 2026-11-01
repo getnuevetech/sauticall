@@ -12,7 +12,7 @@ import { manualTrunkNote, mentionsDelta, readTrunkIdentity, redactProvisioning, 
 import { shownAccountName } from "./pbx-user";
 import { carrierDidRef, numberIsBought, orderTimedOut } from "./number-order";
 import { automaticStopNote, trunkMayAutoTry } from "./trunk-tries";
-import { inboundDestinationUpdate, inboundRuleAttempts, trunkNameFromAccount, trunkRouteAttempts, trunkStatusNote } from "./trunk-route";
+import { inboundDestinationUpdate, inboundRuleAttempts, retiredPhoneAiRoute, trunkNameFromAccount, trunkRouteAttempts, trunkStatusNote } from "./trunk-route";
 import { ensureTrunkDefaults, savedDefaultRoute } from "./trunk-prereq";
 import { inboundRuleFound, outboundAssignedToDepartment, outboundRuleFound, outboundRuleId, portNumbers, trunkDepartmentLimit, trunkRoutingRules } from "./trunk-routes";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
@@ -27,7 +27,7 @@ function departmentName(userId: number) {
 }
 
 function extensionFor(userId: number) {
-  const row = getDb().prepare("SELECT number FROM pbx_extensions WHERE user_id = ? AND status != 'removed' ORDER BY id LIMIT 1").get(userId) as { number: string } | undefined;
+  const row = getDb().prepare("SELECT number FROM pbx_extensions WHERE user_id = ? AND status != 'removed' AND ai_role != 'receptionist' ORDER BY id LIMIT 1").get(userId) as { number: string } | undefined;
   return row?.number || String(extensionRange(userId, readExtensionPlan()).from);
 }
 
@@ -197,6 +197,35 @@ async function saveInboundRoute(input: { name: string; did: string; trunkId: num
     return { ok: true, message: saved };
   }
   return { ok: false, message: failures.filter(Boolean)[0] || "The inbound route is not on 3CX." };
+}
+
+export async function retargetRetiredAiRoutes(userId: number) {
+  const route = savedDefaultRoute(userId);
+  const number = route.label.match(/(\d+)\s*$/)?.[1] || "";
+  if (!route.label || !number) return { ok: true as const, moved: false };
+  const lines = getDb().prepare("SELECT id, did, trunk_id, route_label FROM phone_lines WHERE user_id = ? AND trunk_id != 0").all(userId) as { id: number; did: string; trunk_id: number; route_label: string }[];
+  let moved = false;
+  for (const line of lines) {
+    if (!retiredPhoneAiRoute(line.route_label)) continue;
+    const to = route.ai ? "Extension" as const : "RingGroup" as const;
+    if (!flagOn("pbx.live_trunk")) {
+      const note = `Calls are still aimed at a phone extension that does not answer. ${route.label} is the safe destination. The phone number stays unchanged until the phone system accepts that route. No call was placed.`;
+      getDb().prepare("UPDATE phone_lines SET last_message = ? WHERE id = ?").run(note, line.id);
+      continue;
+    }
+    const saved = await saveInboundRoute({
+      name: `SautiCall ${line.did}`,
+      did: line.did,
+      trunkId: line.trunk_id,
+      to,
+      number,
+      label: route.label,
+    });
+    if (!saved.ok) continue;
+    getDb().prepare("UPDATE phone_lines SET route_label = ?, last_message = ? WHERE id = ?").run(route.label.slice(0, 120), saved.message, line.id);
+    moved = true;
+  }
+  return { ok: true as const, moved };
 }
 
 function trunkSeed(body: unknown) {

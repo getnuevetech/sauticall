@@ -88,6 +88,40 @@ export async function restoreAccountPromptForm(formData: FormData) {
   redirect(`${next}${next.includes("?") ? "&" : "?"}saved=restored`);
 }
 
+export async function createVirtualAgentForm(formData: FormData) {
+  const user = await guardAccount();
+  const plan = paidPlan(user.id);
+  if (!plan) redirect(PLAN_SETUP_PATH);
+  const agentType = String(formData.get("agent_type") || "");
+  const feature = knownAccountAi(agentType) ? (await import("@/lib/ai-account")).accountAiFeature(agentType) : "";
+  const { planAllows } = await import("@/lib/plan-features");
+  if (!feature || !planAllows(plan, feature)) redirect("/account/ai/extensions?error=That%20AI%20extension%20is%20not%20included%20on%20this%20plan.");
+  const { getDb } = await import("@/lib/db");
+  const { publishVirtualAgent, saveVirtualAgent } = await import("@/lib/ai-virtual-store");
+  const now = new Date().toISOString();
+  const saved = saveVirtualAgent(getDb(), {
+    userId: user.id,
+    name: String(formData.get("name") || ""),
+    agentType,
+    engine: String(formData.get("engine") || ""),
+    greeting: String(formData.get("greeting") || ""),
+    instructions: String(formData.get("instructions") || ""),
+    did: String(formData.get("did") || ""),
+    language: String(formData.get("language") || "en-US"),
+    allowedTransfers: String(formData.get("transfers") || "").split(",").map((item) => item.trim()).filter(Boolean),
+    now,
+  });
+  if (!saved.ok) redirect(`/account/ai/extensions?error=${encodeURIComponent(saved.message)}`);
+  const published = publishVirtualAgent(getDb(), {
+    userId: user.id,
+    agentId: saved.id,
+    idempotencyKey: String(formData.get("request_id") || crypto.randomUUID()),
+    now,
+  });
+  if (!published.ok) redirect(`/account/ai/extensions/${saved.id}?error=${encodeURIComponent(published.message)}`);
+  redirect(`/account/ai/extensions/${saved.id}?saved=1`);
+}
+
 export async function setAiService(formData: FormData) {
   const user = await guardAccount();
   if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
