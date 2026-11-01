@@ -70,12 +70,12 @@ In the Lightsail instance networking page, HTTPS on TCP 443 must be allowed. The
 sudo CERT_EMAIL=you@example.com bash /opt/sauticall/deploy/lightsail/enable-https.sh
 ```
 
-That gets a certificate for the server's public IP address from Let's Encrypt and sends every HTTP visit to HTTPS. The IP certificate lasts about six days, and Certbot renews it. Sign-in cookies are sent only over HTTPS after this.
+That gets a certificate for the server's public IP address from Let's Encrypt and sends every HTTP visit to HTTPS. The IP certificate lasts about six days, and Certbot renews it. Sign-in cookies are sent only over HTTPS after this. Confirmation links, checkout return addresses, and the inbound email endpoint use `https://sauticall.com`. An IP address saved as the public origin is not used.
 
-When a domain name already points at the static IP, use that name instead:
+When the domain already points at the static IP, issue the certificate for that name:
 
 ```bash
-sudo DOMAIN=sauticall.example CERT_EMAIL=you@example.com bash /opt/sauticall/deploy/lightsail/enable-https.sh
+sudo DOMAIN=sauticall.com CERT_EMAIL=you@example.com bash /opt/sauticall/deploy/lightsail/enable-https.sh
 ```
 
 Later updates pull `main` from GitHub and rebuild:

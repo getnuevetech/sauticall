@@ -4,6 +4,7 @@ import { CopyText, InboundSecret, MailPassword } from "@/components/admin/MailBi
 import { saveOutboundMail, saveRoutingGroup, saveRoutingMembers, saveRoutingTopic, sendTestMail, tryInboundMail } from "../../desk-actions";
 import { requirePermission } from "@/lib/access";
 import { getDb } from "@/lib/db";
+import { inboundMailEndpoint } from "@/lib/public-origin";
 import { mailSettings } from "@/lib/tickets";
 
 const TABS = [
@@ -25,8 +26,7 @@ export default async function TicketSettingsPage({ searchParams }: { searchParam
   const staff = getDb().prepare("SELECT id, name, email, role FROM users WHERE role IN ('staff', 'super_admin') ORDER BY name").all() as { id: number; name: string; email: string; role: string }[];
   const members = getDb().prepare("SELECT group_id, user_id FROM ticket_group_members").all() as { group_id: number; user_id: number }[];
   const mail = mailSettings();
-  const origin = process.env.SAUTICALL_PUBLIC_ORIGIN || "https://your-site";
-  const endpoint = `${origin}/api/tickets/inbound`;
+  const endpoint = inboundMailEndpoint(process.env.SAUTICALL_PUBLIC_ORIGIN || "");
   const groupName = new Map(groups.map((group) => [group.id, group.name]));
   const creatingTopic = params.topic === "new";
   const topic = creatingTopic ? undefined : topics.find((item) => String(item.id) === params.topic) || (tab === "topics" ? topics[0] : undefined);

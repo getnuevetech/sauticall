@@ -10,7 +10,7 @@ fi
 
 if [[ -z "${CERT_EMAIL:-}" ]]; then
   echo "Usage: CERT_EMAIL=you@example.com bash enable-https.sh"
-  echo "Or, when a domain already points at this server: DOMAIN=sauticall.example CERT_EMAIL=you@example.com bash enable-https.sh"
+  echo "Or, when the domain already points at this server: DOMAIN=sauticall.com CERT_EMAIL=you@example.com bash enable-https.sh"
   exit 1
 fi
 
@@ -155,10 +155,18 @@ set_env() {
 }
 
 set_env SAUTICALL_COOKIE_SECURE 1
-set_env SAUTICALL_PUBLIC_ORIGIN "https://${NAME}"
+# Links, checkout returns, and the inbound email endpoint use the domain.
+# The certificate name can still be the public IPv4 when DOMAIN was not set.
+if [[ -n "${DOMAIN:-}" && ! "${DOMAIN}" =~ ^[0-9]+(\.[0-9]+){3}$ ]]; then
+  PUBLIC_ORIGIN="https://${DOMAIN}"
+else
+  PUBLIC_ORIGIN="https://sauticall.com"
+fi
+set_env SAUTICALL_PUBLIC_ORIGIN "${PUBLIC_ORIGIN}"
 systemctl restart sauticall
 
 echo "HTTPS is on for https://${NAME}."
+echo "Public links use ${PUBLIC_ORIGIN}."
 if [[ -z "${DOMAIN:-}" ]]; then
   echo "This certificate lasts about six days. Certbot renews it on its own."
 fi
