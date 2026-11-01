@@ -1,11 +1,20 @@
-export function outboundRuleBody(input: { name: string; trunkId: number; callerId: string; from: string; to: string; priority: number }) {
-  return {
+export function outboundRuleBody(input: { name: string; trunkId: number; callerId: string; from: string; to: string; priority: number; groupId?: number }) {
+  const body: {
+    Name: string;
+    Prefix: string;
+    Priority: number;
+    Routes: { TrunkId: number; StripDigits: number; Prepend: string; Append: string; CallerID: string }[];
+    DNRanges: { From: string; To: string }[];
+    GroupIds?: number[];
+  } = {
     Name: input.name,
     Prefix: "",
     Priority: input.priority,
     Routes: [{ TrunkId: input.trunkId, StripDigits: 0, Prepend: "", Append: "", CallerID: input.callerId }],
     DNRanges: [{ From: input.from, To: input.to }],
   };
+  if (input.groupId && input.groupId > 0) body.GroupIds = [input.groupId];
+  return body;
 }
 
 export function nextOutboundPriority(body: unknown) {

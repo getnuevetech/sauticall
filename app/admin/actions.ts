@@ -448,6 +448,19 @@ export async function confirmTrunkCalls(formData: FormData) {
   redirect(`/admin/lines?line=${id}&saved=calls`);
 }
 
+export async function testTrunkCall(formData: FormData) {
+  const user = await staff("settings.lines");
+  const id = Number(formData.get("id"));
+  const row = getDb().prepare("SELECT user_id FROM phone_lines WHERE id = ?").get(id) as { user_id: number } | undefined;
+  ownedCompany(formData, row?.user_id || 0, "/admin/lines");
+  const direction = String(formData.get("direction") || "") === "inbound" ? "inbound" : "outbound";
+  const { testTrunkCall: place } = await import("@/lib/lines");
+  const result = await place(id, direction, String(formData.get("destination") || ""));
+  audit(user.email, "trunk.test", `${id}:${direction}:${result.ok ? "ok" : "failed"}`);
+  if (!result.ok) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent(result.message)}`);
+  redirect(`/admin/lines?line=${id}&saved=tested`);
+}
+
 export async function checkTrunk(formData: FormData) {
   const user = await staff("settings.lines");
   const id = Number(formData.get("id"));
@@ -505,10 +518,11 @@ export async function linkTrunk(formData: FormData) {
   const owner = getDb().prepare("SELECT user_id FROM phone_lines WHERE id = ?").get(id) as { user_id: number } | undefined;
   ownedCompany(formData, owner?.user_id || 0, "/admin/lines");
   const trunkId = postedTrunkId(formData);
-  if (trunkId < 1) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent("Enter the trunk id shown in 3CX.")}`);
+  const trunkName = String(formData.get("trunk_name") || "").trim();
+  if (trunkId < 0) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent("A trunk id has to be a number. 3CX does not show one, so use the VoIP.ms line account name.")}`);
   const { linkManualTrunk } = await import("@/lib/lines");
-  const result = await linkManualTrunk(id, trunkId);
-  audit(user.email, "trunk.link", `${id}:${trunkId}:${result.ok ? "ok" : "failed"}`);
+  const result = await linkManualTrunk(id, trunkId > 0 ? trunkId : 0, trunkName);
+  audit(user.email, "trunk.link", `${id}:${trunkName || trunkId}:${result.ok ? "ok" : "failed"}`);
   if (!result.ok) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent(result.message)}`);
   redirect(`/admin/lines?line=${id}&saved=linked`);
 }

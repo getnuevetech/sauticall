@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { checkTrunk, completeEmergency, completeTrunk, confirmTrunkCalls, linkTrunk, retryTrunk, sendEmergencyAddress, syncMinutes } from "../actions";
+import { checkTrunk, completeEmergency, completeTrunk, confirmTrunkCalls, linkTrunk, retryTrunk, sendEmergencyAddress, syncMinutes, testTrunkCall } from "../actions";
 import { SipReveal } from "@/components/admin/OpsBits";
 import { requirePermission } from "@/lib/access";
 import { flagOn } from "@/lib/db";
 import { formatAddress, parseEmergency } from "@/lib/e911";
 import { formatDid, lineStatusLabel, listCompanies, listLines, maskCredential, trunkStep, unmatchedTrunkLogs, type LineView } from "@/lib/phone-ops";
 import { publishAllBoughtNumbers, scheduleAutomaticTrunks } from "@/lib/lines";
+import { scheduleReadyAccounts } from "@/lib/default-account";
 import { trunkAttemptLabel } from "@/lib/trunk-tries";
 
 const E911: Record<string, string> = {
@@ -48,12 +49,12 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
       <p>Automatic tries: <strong>{trunkAttemptLabel(line)}</strong>. Automatic tries stop after 3. Retry failed step is not limited.</p>
       {line.status === "trunk_waiting" ? (
         <div>
-          <p className="ops-alert">{line.trunkId ? "The 3CX trunk id is saved. Provisioning stays incomplete until the trunk is registered, both routes are on 3CX, and an administrator records the inbound and outbound test calls." : line.attempts >= 3 ? "Automatic tries stopped at 3 of 3. Retry here as many times as you need, or create the trunk in 3CX and save its id." : "Add this trunk in the 3CX admin. The automatic request was refused."}</p>
+          <p className="ops-alert">{line.trunkId ? "The 3CX trunk is saved. Provisioning stays incomplete until the trunk is registered, both routes are on 3CX, and an administrator records the inbound and outbound test calls." : line.attempts >= 3 ? "Automatic tries stopped at 3 of 3. Retry here as many times as you need, or create the trunk in 3CX under the VoIP.ms line account name and read it here." : "Add this trunk in the 3CX admin. The automatic request was refused."}</p>
           <ol className="ops-steps">
-            <li>Create a SIP trunk for {line.company}.</li>
+            <li>Create a SIP trunk for {line.company}. Name it {line.sipAccount || "the VoIP.ms line account"}, the same name as the VoIP.ms sub-account.</li>
             <li>Use registrar {line.sipHost || "the saved POP"}. The SIP user and password are below. Use the saved password.</li>
-            <li>Use trunk number {formatDid(line.did)}. Route inbound calls to {line.extension ? `extension ${line.extension}` : "the saved extension"}.</li>
-            <li>Add an outbound rule limited to extensions {line.from && line.to ? `${line.from}–${line.to}` : "the company’s reserved range"}.</li>
+            <li>Use trunk number {formatDid(line.did)}. Route inbound calls to {line.route || (line.extension ? `extension ${line.extension}` : "the default extension or ring group")}.</li>
+            <li>Add an outbound rule for this company department, extensions {line.from && line.to ? `${line.from}–${line.to}` : "the company’s reserved range"}.</li>
           </ol>
         </div>
       ) : null}
@@ -66,7 +67,8 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
       <p>{line.trunkId ? `3CX trunk id ${line.trunkId}${line.trunkNumber ? `, internal number ${line.trunkNumber}` : ""}.` : "No 3CX trunk id is stored yet."}</p>
       <h3>Routing configuration</h3>
       <dl className="ops-facts">
-        <div><dt>Inbound destination</dt><dd>{line.extension ? `Extension ${line.extension}` : "Not saved"}</dd></div>
+        <div><dt>Trunk name</dt><dd>{line.sipAccount || "The VoIP.ms line account name is not saved yet."}</dd></div>
+        <div><dt>Inbound destination</dt><dd>{line.route || (line.extension ? `Extension ${line.extension}` : "Not saved")}</dd></div>
         <div><dt>Outbound scope</dt><dd>{line.from && line.to ? `Extensions ${line.from}–${line.to}` : "The company’s reserved range"}</dd></div>
       </dl>
       <p className="ops-muted">Saved configuration. Not verified live.</p>
@@ -95,18 +97,34 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
         <button className="btn btn-secondary" type="submit">Check trunk and routes in 3CX</button>
         <p className="ops-muted">Reads registration, the inbound route, and the outbound rule from 3CX, then updates this line. It does not place a call and does not mark the trunk finished.</p>
       </form>
+      <form action={testTrunkCall} className="ops-stack">
+        <input type="hidden" name="id" value={line.id} />
+        <input type="hidden" name="company" value={line.userId} />
+        <input type="hidden" name="direction" value="inbound" />
+        <button className="btn btn-secondary" type="submit" disabled={!line.trunkId || !line.routes}>Test an inbound call</button>
+        <p className="ops-muted">Starts only after the trunk, both routes, a phone-system extension, and a registered trunk are in place. It calls this number from the first extension so the call comes back through the trunk. It does not mark the trunk finished.</p>
+      </form>
+      <form action={testTrunkCall} className="ops-stack">
+        <input type="hidden" name="id" value={line.id} />
+        <input type="hidden" name="company" value={line.userId} />
+        <input type="hidden" name="direction" value="outbound" />
+        <label>Outbound test number <input name="destination" inputMode="tel" placeholder="10-digit number" disabled={!line.trunkId || !line.routes} /></label>
+        <button className="btn btn-secondary" type="submit" disabled={!line.trunkId || !line.routes}>Test an outbound call</button>
+        <p className="ops-muted">Places a call from the first extension through this company’s trunk. Use it after setup is ready. It does not mark the trunk finished.</p>
+      </form>
       <form action={confirmTrunkCalls}>
         <input type="hidden" name="id" value={line.id} />
         <input type="hidden" name="company" value={line.userId} />
         <button className="btn btn-secondary" type="submit">Record successful test calls</button>
-        <p className="ops-muted">Available after the trunk id is stored and both routes are saved. 3CX must show the trunk registered. This does not place a call.</p>
+        <p className="ops-muted">Available after the trunk is stored and both routes are saved. 3CX must show the trunk registered. This records the result. It does not place a call.</p>
       </form>
       <form action={linkTrunk} className="ops-stack">
         <input type="hidden" name="id" value={line.id} />
         <input type="hidden" name="company" value={line.userId} />
-        <label>3CX trunk id <input name="trunk_id" inputMode="numeric" defaultValue={line.trunkId ? String(line.trunkId) : ""} placeholder="Id from the 3CX trunk" required /></label>
-        <button className="btn btn-primary" type="submit">Save this trunk and try routing</button>
-        <p className="ops-muted">Reads that trunk from 3CX, then tries the inbound route and the outbound rule. It does not place a call.</p>
+        <label>3CX trunk name <input name="trunk_name" defaultValue={line.sipAccount} placeholder="577137_I0000002" /></label>
+        <label>3CX trunk id, if one is shown <input name="trunk_id" inputMode="numeric" defaultValue={line.trunkId ? String(line.trunkId) : ""} placeholder="Optional" /></label>
+        <button className="btn btn-primary" type="submit">Read this trunk and try routing</button>
+        <p className="ops-muted">3CX does not show a trunk id. The trunk name is the VoIP.ms line account, for example 577137_I0000002. SautiCall reads that trunk, then tries the inbound route and the outbound rule. It does not place a call.</p>
       </form>
       <form action={completeTrunk} className="ops-stack">
         <input type="hidden" name="id" value={line.id} />
@@ -141,6 +159,7 @@ export default async function LinesPage({ searchParams }: { searchParams: Promis
   await requirePermission("settings.lines");
   const params = await searchParams;
   publishAllBoughtNumbers();
+  scheduleReadyAccounts();
   scheduleAutomaticTrunks();
   const tab = params.tab === "numbers" || params.tab === "routing" ? params.tab : "trunks";
   const company = Number(params.company || params.user || 0);
@@ -162,12 +181,13 @@ export default async function LinesPage({ searchParams }: { searchParams: Promis
           </div>
           <form action={syncMinutes}><button className="btn btn-secondary" type="submit">Read minutes</button></form>
         </div>
-        <p className="ops-muted">{reading ? "Reading call minutes is on." : "Reading call minutes is off."} {trunks ? "Adding a 3CX trunk from here is on. A retry uses the customer's SIP account and does not place a call." : "Adding trunks from here is off, so a retry records the waiting step."} Each bought number gets 3 automatic trunk tries, then it waits here. An administrator can retry without that limit, check the routes in 3CX, or save a trunk created by hand. {flagOn("pbx.voipms_backup") ? "VoIP.ms backup is on for a confirmed trunk failure, and it uses that customer's client." : "VoIP.ms backup is off. Only an administrator can turn it on in Platform controls."}</p>
+        <p className="ops-muted">{reading ? "Reading call minutes is on." : "Reading call minutes is off."} {trunks ? "Adding a 3CX trunk from here is on. A retry uses the customer's SIP account and does not place a call." : "Adding trunks from here is off, so a retry records the waiting step."} Each bought number gets 3 automatic trunk tries, then it waits here. An administrator can retry without that limit, check the routes in 3CX, or read a trunk created by hand using the VoIP.ms line account name. Inbound and outbound test calls start only after that trunk is registered and both routes are saved. {flagOn("pbx.voipms_backup") ? "VoIP.ms backup is on for a confirmed trunk failure, and it uses that customer's client." : "VoIP.ms backup is off. Only an administrator can turn it on in Platform controls."}</p>
         {params.error ? <p className="form-feedback form-error" role="alert">{params.error}</p> : null}
         {params.saved === "recorded" ? <p className="form-feedback">The note was recorded. Registration was not verified.</p> : null}
         {params.saved === "calls" ? <p className="form-feedback">Test calls were recorded. The trunk was registered on 3CX. SautiCall did not place the calls.</p> : null}
         {params.saved === "linked" ? <p className="form-feedback">The trunk was read from 3CX and routing was saved. No call was placed.</p> : null}
         {params.saved === "checked" ? <p className="form-feedback">The trunk and routes were read from 3CX. No call was placed.</p> : null}
+        {params.saved === "tested" ? <p className="form-feedback">3CX accepted the test call. The trunk stays unfinished until the test calls are recorded.</p> : null}
         {params.saved === "1" ? <p className="form-feedback">Call minutes were updated.</p> : null}
         <nav className="ops-tabs">
           <Link href="/admin/lines?tab=trunks" data-current={tab === "trunks" ? "true" : undefined}>Trunks</Link>

@@ -14,7 +14,9 @@ export default async function AccountHome() {
   const usage = accountUsage(user.id);
   const plan = usage.plan;
   const { publishBoughtNumbers, scheduleAutomaticTrunks } = await import("@/lib/lines");
+  const { scheduleDefaultAccount } = await import("@/lib/default-account");
   publishBoughtNumbers(user.id);
+  scheduleDefaultAccount(user.id);
   scheduleAutomaticTrunks(user.id);
   const lines = getDb().prepare("SELECT status, trunk_id, trunk_attempts FROM phone_lines WHERE user_id = ?").all(user.id) as { status: string; trunk_id: number; trunk_attempts: number }[];
   const numbers = lines.filter((line) => line.status !== "not_on_carrier").length;

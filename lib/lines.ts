@@ -15,6 +15,8 @@ import { automaticStopNote, trunkMayAutoTry } from "./trunk-tries";
 import { inboundRuleFound, outboundRuleFound, portNumbers } from "./trunk-routes";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
 import { ensureSubaccount, getSubaccount } from "./voip-account";
+import { ensureDefaultAccount } from "./default-account";
+import { defaultInbound, inboundRuleBody, nationalTestNumber, trunkNameFromAccount, trunkTestReady, trunkWriteRequest } from "./default-setup";
 
 type Line = { id: number; user_id: number; request_id: number; did: string; status: string; trunk_id: number; trunk_number: string; trunk_routes: number; last_message: string };
 
@@ -59,13 +61,21 @@ function extensionSpan(userId: number) {
   return { from: String(range.from), to: String(range.to) };
 }
 
-async function addOutboundRule(input: { name: string; trunkId: number; callerId: string; from: string; to: string }) {
+async function addOutboundRule(input: { name: string; trunkId: number; callerId: string; from: string; to: string; groupId?: number }) {
   const listed = await pbxRequest("OutboundRules?$select=Priority&$top=100");
-  const ruleBody = outboundRuleBody({ ...input, priority: nextOutboundPriority(listed.body) });
+  const priority = nextOutboundPriority(listed.body);
+  let ruleBody = outboundRuleBody({ ...input, priority });
   let created = await pbxWrite("OutboundRules", {
     method: "POST",
     body: ruleBody,
   });
+  if (!created.ok && input.groupId) {
+    ruleBody = outboundRuleBody({ ...input, priority, groupId: 0 });
+    created = await pbxWrite("OutboundRules", {
+      method: "POST",
+      body: ruleBody,
+    });
+  }
   if (!created.ok && mentionsDelta(created.message || "")) {
     created = await pbxWrite("OutboundRules", {
       method: "POST",
@@ -92,39 +102,68 @@ function trunkSeed(body: unknown) {
   return { ...value };
 }
 
+async function trunkByName(name: string) {
+  const safe = name.trim().replace(/'/g, "");
+  if (!/^[\w ._-]{3,80}$/.test(safe)) return 0;
+  const found = await pbxRequest(`Trunks?$filter=${encodeURIComponent(`Name eq '${safe}'`)}&$select=Id&$top=1`);
+  return found.ok ? firstListedId(found.body) : 0;
+}
+
 export async function attachTrunk(lineId: number) {
   const line = getDb().prepare("SELECT * FROM phone_lines WHERE id = ?").get(lineId) as Line | undefined;
   if (!line) return { ok: false, message: "That line was not found." };
   if (line.status === "trunk_live" && line.trunk_id) return { ok: true, message: "This number is already a trunk on the phone system." };
+  const setup = await ensureDefaultAccount(line.user_id);
+  const extension = setup.extension || extensionFor(line.user_id);
+  const inbound = defaultInbound({ ai: setup.ai, extension: setup.extension, ringGroup: setup.ringGroup });
+  const routeLabel = inbound?.label || `extension ${extension}`;
   const sub = getSubaccount(line.user_id);
   const span = extensionSpan(line.user_id);
   if (!sub) {
-    const note = `VoIP.ms has no SIP account for this customer, so the number cannot be routed yet. Create the line account, then add the 3CX trunk, inbound route to extension ${extensionFor(line.user_id)}, and an outbound rule for extensions ${span.from}–${span.to}.`;
+    const note = `VoIP.ms has no SIP account for this customer, so the number cannot be routed yet. Create the line account, then add the 3CX trunk named with that VoIP.ms account, inbound route to ${routeLabel}, and an outbound rule for this company department, extensions ${span.from}–${span.to}. ${setup.message}`;
     openTask(line.id, line.user_id, line.did, note);
     return { ok: false, message: note };
   }
+  const trunkName = trunkNameFromAccount(sub.account) || trunkNameFromAccount(sub.username);
   if (!flagOn("pbx.live_trunk")) {
-    const note = `Adding trunks on the phone system is turned off. VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"} is ready. Add this number as a SIP trunk on the 3CX server, route inbound to extension ${extensionFor(line.user_id)}, and add an outbound rule limited to extensions ${span.from}–${span.to}.`;
+    const note = `Adding trunks on the phone system is turned off. VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"} is ready. Add this number as a SIP trunk named ${trunkName || sub.account} on the 3CX server, route inbound to ${routeLabel}, and add an outbound rule for this company department, extensions ${span.from}–${span.to}.`;
     openTask(line.id, line.user_id, line.did, note);
+    return { ok: false, message: note };
+  }
+  if (!trunkName) {
+    const note = `VoIP.ms account ${sub.account || "is missing a name"}, so the 3CX trunk cannot be named. The trunk name has to match the VoIP.ms line account, for example 577137_I0000002.`;
+    openTask(line.id, line.user_id, line.did, note);
+    recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
     return { ok: false, message: note };
   }
   const template = trunkTemplateName(getConnection("3cx").public.trunk_template || "");
   const number = trunkDialedNumber(line.did);
   const department = getDb().prepare("SELECT xapi_id, name FROM pbx_departments WHERE user_id = ?").get(line.user_id) as { xapi_id: number; name: string } | undefined;
-  const extension = extensionFor(line.user_id);
-  const trunkName = `SautiCall ${line.did}`.replace(/'/g, "");
   let trunkId = line.trunk_id || 0;
   if (trunkId) {
     const saved = await pbxRequest(`Trunks(${trunkId})?$select=Id`);
     if (!saved.ok) trunkId = 0;
   }
+  if (!trunkId) trunkId = await trunkByName(trunkName);
   if (!trunkId) {
-    const found = await pbxRequest(`Trunks?$filter=${encodeURIComponent(`Name eq '${trunkName}'`)}&$select=Id&$top=1`);
-    trunkId = found.ok ? firstListedId(found.body) : 0;
+    const legacy = await trunkByName(`SautiCall ${line.did}`.replace(/'/g, ""));
+    if (legacy) {
+      trunkId = legacy;
+      await pbxWrite(`Trunks(${trunkId})`, { method: "PATCH", body: { Name: trunkName } });
+    }
   }
   const seeded = trunkId ? { ok: true, message: "", body: null } : await pbxRequest(`Trunks/Pbx.InitTrunk(template=${encodeURIComponent(`'${template}'`)})`);
   const seed = seeded.ok ? trunkSeed(seeded.body) : null;
-  const handoff = (reason: string) => {
+    const postedBody = () => trunkPassthroughBody({
+      seed,
+      name: trunkName,
+      number,
+      authId: sub.account,
+      password: sub.password,
+      host: sub.sip_host || "",
+      template,
+    });
+    const handoff = (reason: string, requestBody?: Record<string, unknown>) => {
     const note = hideSecret(manualTrunkNote({
       company: department?.name || departmentName(line.user_id),
       did: line.did,
@@ -135,9 +174,11 @@ export async function attachTrunk(lineId: number) {
       account: sub.account,
       host: sub.sip_host || "",
       reason,
+      route: routeLabel,
     }), sub.password);
     openTask(line.id, line.user_id, line.did, note);
-    recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
+    const request = requestBody ? JSON.stringify(trunkWriteRequest({ origin: getConnection("3cx").public.base_url || "", body: requestBody })) : "";
+    recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: request ? `${note} ${request}` : note });
     return { ok: false as const, message: note.slice(0, 500) };
   };
   if (!trunkId && (!seeded.ok || !seed)) return handoff(seeded.message || "3CX did not return a trunk template.");
@@ -145,20 +186,12 @@ export async function attachTrunk(lineId: number) {
     ? { ok: true, status: 200, message: "An existing trunk was found and was not created again.", body: null, location: "" }
     : await pbxRequest("Trunks", {
       method: "POST",
-      body: trunkPassthroughBody({
-        seed,
-        name: `SautiCall ${line.did}`,
-        number,
-        authId: sub.account,
-        password: sub.password,
-        host: sub.sip_host || "",
-        template,
-      }),
+      body: postedBody(),
       contentType: "application/json",
     });
   if (!trunkId) trunkId = idFromPbx(created.body, created.location) || readTrunkIdentity(created.body).id;
   const createdIdentity = readTrunkIdentity(created.body);
-  if (!created.ok || !trunkId) return handoff(created.message || "3CX did not add the trunk.");
+  if (!created.ok || !trunkId) return handoff(created.message || "3CX did not add the trunk.", seed ? postedBody() : undefined);
   let trunkNumber = createdIdentity.number || line.trunk_number || "";
   let departmentNote = "";
   if (department?.xapi_id) {
@@ -172,29 +205,25 @@ export async function attachTrunk(lineId: number) {
     }
     if (!grouped.ok) departmentNote = ` The trunk is not limited to ${department.name} yet.`;
   }
+  const destination = inbound || { to: "Extension" as const, number: extension, label: routeLabel };
+  const ruleName = `${trunkName} ${number}`.slice(0, 80);
   let rule = await pbxWrite("InboundRules", {
     method: "POST",
-    body: {
-      Name: `SautiCall ${line.did}`,
-      DID: number,
-      TrunkId: trunkId,
-      OfficeHoursDestination: { To: "Extension", Number: extension, External: "" },
-      OutOfOfficeHoursDestination: { To: "VoiceMail", Number: extension, External: "" },
-    },
+    body: inboundRuleBody({ name: ruleName, did: number, trunkId, to: destination.to, number: destination.number }),
   });
   if (!rule.ok && /duplicate|already exists/i.test(`${rule.message} ${rule.code || ""}`)) {
     rule = { ...rule, ok: true, message: "The inbound route is already on the phone system." };
   }
   if (!rule.ok) {
-    const note = `3CX trunk id ${trunkId}${trunkNumber ? `, internal number ${trunkNumber}` : ""}. Inbound calls to extension ${extension} and outbound calls for extensions ${span.from}–${span.to} still need to be finished. VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"}. ${hideSecret(rule.message, sub.password)}`;
+    const note = `3CX trunk id ${trunkId}${trunkNumber ? `, internal number ${trunkNumber}` : ""}. Inbound calls to ${routeLabel} and outbound calls for this company department, extensions ${span.from}–${span.to}, still need to be finished. VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"}. ${hideSecret(rule.message, sub.password)}`;
     saveWaiting(line.id, trunkId, trunkNumber, false, note);
     openTask(line.id, line.user_id, line.did, note);
     recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
     return { ok: false, message: "The trunk exists, but inbound and outbound still need a person." };
   }
-  const outbound = await addOutboundRule({ name: `SautiCall ${line.did}`, trunkId, callerId: number, from: span.from, to: span.to });
+  const outbound = await addOutboundRule({ name: ruleName, trunkId, callerId: number, from: span.from, to: span.to, groupId: department?.xapi_id || 0 });
   if (!outbound.ok) {
-    const note = `3CX trunk id ${trunkId}${trunkNumber ? `, internal number ${trunkNumber}` : ""}. Inbound calls go to extension ${extension}. ${outbound.message} VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"}.`;
+    const note = `3CX trunk id ${trunkId}${trunkNumber ? `, internal number ${trunkNumber}` : ""}. Inbound calls go to ${routeLabel}. ${outbound.message} VoIP.ms SIP account ${sub.account} at ${sub.sip_host || "the saved POP"}.`;
     saveWaiting(line.id, trunkId, trunkNumber, false, note);
     openTask(line.id, line.user_id, line.did, note);
     recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
@@ -239,14 +268,56 @@ export function markTrunkDone(lineId: number, note: string, trunkId = 0) {
   return { ok: true, message: text };
 }
 
-export async function linkManualTrunk(lineId: number, trunkId: number) {
+export async function linkManualTrunk(lineId: number, trunkId = 0, trunkName = "") {
   const line = getDb().prepare("SELECT * FROM phone_lines WHERE id = ?").get(lineId) as Line | undefined;
   if (!line) return { ok: false, message: "That line was not found." };
-  if (!Number.isInteger(trunkId) || trunkId < 1) return { ok: false, message: "Enter the trunk id shown in 3CX." };
-  const saved = await pbxRequest(`Trunks(${trunkId})?$select=Id`);
-  if (!saved.ok) return { ok: false, message: saved.message || "3CX does not have a trunk with that id." };
-  getDb().prepare("UPDATE phone_lines SET trunk_id = ?, status = 'trunk_waiting', last_message = ? WHERE id = ?").run(trunkId, "The trunk id was read from 3CX. Inbound and outbound are still being checked.", line.id);
+  const named = trunkNameFromAccount(trunkName);
+  let resolved = 0;
+  if (named) {
+    resolved = await trunkByName(named);
+    if (!resolved && !(Number.isInteger(trunkId) && trunkId > 0)) {
+      return { ok: false, message: `3CX has no trunk named ${named}. Create the trunk with that VoIP.ms line account name, then read it again.` };
+    }
+  }
+  if (!resolved && Number.isInteger(trunkId) && trunkId > 0) {
+    const saved = await pbxRequest(`Trunks(${trunkId})?$select=Id`);
+    if (!saved.ok) return { ok: false, message: saved.message || "3CX does not have a trunk with that id." };
+    resolved = trunkId;
+  }
+  if (!resolved) return { ok: false, message: "Enter the VoIP.ms line account name, for example 577137_I0000002. 3CX does not show a trunk id, so the trunk is read by that name." };
+  getDb().prepare("UPDATE phone_lines SET trunk_id = ?, status = 'trunk_waiting', last_message = ? WHERE id = ?").run(resolved, named ? `Trunk ${named} was read from 3CX. Inbound and outbound are still being checked.` : "The trunk id was read from 3CX. Inbound and outbound are still being checked.", line.id);
   return attachTrunk(line.id);
+}
+
+export async function testTrunkCall(lineId: number, direction: "inbound" | "outbound", destinationRaw = "") {
+  const line = getDb().prepare("SELECT * FROM phone_lines WHERE id = ?").get(lineId) as Line | undefined;
+  if (!line) return { ok: false, message: "That line was not found." };
+  const setup = await ensureDefaultAccount(line.user_id);
+  const person = getDb().prepare(
+    "SELECT number, xapi_id FROM pbx_extensions WHERE user_id = ? AND status != 'removed' ORDER BY id LIMIT 1",
+  ).get(line.user_id) as { number: string; xapi_id: number } | undefined;
+  const registeredCheck = line.trunk_id ? await pbxRequest(`Trunks(${line.trunk_id})?$select=Id,Number,IsOnline`) : { ok: false, body: null, message: "" };
+  const registered = registeredCheck.ok && readTrunkIdentity(registeredCheck.body).registered;
+  if (!trunkTestReady({ trunkId: line.trunk_id, routes: line.trunk_routes === 1, registered, extensionOnPhoneSystem: Boolean(person?.xapi_id) })) {
+    if (!line.trunk_id || line.trunk_routes !== 1) return { ok: false, message: "Test calls start after the trunk and both routes are saved." };
+    if (!person?.xapi_id) return { ok: false, message: "The first extension is not on the phone system yet, so the test call was not started." };
+    return { ok: false, message: "3CX does not show this trunk as registered, so the test call was not started." };
+  }
+  const destination = direction === "inbound" ? trunkDialedNumber(line.did) : nationalTestNumber(destinationRaw);
+  if (!destination) return { ok: false, message: "Enter a 10-digit number for the outbound test." };
+  const started = await pbxRequest(`Users(${person?.xapi_id})/Pbx.MakeCall`, {
+    method: "POST",
+    body: { destination },
+  });
+  const route = defaultInbound({ ai: setup.ai, extension: setup.extension, ringGroup: setup.ringGroup });
+  const which = direction === "inbound" ? `an inbound test to ${line.did}` : "an outbound test to a number an administrator entered";
+  const outcome = started.ok
+    ? `3CX accepted ${which} from extension ${person?.number}.`
+    : `3CX did not start ${which} from extension ${person?.number}. ${hideSecret(started.message || "The phone system did not start the call.", "")}`;
+  const note = `${outcome} ${route ? `Inbound route is ${route.label}.` : ""} This does not mark the trunk finished.`.replace(/\s+/g, " ").trim().slice(0, 2000);
+  getDb().prepare("UPDATE phone_lines SET last_message = ? WHERE id = ?").run(note, line.id);
+  if (!started.ok) recordFailure({ area: "trunk", userId: line.user_id, subject: `test ${line.did}`, detail: note });
+  return { ok: started.ok, message: note };
 }
 
 export function ensureCustomerLine(userId: number, requestId: number, did: string) {

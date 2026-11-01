@@ -235,6 +235,9 @@ async function markPaid(id: number) {
   if (info.changes && attempt.user_id && attempt.plan_name) {
     const { fundPaidPlanWithRetry } = await import("./voip-client");
     await fundPaidPlanWithRetry(attempt.user_id, attempt.plan_name);
+    const userId = attempt.user_id;
+    const { finishAfterResponse } = await import("./later");
+    finishAfterResponse(() => import("./default-account").then(({ ensureDefaultAccount }) => ensureDefaultAccount(userId)));
   }
 }
 

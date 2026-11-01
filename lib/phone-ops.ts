@@ -6,6 +6,7 @@ import { extensionCapacity } from "./plan-features";
 import { paidPlan } from "./pbx";
 import { shownAccountName } from "./pbx-user";
 import { trunkSubjectMatchesLine } from "./trunk-tries";
+import { defaultInbound } from "./default-setup";
 
 export { companyMatches, formatDid, lineStatusLabel, maskCredential, personState, setupEmailState, setupLabel, setupStatus, trunkStep } from "./phone-ops-view";
 import { formatDid, lineStatusLabel, personState, setupStatus } from "./phone-ops-view";
@@ -216,7 +217,9 @@ export type LineView = {
   from: string;
   to: string;
   sipUser: string;
+  sipAccount: string;
   sipHost: string;
+  route: string;
   hasAccount: boolean;
   taskOpen: boolean;
   taskNote: string;
@@ -244,7 +247,10 @@ export function listLines(query = "", company = 0, status = "") {
             COALESCE(t.extension_number, '') AS extension_number, COALESCE(t.sip_user, '') AS sip_user, COALESCE(t.sip_host, '') AS sip_host,
             COALESCE(t.status, '') AS task_status, COALESCE(t.note, '') AS task_note,
             CASE WHEN s.user_id IS NULL THEN 0 ELSE 1 END AS has_account,
-            COALESCE(s.username, '') AS sub_user, COALESCE(s.sip_host, '') AS sub_host
+            COALESCE(s.account, '') AS sub_account, COALESCE(s.username, '') AS sub_user, COALESCE(s.sip_host, '') AS sub_host,
+            COALESCE((SELECT number FROM pbx_extensions WHERE user_id = l.user_id AND status != 'removed' ORDER BY id LIMIT 1), '') AS first_ext,
+            COALESCE((SELECT ai_role FROM pbx_extensions WHERE user_id = l.user_id AND status != 'removed' ORDER BY id LIMIT 1), '') AS first_ai,
+            COALESCE((SELECT number FROM call_groups WHERE user_id = l.user_id AND kind = 'ring' AND answers = 1 ORDER BY id LIMIT 1), '') AS ring_number
      FROM phone_lines l
      JOIN users u ON u.id = l.user_id
      LEFT JOIN pbx_departments d ON d.user_id = l.user_id
@@ -254,13 +260,13 @@ export function listLines(query = "", company = 0, status = "") {
   ).all() as {
     id: number; user_id: number; request_id: number; email: string; name: string; business_name: string; did: string; status: string; trunk_id: number; trunk_number: string; trunk_attempts: number; trunk_routes: number; last_message: string;
     e911_status: string; e911_message: string; department: string; number_from: string; number_to: string; extension_number: string;
-    sip_user: string; sip_host: string; task_status: string; task_note: string; has_account: number; sub_user: string; sub_host: string;
+    sip_user: string; sip_host: string; task_status: string; task_note: string; has_account: number; sub_account: string; sub_user: string; sub_host: string; first_ext: string; first_ai: string; ring_number: string;
   }[];
   const needle = query.trim().toLowerCase();
   const visible = rows.filter((row) => {
     if (company && row.user_id !== company) return false;
     if (status && status !== "all" && lineStatusLabel(row.status).toLowerCase().replace(/\s/g, "") !== status && row.status !== status) return false;
-    const text = `${row.name} ${row.business_name || ""} ${row.email} ${row.did} ${row.department}`.toLowerCase();
+    const text = `${row.name} ${row.business_name || ""} ${row.email} ${row.did} ${row.department} ${row.sub_account}`.toLowerCase();
     return !needle || text.includes(needle) || formatDid(row.did).toLowerCase().includes(needle);
   });
   return visible.map((row) => ({
@@ -279,7 +285,9 @@ export function listLines(query = "", company = 0, status = "") {
     from: row.number_from,
     to: row.number_to,
     sipUser: row.sip_user || row.sub_user,
+    sipAccount: row.sub_account || row.sub_user,
     sipHost: row.sip_host || row.sub_host,
+    route: defaultInbound({ ai: row.first_ai === "receptionist", extension: row.first_ext, ringGroup: row.first_ai === "receptionist" ? "" : row.ring_number })?.label || "",
     hasAccount: row.has_account === 1,
     taskOpen: row.task_status === "open",
     taskNote: row.task_note,
