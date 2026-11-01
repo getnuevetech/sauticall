@@ -108,11 +108,12 @@ export function mentionsDelta(message: string) {
   return /delta/i.test(message);
 }
 
-export function trunkProvisionVerdict(input: { registered: boolean; inbound: boolean; outbound: boolean; callsConfirmed: boolean }) {
-  if (!input.registered) return { complete: false, status: "trunk_waiting" as const, reason: "The 3CX trunk is not registered." };
-  if (!input.inbound || !input.outbound) return { complete: false, status: "trunk_waiting" as const, reason: "Inbound and outbound routing are not both verified." };
-  if (!input.callsConfirmed) return { complete: false, status: "trunk_waiting" as const, reason: "Inbound and outbound test calls have not been confirmed. No call was placed from SautiCall." };
-  return { complete: true, status: "trunk_live" as const, reason: "The trunk is registered, both routes are verified, and the test calls were confirmed." };
+export function trunkProvisionVerdict(input: { registered: boolean; inbound: boolean; outbound: boolean; outboundAssigned?: boolean; departmentLimited?: boolean }) {
+  if (!input.inbound || !input.outbound) return { complete: false, status: "trunk_waiting" as const, reason: "Inbound and outbound routing are not both saved." };
+  if (input.outboundAssigned === false) return { complete: false, status: "trunk_waiting" as const, reason: "The outbound rule is not assigned to the department." };
+  if (input.departmentLimited === false) return { complete: false, status: "trunk_waiting" as const, reason: "The trunk is not limited to the department." };
+  if (!input.registered) return { complete: false, status: "trunk_waiting" as const, reason: "The trunk is saved. 3CX has not shown it as registered yet." };
+  return { complete: true, status: "trunk_live" as const, reason: "3CX shows this trunk registered. The inbound route, outbound rule, and department limit are saved. No call was placed." };
 }
 
 export function readTrunkIdentity(body: unknown) {

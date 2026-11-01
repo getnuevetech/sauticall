@@ -55,8 +55,7 @@ export function trunkProgress(input: {
   const extension = input.extensionOnPbx ? "On 3CX" : "Not on 3CX";
   const route = input.routeOnPbx ? (input.routeLabel || "On 3CX") : "Not created";
   let trunk = "Not started";
-  if (input.status === "trunk_live") trunk = "Registered";
-  else if (input.status === "trunk_done") trunk = "Recorded manually";
+  if (input.status === "trunk_live" || input.status === "trunk_done") trunk = "Registered";
   else if (input.trunkId) trunk = "Saved";
   else if (input.status === "trunk_waiting") trunk = "Not created";
   const inbound = input.inboundOnPbx ? "On 3CX" : "Not on 3CX";
@@ -69,13 +68,14 @@ export function trunkTone(label: string) {
   if (
     label === "Ready"
     || label === "Registered"
+    || label === "Certified"
     || label === "On 3CX"
     || label === "Limited to the department"
     || label === "On 3CX, assigned to the department"
     || label.startsWith("Ring group")
     || label.startsWith("AI receptionist")
   ) return "ok" as const;
-  if (label === "Saved" || label === "Recorded manually") return "muted" as const;
+  if (label === "Saved") return "muted" as const;
   return "bad" as const;
 }
 
@@ -89,14 +89,14 @@ export function trunkAdminSummary(input: ReturnType<typeof trunkProgress>) {
   if (input.outbound === "Not on 3CX") missing.push("the outbound rule");
   if (input.outbound.startsWith("On 3CX, not assigned")) missing.push("the outbound rule assignment");
   if (input.limit !== "Limited to the department") missing.push("the department limit");
-  if (!missing.length) return "Department, default route, inbound route, and outbound rule are on 3CX. The trunk stays incomplete until it is registered and an administrator records the test calls.";
+  if (!missing.length && (input.trunk === "Registered" || input.trunk === "Certified")) return "This trunk is registered on 3CX. The department, default route, inbound route, and outbound rule are saved. No call was placed.";
+  if (!missing.length) return "The department, default route, inbound route, and outbound rule are saved. 3CX has not shown this trunk as registered yet.";
   return `Still missing: ${missing.join(", ")}.`;
 }
 
 export function trunkStep(input: { hasAccount: boolean; trunkId: number; status: string }) {
   const provider = input.hasAccount ? "Ready" : "Not ready";
-  if (input.status === "trunk_live") return { provider, trunk: "Ready", routing: "Saved, not verified" };
-  if (input.status === "trunk_done") return { provider, trunk: "Recorded manually", routing: "Not verified" };
+  if (input.status === "trunk_live" || input.status === "trunk_done") return { provider, trunk: "Ready", routing: "Certified" };
   if (input.trunkId) return { provider, trunk: "Ready", routing: "Needs attention" };
   if (input.status === "trunk_waiting") return { provider, trunk: "Failed", routing: "Not verified" };
   return { provider, trunk: "Not started", routing: "Not verified" };
@@ -115,8 +115,7 @@ export function setupEmailState(detail: string, note = "") {
 }
 
 export function lineStatusLabel(status: string) {
-  if (status === "trunk_live") return "Provisioned";
-  if (status === "trunk_done") return "Recorded manually";
+  if (status === "trunk_live" || status === "trunk_done") return "Provisioned";
   if (status === "trunk_waiting") return "Needs attention";
   if (status === "ordered") return "Pending";
   if (status === "not_on_carrier") return "Not on provider";

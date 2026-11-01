@@ -50,17 +50,20 @@ test("the VoIP.ms template is initialized and empty deltas are arrays", () => {
   assert.match(redactProvisioning("Authorization Bearer abc.def-ghi", []), /Bearer \[hidden\]/);
 });
 
-test("provisioning stays incomplete until registration, both routes, and confirmed test calls", () => {
-  const waiting = trunkProvisionVerdict({ registered: false, inbound: true, outbound: true, callsConfirmed: false });
+test("a saved trunk is certified when 3CX shows it registered and both routes are saved", () => {
+  const waiting = trunkProvisionVerdict({ registered: false, inbound: true, outbound: true, outboundAssigned: true, departmentLimited: true });
   assert.equal(waiting.complete, false);
-  assert.match(waiting.reason, /not registered/);
-  const uncalled = trunkProvisionVerdict({ registered: true, inbound: true, outbound: true, callsConfirmed: false });
-  assert.equal(uncalled.status, "trunk_waiting");
-  assert.match(uncalled.reason, /No call was placed/);
-  const done = trunkProvisionVerdict({ registered: true, inbound: true, outbound: true, callsConfirmed: true });
+  assert.equal(waiting.status, "trunk_waiting");
+  assert.match(waiting.reason, /not shown it as registered/);
+  const missingRoute = trunkProvisionVerdict({ registered: true, inbound: true, outbound: false });
+  assert.equal(missingRoute.complete, false);
+  const done = trunkProvisionVerdict({ registered: true, inbound: true, outbound: true, outboundAssigned: true, departmentLimited: true });
   assert.equal(done.status, "trunk_live");
+  assert.equal(done.complete, true);
+  assert.match(done.reason, /No call was placed/);
   const identity = readTrunkIdentity({ Id: 44, Number: "10012", IsOnline: false });
   assert.equal(identity.id, 44);
   assert.equal(identity.number, "10012");
   assert.equal(identity.registered, false);
+  assert.equal(readTrunkIdentity({ Id: 159, Number: "10004", IsRegistered: true }).registered, true);
 });

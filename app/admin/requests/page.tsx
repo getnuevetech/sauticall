@@ -166,6 +166,6 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
 function lineStatus(status: string) {
   if (status === "trunk_live") return "Provisioned";
   if (status === "trunk_waiting") return "Needs attention";
-  if (status === "trunk_done") return "Recorded manually";
+  if (status === "trunk_done") return "Provisioned";
   return "Not verified";
 }
