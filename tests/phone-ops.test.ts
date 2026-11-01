@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { firstListedId } from "../lib/pbx-id.ts";
-import { companyMatches, formatDid, lineStatusLabel, maskCredential, setupEmailState, setupLabel, setupStatus, trunkStep } from "../lib/phone-ops-view.ts";
+import { companyMatches, formatDid, lineStatusLabel, maskCredential, setupEmailState, setupLabel, setupStatus, trunkProgress, trunkRepairsOpen, trunkStep } from "../lib/phone-ops-view.ts";
 
 test("company actions only match the selected company", () => {
   assert.equal(companyMatches(4, 4), true);
@@ -32,6 +32,25 @@ test("a failed setup email stays separate from extension provisioning", () => {
   assert.equal(setupEmailState("Extension 510 is on the phone system.", "A setup email was sent to this address.").label, "Sent");
   assert.equal(setupEmailState("The SautiCall setup email failed: timeout", "A setup email was sent to this address.").label, "Delivery failed");
   assert.equal(setupEmailState("").label, "Not sent");
+});
+
+test("repair actions stay off while every trunk check is good", () => {
+  const input = {
+    hasAccount: true,
+    departmentOnPbx: true,
+    extensionOnPbx: true,
+    routeLabel: "AI receptionist extension 529",
+    routeOnPbx: true,
+    trunkId: 159,
+    status: "trunk_live",
+    inboundOnPbx: true,
+    outboundOnPbx: true,
+    outboundAssigned: true,
+    departmentLimited: true,
+  };
+  assert.equal(trunkRepairsOpen(trunkProgress(input)), false);
+  assert.equal(trunkRepairsOpen(trunkProgress({ ...input, inboundOnPbx: false })), true);
+  assert.equal(trunkRepairsOpen(trunkProgress({ ...input, status: "trunk_waiting" })), true);
 });
 
 test("phone numbers and existing phone-system ids are read without assuming one trunk", () => {

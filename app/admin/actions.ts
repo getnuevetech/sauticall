@@ -429,6 +429,8 @@ export async function retryTrunk(formData: FormData) {
   const id = Number(formData.get("id"));
   const row = getDb().prepare("SELECT user_id FROM phone_lines WHERE id = ?").get(id) as { user_id: number } | undefined;
   ownedCompany(formData, row?.user_id || 0, "/admin/lines");
+  const { lineRepairsOpen } = await import("@/lib/phone-ops");
+  if (!lineRepairsOpen(id)) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent("This trunk is certified. Retry stays off until a check is no longer good.")}`);
   const { retryTrunkLine } = await import("@/lib/lines");
   const result = await retryTrunkLine(id);
   audit(user.email, "trunk.retry", `${id}:${result.ok ? "ok" : "failed"}`);
@@ -441,6 +443,8 @@ export async function confirmTrunkCalls(formData: FormData) {
   const id = Number(formData.get("id"));
   const row = getDb().prepare("SELECT user_id FROM phone_lines WHERE id = ?").get(id) as { user_id: number } | undefined;
   ownedCompany(formData, row?.user_id || 0, "/admin/lines");
+  const { lineRepairsOpen } = await import("@/lib/phone-ops");
+  if (!lineRepairsOpen(id)) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent("This trunk is certified. Certification stays off until a check is no longer good.")}`);
   const { confirmTrunkCalls: confirm } = await import("@/lib/lines");
   const result = await confirm(id);
   audit(user.email, "trunk.calls", `${id}:${result.ok ? "ok" : "failed"}`);
@@ -453,11 +457,11 @@ export async function checkTrunk(formData: FormData) {
   const id = Number(formData.get("id"));
   const row = getDb().prepare("SELECT user_id FROM phone_lines WHERE id = ?").get(id) as { user_id: number } | undefined;
   ownedCompany(formData, row?.user_id || 0, "/admin/lines");
-  const { checkTrunkRouting } = await import("@/lib/lines");
-  const result = await checkTrunkRouting(id);
+  const { reportTrunkCheck } = await import("@/lib/lines");
+  const result = await reportTrunkCheck(id);
   audit(user.email, "trunk.check", `${id}:${result.ok ? "ok" : "failed"}`);
   if (!result.ok) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent(result.message)}`);
-  redirect(`/admin/lines?line=${id}&saved=checked`);
+  redirect(`/admin/lines?line=${id}&report=${encodeURIComponent(result.message)}`);
 }
 
 export async function revealSip(company: number, which: "user" | "pass") {
@@ -504,6 +508,8 @@ export async function linkTrunk(formData: FormData) {
   const id = Number(formData.get("id"));
   const owner = getDb().prepare("SELECT user_id FROM phone_lines WHERE id = ?").get(id) as { user_id: number } | undefined;
   ownedCompany(formData, owner?.user_id || 0, "/admin/lines");
+  const { lineRepairsOpen } = await import("@/lib/phone-ops");
+  if (!lineRepairsOpen(id)) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent("This trunk is certified. Saving another trunk stays off until a check is no longer good.")}`);
   const trunkId = postedTrunkId(formData);
   if (trunkId < 1) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent("Enter the trunk id shown in 3CX.")}`);
   const { linkManualTrunk } = await import("@/lib/lines");
@@ -518,6 +524,8 @@ export async function completeTrunk(formData: FormData) {
   const id = Number(formData.get("id"));
   const owner = getDb().prepare("SELECT user_id FROM phone_lines WHERE id = ?").get(id) as { user_id: number } | undefined;
   ownedCompany(formData, owner?.user_id || 0, "/admin/lines");
+  const { lineRepairsOpen } = await import("@/lib/phone-ops");
+  if (!lineRepairsOpen(id)) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent("This trunk is certified. Certification stays off until a check is no longer good.")}`);
   const trunkId = postedTrunkId(formData);
   if (trunkId < 0) redirect(`/admin/lines?line=${id}&error=${encodeURIComponent("Enter the trunk id shown in 3CX.")}`);
   const note = String(formData.get("note") || "");

@@ -4,7 +4,7 @@ import { SipReveal } from "@/components/admin/OpsBits";
 import { requirePermission } from "@/lib/access";
 import { flagOn } from "@/lib/db";
 import { formatAddress, parseEmergency } from "@/lib/e911";
-import { formatDid, lineStatusLabel, listCompanies, listLines, maskCredential, trunkAdminSummary, trunkProgress, trunkTone, unmatchedTrunkLogs, type LineView } from "@/lib/phone-ops";
+import { formatDid, lineStatusLabel, listCompanies, listLines, maskCredential, trunkAdminSummary, trunkProgress, trunkRepairsOpen, trunkTone, unmatchedTrunkLogs, type LineView } from "@/lib/phone-ops";
 import { publishAllBoughtNumbers, scheduleAutomaticTrunks } from "@/lib/lines";
 import { trunkAttemptLabel } from "@/lib/trunk-tries";
 
@@ -40,6 +40,7 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
     departmentLimited: line.departmentLimited,
   });
   const summary = trunkAdminSummary(progress);
+  const repairsOpen = trunkRepairsOpen(progress);
   const sharedTrunk = line.siblings.filter((item) => line.trunkId && item.trunkId === line.trunkId);
   const steps = [
     ["Provider account", progress.provider],
@@ -109,6 +110,13 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
       <SipReveal company={line.userId} label="Username" masked={maskedUser} which="user" />
       <SipReveal company={line.userId} label="Password" masked={line.hasAccount ? "••••••••" : ""} which="pass" />
       <p className="ops-muted">Reveal uses the lines permission and is recorded in the audit log. The password is not included in this page.</p>
+      <form action={checkTrunk}>
+        <input type="hidden" name="id" value={line.id} />
+        <input type="hidden" name="company" value={line.userId} />
+        <button className="btn btn-secondary" type="submit">Test trunk and routes</button>
+        <p className="ops-muted">Reads 3CX and shows the result. This test does not change the trunk, the routes, or the certification, and it does not place a call.</p>
+      </form>
+      <fieldset className="ops-repair" disabled={!repairsOpen}>
       <div className="ops-actions">
         <form action={retryTrunk}>
           <input type="hidden" name="id" value={line.id} />
@@ -117,12 +125,6 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
         </form>
         <p className="ops-muted">Uses the VoIP.ms template already on 3CX, reuses this company’s SIP account and any trunk id already stored, and does not place a call. This retry does not count toward the 3 automatic tries.</p>
       </div>
-      <form action={checkTrunk}>
-        <input type="hidden" name="id" value={line.id} />
-        <input type="hidden" name="company" value={line.userId} />
-        <button className="btn btn-secondary" type="submit">Check trunk and routes in 3CX</button>
-        <p className="ops-muted">Reads registration, the inbound route, and the outbound rule from 3CX. When the trunk is registered and those routes are saved, this certifies it. It does not place a call.</p>
-      </form>
       <form action={confirmTrunkCalls}>
         <input type="hidden" name="id" value={line.id} />
         <input type="hidden" name="company" value={line.userId} />
@@ -132,7 +134,7 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
       <form action={linkTrunk} className="ops-stack">
         <input type="hidden" name="id" value={line.id} />
         <input type="hidden" name="company" value={line.userId} />
-        <label>3CX trunk id <input name="trunk_id" inputMode="numeric" defaultValue={line.trunkId ? String(line.trunkId) : ""} placeholder="Id from the 3CX trunk" required /></label>
+        <label>3CX trunk id <input name="trunk_id" inputMode="numeric" defaultValue={line.trunkId ? String(line.trunkId) : ""} placeholder="Id from the 3CX trunk" required={repairsOpen} /></label>
         <button className="btn btn-primary" type="submit">Save this trunk and try routing</button>
         <p className="ops-muted">Reads that trunk from 3CX, then tries the default route, the department limit, and the outbound rule. It does not place a call.</p>
       </form>
@@ -144,6 +146,8 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
         <button className="btn btn-secondary" type="submit">Certify this trunk</button>
         <p className="ops-muted">Certifies the trunk when 3CX shows it registered and the routes are saved. The customer then sees the number as connected. This does not place a call.</p>
       </form>
+      </fieldset>
+      {repairsOpen ? null : <p className="ops-muted">Retry, saving a trunk, and certification are off while every check is good.</p>}
       {line.requestId ? <p><Link href={`/admin/requests?request=${line.requestId}`}>Open the number request</Link></p> : <p>No number request is linked to this line.</p>}
       <details className="ops-details">
         <summary>Emergency address · {E911[line.e911] || line.e911}</summary>
@@ -165,7 +169,7 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
   );
 }
 
-export default async function LinesPage({ searchParams }: { searchParams: Promise<{ q?: string; company?: string; user?: string; status?: string; tab?: string; line?: string; error?: string; saved?: string }> }) {
+export default async function LinesPage({ searchParams }: { searchParams: Promise<{ q?: string; company?: string; user?: string; status?: string; tab?: string; line?: string; error?: string; saved?: string; report?: string }> }) {
   await requirePermission("settings.lines");
   const params = await searchParams;
   publishAllBoughtNumbers();
@@ -194,7 +198,7 @@ export default async function LinesPage({ searchParams }: { searchParams: Promis
         {params.error ? <p className="form-feedback form-error" role="alert">{params.error}</p> : null}
         {params.saved === "recorded" || params.saved === "calls" ? <p className="form-feedback">This trunk is registered and certified. No call was placed.</p> : null}
         {params.saved === "linked" ? <p className="form-feedback">The trunk was read from 3CX and routing was saved. No call was placed.</p> : null}
-        {params.saved === "checked" ? <p className="form-feedback">Registration and routes were read from 3CX. A registered trunk with its routes saved is certified. No call was placed.</p> : null}
+        {params.report ? <p className="form-feedback">{params.report}</p> : null}
         {params.saved === "1" ? <p className="form-feedback">Call minutes were updated.</p> : null}
         <nav className="ops-tabs">
           <Link href="/admin/lines?tab=trunks" data-current={tab === "trunks" ? "true" : undefined}>Trunks</Link>
