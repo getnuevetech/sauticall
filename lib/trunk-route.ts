@@ -1,3 +1,15 @@
+export function extensionReady(input: { paid: boolean; emailVerified: boolean; phoneVerified: boolean; emailRequired: boolean; smsRequired: boolean }) {
+  if (!input.paid) return false;
+  if (input.emailRequired && !input.emailVerified) return false;
+  if (input.smsRequired && !input.phoneVerified) return false;
+  return true;
+}
+
+export function trunkNameFromAccount(account: string) {
+  const name = account.trim();
+  return /^[A-Za-z0-9_]{3,40}$/.test(name) ? name : "";
+}
+
 export function signupPersonName(full: string, email: string) {
   const cleaned = full.trim().replace(/\s+/g, " ");
   const parts = cleaned.split(" ").filter(Boolean);

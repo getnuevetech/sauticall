@@ -12,7 +12,7 @@ import { manualTrunkNote, mentionsDelta, readTrunkIdentity, redactProvisioning, 
 import { shownAccountName } from "./pbx-user";
 import { carrierDidRef, numberIsBought, orderTimedOut } from "./number-order";
 import { automaticStopNote, trunkMayAutoTry } from "./trunk-tries";
-import { inboundDestinationUpdate, inboundRuleAttempts, trunkRouteAttempts, trunkStatusNote } from "./trunk-route";
+import { inboundDestinationUpdate, inboundRuleAttempts, trunkNameFromAccount, trunkRouteAttempts, trunkStatusNote } from "./trunk-route";
 import { ensureTrunkDefaults } from "./trunk-prereq";
 import { inboundRuleFound, outboundAssignedToDepartment, outboundRuleFound, outboundRuleId, portNumbers, trunkDepartmentLimit, trunkRoutingRules } from "./trunk-routes";
 import { billDidToClient, ensureVoipClient, getVoipClient, readFundedBalance } from "./voip-client";
@@ -232,7 +232,8 @@ export async function attachTrunk(lineId: number) {
   }
   const template = trunkTemplateName(getConnection("3cx").public.trunk_template || "");
   const number = trunkDialedNumber(line.did);
-  const gatewayName = `${company || "SautiCall"} - VoIP.ms ${number}`.replace(/'/g, "").slice(0, 80);
+  const accountName = trunkNameFromAccount(sub.account);
+  const gatewayName = accountName || `${company || "SautiCall"} - VoIP.ms ${number}`.replace(/'/g, "").slice(0, 80);
   let trunkId = line.trunk_id || 0;
   if (trunkId) {
     const saved = await pbxRequest(`Trunks(${trunkId})?$select=Id`);
@@ -241,6 +242,10 @@ export async function attachTrunk(lineId: number) {
   if (!trunkId) {
     const found = await pbxRequest("Trunks?$top=100&$select=Id,ExternalNumber,DidNumbers");
     trunkId = found.ok ? trunkIdForDid(found.body, number) : 0;
+  }
+  if (!trunkId && accountName) {
+    const named = await pbxRequest(`Trunks?$filter=${encodeURIComponent(`Name eq '${accountName}'`)}&$select=Id&$top=1`);
+    trunkId = named.ok ? firstListedId(named.body) : 0;
   }
   const seeded = trunkId ? { ok: true, message: "", body: null } : await pbxRequest(`Trunks/Pbx.InitTrunk(template=${encodeURIComponent(`'${template}'`)})`);
   const seed = seeded.ok ? trunkSeed(seeded.body) : null;

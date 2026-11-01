@@ -1,11 +1,15 @@
+import { verificationStatus } from "./account-verify";
 import { appPassword } from "./app-password";
 import { assignExtensionAi } from "./ai-account-store";
 import { createCallGroup, groupMembers, provisionCallGroup, setDaytimeGroup, type CallGroup } from "./call-groups";
-import { flagOn, getDb } from "./db";
-import { planAllows } from "./plan-features";
+import { flagOn, getDb, readDoc } from "./db";
+import { recordFailure } from "./failure-log";
+import { finishAfterResponse } from "./later";
+import { normalizePlan, planAllows } from "./plan-features";
 import { accountDepartmentName, departmentNameIssue, accountDisplayName } from "./pbx-user";
-import { allocateExtension, applyDepartmentName, paidPlan, provisionExtension, updateRouting } from "./pbx";
-import { signupPersonName } from "./trunk-route";
+import { allocateExtension, applyDepartmentName, provisionExtension, updateRouting } from "./pbx";
+import { extensionReady, signupPersonName } from "./trunk-route";
+import type { Plan } from "./types";
 
 export type TrunkDefaults = {
   ok: true;
@@ -19,6 +23,31 @@ export type TrunkDefaults = {
   ok: false;
   message: string;
 };
+
+function subscriptionPlan(userId: number) {
+  const row = getDb().prepare(
+    "SELECT plan_name FROM payment_attempts WHERE user_id = ? AND status = 'paid' AND plan_name != '' AND COALESCE(product_kind, '') != 'bundle' ORDER BY id DESC LIMIT 1",
+  ).get(userId) as { plan_name: string } | undefined;
+  if (!row?.plan_name) return null;
+  const plan = readDoc<Plan[]>("plans").find((item) => item.name === row.plan_name);
+  return plan ? normalizePlan(plan) : null;
+}
+
+function defaultsSettled(userId: number) {
+  const department = getDb().prepare("SELECT xapi_id, number_from, number_to FROM pbx_departments WHERE user_id = ?").get(userId) as { xapi_id: number; number_from: string; number_to: string } | undefined;
+  if (!department?.xapi_id || !/^\d+$/.test(department.number_from) || !/^\d+$/.test(department.number_to)) return false;
+  const extension = getDb().prepare("SELECT id, xapi_id, ai_role FROM pbx_extensions WHERE user_id = ? AND status != 'removed' ORDER BY id LIMIT 1").get(userId) as { id: number; xapi_id: number; ai_role: string } | undefined;
+  if (!extension?.xapi_id) return false;
+  if (planAllows(subscriptionPlan(userId), "ai")) return extension.ai_role === "receptionist";
+  const ring = getDb().prepare(
+    "SELECT g.id FROM call_groups g JOIN call_group_members m ON m.group_id = g.id WHERE g.user_id = ? AND g.kind = 'ring' AND g.xapi_id != 0 AND m.extension_id = ? LIMIT 1",
+  ).get(userId, extension.id) as { id: number } | undefined;
+  return Boolean(ring);
+}
+
+function quietDefaultMessage(message: string) {
+  return /no paid plan|waits until|was not found|turned off|enter the company name/i.test(message);
+}
 
 function usedNumbers() {
   const database = getDb();
@@ -86,8 +115,13 @@ async function ensureRing(userId: number, extensionId: number) {
 }
 
 export async function ensureTrunkDefaults(userId: number): Promise<TrunkDefaults> {
-  const paid = getDb().prepare("SELECT id FROM payment_attempts WHERE user_id = ? AND status = 'paid' LIMIT 1").get(userId) as { id: number } | undefined;
+  const paid = getDb().prepare("SELECT id FROM payment_attempts WHERE user_id = ? AND status = 'paid' AND plan_name != '' AND COALESCE(product_kind, '') != 'bundle' LIMIT 1").get(userId) as { id: number } | undefined;
   if (!paid) return { ok: false, message: "No paid plan is on this account. The department, default extension, and default route were not created." };
+  const existingExtension = getDb().prepare("SELECT id FROM pbx_extensions WHERE user_id = ? AND status != 'removed' LIMIT 1").get(userId) as { id: number } | undefined;
+  const check = verificationStatus(userId);
+  if (!existingExtension && !extensionReady({ paid: true, emailVerified: check.emailVerified, phoneVerified: check.phoneVerified, emailRequired: check.emailRequired, smsRequired: check.smsRequired })) {
+    return { ok: false, message: "The first extension waits until the required email and mobile confirmation are done." };
+  }
   const user = getDb().prepare("SELECT name, business_name, email FROM users WHERE id = ?").get(userId) as { name: string; business_name: string; email: string } | undefined;
   if (!user) return { ok: false, message: "That account was not found. The department and default route were not created." };
   const company = accountDepartmentName(user.business_name || "", user.name || "");
@@ -113,9 +147,9 @@ export async function ensureTrunkDefaults(userId: number): Promise<TrunkDefaults
   if (!extension.ok) return extension;
   const from = department.number_from;
   const to = department.number_to;
-  const plan = paidPlan(userId);
+  const plan = subscriptionPlan(userId);
   if (plan && planAllows(plan, "ai")) {
-    const assigned = assignExtensionAi(userId, plan, extension.id, "receptionist", extension.aiName || "Receptionist");
+    const assigned = assignExtensionAi(userId, plan, extension.id, "receptionist", extension.aiName || `${extension.first} receptionist`.trim());
     if (!assigned.ok) return { ok: false, message: `${assigned.message} The AI receptionist was not saved, so the trunk was left unchanged.` };
     await updateRouting(userId);
     return {
@@ -139,4 +173,20 @@ export async function ensureTrunkDefaults(userId: number): Promise<TrunkDefaults
     extensionNumber: extension.number,
     target: { to: "RingGroup", number: ring.number, label: `Ring group ${ring.name} · ${ring.number}`, kind: "ring" },
   };
+}
+
+export async function runScheduledDefaults(userId: number) {
+  if (!userId || defaultsSettled(userId)) return;
+  const result = await ensureTrunkDefaults(userId);
+  if (result.ok || quietDefaultMessage(result.message)) return;
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const existing = getDb().prepare(
+    "SELECT id FROM failure_log WHERE area = 'extension' AND user_id = ? AND detail = ? AND created_at >= ? LIMIT 1",
+  ).get(userId, result.message, since) as { id: number } | undefined;
+  if (!existing) recordFailure({ area: "extension", userId, subject: "default extension", detail: result.message });
+}
+
+export function scheduleDefaultAccount(userId: number) {
+  if (!userId) return;
+  finishAfterResponse(() => runScheduledDefaults(userId));
 }
