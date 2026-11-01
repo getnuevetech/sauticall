@@ -1,3 +1,5 @@
+export const CUSTOMER_TRUNK_WAIT = "Your trunk will be ready in a few minutes.";
+
 export const TRUNK_AUTO_LIMIT = 3;
 
 export const TRUNK_AUTO_STOPPED = "Automatic tries stopped at 3 of 3. An administrator can retry, or create the trunk in 3CX and save its id here.";
@@ -29,13 +31,8 @@ export function customerTrunkStatus(input: { status: string; trunkId?: number; a
   const trunkId = input.trunkId || 0;
   const attempts = input.attempts || 0;
   if (input.status === "trunk_live" || input.status === "trunk_done") return "Connected for calls";
-  if (trunkId > 0 && input.routes) return "Trunk added. Connecting this number for calls.";
-  if (trunkId > 0) return "Trunk added. Routing still needs the team.";
-  if (input.status === "trunk_waiting" && attempts >= TRUNK_AUTO_LIMIT) return "The trunk could not be added after 3 tries. Waiting for the team.";
-  if (input.status === "trunk_waiting" && attempts > 0) return `Adding the trunk. Try ${attempts} of 3.`;
-  if (input.status === "trunk_waiting") return "Bought. Connecting this number for calls still needs the team.";
   if (input.status === "not_on_carrier") return "Not on the phone company";
-  if (input.status === "ordered") return "Bought. Connecting this number for calls.";
+  if (input.status === "trunk_waiting" || input.status === "ordered" || trunkId > 0 || attempts > 0) return CUSTOMER_TRUNK_WAIT;
   return "In progress";
 }
 

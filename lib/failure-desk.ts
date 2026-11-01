@@ -59,6 +59,9 @@ export function failureFacts(detail: string): FailureFact {
   const quoted = text.match(/"error"\s*:\s*"([^"]+)"/i)?.[1] || text.match(/"code"\s*:\s*"([^"]+)"/i)?.[1] || "";
   const snake = text.match(/\b([a-z][a-z0-9]+(?:_[a-z0-9]+)+)\b/)?.[1] || "";
   const code = (quoted || snake).slice(0, 80);
+  if (code === "delta_required" && !text.includes("/xapi/v1/Trunks")) {
+    return { status, code, cause: "Saved locally before a live 3CX check. local_unverified. This is not a new response from 3CX." };
+  }
   const cause = text
     .replace(/\s+/g, " ")
     .replace(/^\{.*\}$/, "The provider returned a technical response.")

@@ -244,8 +244,9 @@ export async function testVoipms() {
 let cachedPbxToken: { key: string; origin: string; token: string; expires: number } | null = null;
 
 async function accessToken(connection: ReturnType<typeof getConnection>) {
-  if (!connection.enabled || !connection.public.base_url || !connection.public.client_id || !connection.secret) {
-    throw new Error("3CX is not enabled or is missing credentials.");
+  if (!connection.enabled) throw new Error("3CX connection is turned off.");
+  if (!connection.public.base_url || !connection.public.client_id || !connection.secret) {
+    throw new Error("3CX credentials are not configured.");
   }
   const origin = httpsHost(connection.public.base_url);
   const key = `${origin}|${connection.public.client_id}|${connection.secret.length}:${connection.secret.slice(-4)}`;
@@ -257,7 +258,7 @@ async function accessToken(connection: ReturnType<typeof getConnection>) {
     signal: AbortSignal.timeout(5000),
   });
   const token = (await tokenResponse.json().catch(() => null)) as { access_token?: string } | null;
-  if (!tokenResponse.ok || !token?.access_token) throw new Error("3CX did not return an access token.");
+  if (!tokenResponse.ok || !token?.access_token) throw new Error("3CX rejected the credentials.");
   cachedPbxToken = { key, origin, token: token.access_token, expires: Date.now() + 10 * 60 * 1000 };
   return { origin, token: token.access_token };
 }

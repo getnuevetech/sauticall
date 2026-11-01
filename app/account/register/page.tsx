@@ -71,6 +71,13 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
             extra={<>
               <input type="hidden" name="plan" value={chosen?.name || ""} />
               <input type="hidden" name="setup" value={setup} />
+              <label>Account type
+                <select name="account_kind" required defaultValue="">
+                  <option value="" disabled>Select account type</option>
+                  <option value="individual">Individual</option>
+                  <option value="business">Business</option>
+                </select>
+              </label>
               <label className="check-option"><input name="terms" type="checkbox" required /> {say("registerTerms")}</label>
               <p>{say("registerPasswordRule")}</p>
             </>}

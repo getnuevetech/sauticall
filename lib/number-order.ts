@@ -30,9 +30,8 @@ export function numberIsBought(status: string, providerRef: string, did: string)
 
 export function customerLineStatus(status: string) {
   if (status === "trunk_live" || status === "trunk_done") return "Connected for calls";
-  if (status === "trunk_waiting") return "Bought. Connecting this number for calls still needs the team.";
   if (status === "not_on_carrier") return "Not on the phone company";
-  if (status === "ordered") return "Bought. Connecting this number for calls.";
+  if (status === "trunk_waiting" || status === "ordered") return "Your trunk will be ready in a few minutes.";
   return "In progress";
 }
 

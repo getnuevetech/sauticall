@@ -70,6 +70,9 @@ export async function register(_previous: FormState, formData: FormData) {
   const phone = normalizeMobile(String(formData.get("phone") || ""));
   if (!name || !email || password.length < 8) return { error: "Use your name, email, and a password of at least 8 characters." };
   if (!phone) return { error: "Enter a mobile number with the country code, such as +1 202 555 0100." };
+  const { accountKindChoice } = await import("@/lib/customer-code");
+  const accountKind = accountKindChoice(String(formData.get("account_kind") || ""));
+  if (!accountKind) return { error: "Select Individual or Business." };
   if (formData.get("terms") !== "on") return { error: "Agree to the Terms of Service to create an account." };
   if (business) {
     const issue = departmentNameIssue(business);
@@ -78,8 +81,8 @@ export async function register(_previous: FormState, formData: FormData) {
   const now = new Date().toISOString();
   try {
     getDb()
-      .prepare("INSERT INTO users (email, name, password_hash, role, mfa_secret, created_at, phone, terms_accepted_at, business_name) VALUES (?, ?, ?, 'customer', NULL, ?, ?, ?, ?)")
-      .run(email, name, hashPassword(password), now, phone, now, business);
+      .prepare("INSERT INTO users (email, name, password_hash, role, mfa_secret, created_at, phone, terms_accepted_at, business_name, account_kind) VALUES (?, ?, ?, 'customer', NULL, ?, ?, ?, ?, ?)")
+      .run(email, name, hashPassword(password), now, phone, now, business, accountKind);
   } catch {
     return { error: "An account with that email already exists." };
   }

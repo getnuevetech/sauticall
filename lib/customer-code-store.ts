@@ -1,4 +1,4 @@
-import { clientMailbox, kindFromPlan, nextCustomerCode, type CustomerKind } from "./customer-code";
+import { accountKindChoice, clientMailbox, kindFromPlan, nextCustomerCode, type CustomerKind } from "./customer-code";
 import { getDb, readDoc } from "./db";
 import { paidPlan } from "./pbx";
 import type { Plan } from "./types";
@@ -9,6 +9,9 @@ function planByName(name: string) {
 }
 
 function kindForExisting(userId: number): CustomerKind {
+  const stored = getDb().prepare("SELECT account_kind FROM users WHERE id = ?").get(userId) as { account_kind?: string } | undefined;
+  const chosen = accountKindChoice(stored?.account_kind || "");
+  if (chosen) return chosen;
   const paid = paidPlan(userId);
   if (paid) return kindFromPlan(paid);
   const setup = getDb().prepare("SELECT payload FROM account_requests WHERE user_id = ? AND kind = 'setup' ORDER BY id DESC LIMIT 1").get(userId) as { payload: string } | undefined;
@@ -38,10 +41,11 @@ function writeCode(userId: number, kind: CustomerKind) {
 }
 
 export function ensureCustomerCode(userId: number, planName = "") {
-  const row = getDb().prepare("SELECT customer_code, role FROM users WHERE id = ?").get(userId) as { customer_code: string; role: string } | undefined;
+  const row = getDb().prepare("SELECT customer_code, role, account_kind FROM users WHERE id = ?").get(userId) as { customer_code: string; role: string; account_kind?: string } | undefined;
   if (!row || row.role !== "customer") return "";
   if (row.customer_code) return row.customer_code;
-  const kind = planName.trim() ? kindFromPlan(planByName(planName)) : kindForExisting(userId);
+  const chosen = accountKindChoice(row.account_kind || "");
+  const kind = chosen || (planName.trim() ? kindFromPlan(planByName(planName)) : kindForExisting(userId));
   try {
     return writeCode(userId, kind);
   } catch {

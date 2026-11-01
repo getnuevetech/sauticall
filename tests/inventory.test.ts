@@ -342,8 +342,8 @@ test("opening balances match the plan, and an outbound rule stays limited to tha
   assert.equal(outboundScopeVerdict(rule, "514", "523"), "scoped");
   assert.equal(outboundScopeVerdict({ DNRanges: [] }, "514", "523"), "open");
   assert.equal(outboundScopeVerdict({ Name: "SautiCall" }, "514", "523"), "unknown");
-  assert.equal(customerLineStatus("ordered"), "Bought. Connecting this number for calls.");
-  assert.equal(customerLineStatus("trunk_waiting"), "Bought. Connecting this number for calls still needs the team.");
+  assert.equal(customerLineStatus("ordered"), "Your trunk will be ready in a few minutes.");
+  assert.equal(customerLineStatus("trunk_waiting"), "Your trunk will be ready in a few minutes.");
   assert.equal(customerLineStatus("trunk_live"), "Connected for calls");
   const trunk = trunkCreateBody({
     seed: {
@@ -686,11 +686,13 @@ test("a trunk post keeps the template 3CX returned and the manual steps omit the
   assert.equal(JSON.stringify(posted).includes("@odata.context"), false);
   assert.equal(posted["@odata.type"], "#Pbx.Trunk");
   assert.equal(posted.Number, "10000");
-  assert.deepEqual(posted.Groups, [{ GroupId: 4 }]);
-  assert.deepEqual(posted.DidNumbers, { value: ["3345397005"] });
+  assert.equal(posted.Name, undefined);
+  assert.equal(posted.Groups, undefined);
+  assert.deepEqual(posted.DidNumbers, ["3345397005"]);
   assert.deepEqual(posted.AuthPassword, { Value: "sip-secret" });
-  assert.equal((posted.Gateway as { Host: string; InboundParams: { value: { Custom: string }[] } }).Host, "houston1.voip.ms");
-  assert.equal((posted.Gateway as { InboundParams: { value: { Custom: string }[] } }).InboundParams.value[0].Custom, "$CalledNum");
+  assert.equal((posted.Gateway as { Name: string; Host: string }).Name, "SautiCall 3345397005");
+  assert.equal((posted.Gateway as { Host: string; InboundParams: { Custom: string }[] }).Host, "houston1.voip.ms");
+  assert.equal((posted.Gateway as { InboundParams: { Custom: string }[] }).InboundParams[0].Custom, "$CalledNum");
   const note = manualTrunkNote({
     company: "Texas Labz",
     did: "3345397005",

@@ -1,5 +1,6 @@
 import { getDb } from "./db";
 import { money, readGatewaySecret, stripeSignatureOk } from "./payment-keys";
+import { requestSiteOrigin } from "./public-origin";
 
 type GatewayRow = {
   id: number;
@@ -128,12 +129,10 @@ export async function testGateway(id: number) {
 
 export async function requestOrigin() {
   const { headers } = await import("next/headers");
-  const configured = process.env["SAUTICALL_PUBLIC_ORIGIN"];
-  if (configured) return new URL(configured).origin;
   const headerList = await headers();
-  const host = (headerList.get("x-forwarded-host") || headerList.get("host") || "127.0.0.1").split(",")[0].trim();
+  const host = (headerList.get("x-forwarded-host") || headerList.get("host") || "").split(",")[0].trim();
   const proto = headerList.get("x-forwarded-proto") || "http";
-  return new URL(`${proto}://${host}`).origin;
+  return requestSiteOrigin({ configured: process.env["SAUTICALL_PUBLIC_ORIGIN"] || "", host, proto });
 }
 
 export async function beginCheckout(attemptId: number, origin: string): Promise<{ ok: true; url: string } | { ok: false; message: string }> {

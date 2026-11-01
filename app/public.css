@@ -208,7 +208,7 @@
 .pub-auth-main h1{font-size:clamp(2rem,3vw,2.6rem)}
 .pub-form{display:grid;gap:14px;max-width:460px}
 .pub-form label{display:grid;gap:6px;font-size:.86rem;font-weight:700;color:#344054}
-.pub-form input{border:1px solid #d5ddea;border-radius:10px;padding:12px;width:100%}
+.pub-form input,.pub-form select{border:1px solid #d5ddea;border-radius:10px;padding:12px;width:100%;background:#fff}
 .pub-form .check-option{display:flex;align-items:flex-start;gap:8px;font-weight:600}
 .pub-form .check-option input{width:auto;margin-top:3px}
 .pub-pass{position:relative}

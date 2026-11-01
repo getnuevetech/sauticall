@@ -8,8 +8,8 @@ test("a trunk stops after three automatic tries and keeps an admin path", () => 
   assert.equal(trunkMayAutoTry(3), false);
   assert.equal(trunkAttemptLabel({ status: "trunk_waiting", attempts: 3, trunkId: 0 }), "3 of 3 · waiting for admin");
   assert.equal(trunkAttemptLabel({ status: "trunk_waiting", attempts: 3, trunkId: 18 }), "Trunk 18 saved");
-  assert.equal(customerTrunkStatus({ status: "trunk_waiting", attempts: 3 }), "The trunk could not be added after 3 tries. Waiting for the team.");
-  assert.equal(customerTrunkStatus({ status: "trunk_waiting", trunkId: 18, routes: true }), "Trunk added. Connecting this number for calls.");
+  assert.equal(customerTrunkStatus({ status: "trunk_waiting", attempts: 3 }), "Your trunk will be ready in a few minutes.");
+  assert.equal(customerTrunkStatus({ status: "trunk_waiting", trunkId: 18, routes: true }), "Your trunk will be ready in a few minutes.");
   assert.equal(trunkSubjectMatchesLine("DEMO-TRK-1042", "3345397005"), false);
   assert.equal(trunkSubjectMatchesLine("3345397005", "3345397005"), true);
 });
