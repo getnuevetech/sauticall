@@ -15,6 +15,7 @@ import { finishAfterResponse } from "@/lib/later";
 import { audit, flagOn, getDb } from "@/lib/db";
 import { accountNeedsMfa, revealBlock } from "@/lib/mfa";
 import { departmentNameIssue, normalizeDepartmentName } from "@/lib/pbx-user";
+import { PLAN_SETUP_PATH } from "@/lib/account-start";
 
 type FormState = { error: string } | null;
 
@@ -255,6 +256,8 @@ export async function startCheckout(_previous: FormState, formData: FormData) {
 export async function startBundleCheckout(formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
+  const { paidPlan: bundlePlan } = await import("@/lib/pbx");
+  if (!bundlePlan(user.id)) redirect(PLAN_SETUP_PATH);
   if (!flagOn("billing.checkout")) redirect("/account/minutes?error=Checkout%20is%20turned%20off.");
   const gatewayId = Number(formData.get("gatewayId"));
   const bundleName = String(formData.get("bundle") || "");
@@ -292,7 +295,9 @@ export async function saveNumber(formData: FormData) {
   if (!flagOn("numbers.search")) redirect("/account/numbers?error=An%20administrator%20has%20turned%20this%20request%20off.");
   const { paidPlan } = await import("@/lib/pbx");
   const { planAllows } = await import("@/lib/plan-features");
-  if (!planAllows(paidPlan(user.id), "numbers")) redirect("/account/numbers?error=Business%20numbers%20are%20not%20included%20on%20your%20plan.");
+  const numberPlan = paidPlan(user.id);
+  if (!numberPlan) redirect(PLAN_SETUP_PATH);
+  if (!planAllows(numberPlan, "numbers")) redirect("/account/numbers?error=Business%20numbers%20are%20not%20included%20on%20your%20plan.");
   const verified = getDb().prepare("SELECT phone_verified_at FROM users WHERE id = ?").get(user.id) as { phone_verified_at: string } | undefined;
   if (flagOn("auth.verify_sms") && !verified?.phone_verified_at) redirect("/account/numbers?error=Confirm%20your%20mobile%20number%20before%20buying%20a%20number.");
   const { getEmergency } = await import("@/lib/e911");
@@ -372,7 +377,9 @@ export async function savePort(formData: FormData) {
   if (!flagOn("porting.requests")) redirect("/account/porting?error=An%20administrator%20has%20turned%20this%20request%20off.");
   const { paidPlan: subscribed } = await import("@/lib/pbx");
   const { planAllows: allows } = await import("@/lib/plan-features");
-  if (!allows(subscribed(user.id), "porting")) redirect("/account/porting?error=Number%20transfer%20is%20not%20included%20on%20your%20plan.");
+  const portPlan = subscribed(user.id);
+  if (!portPlan) redirect(PLAN_SETUP_PATH);
+  if (!allows(portPlan, "porting")) redirect("/account/porting?error=Number%20transfer%20is%20not%20included%20on%20your%20plan.");
   const payload = {
     numbers: String(formData.get("numbers") || "").replace(/[^\d,]/g, ""),
     country: String(formData.get("country") || "US").toUpperCase() === "CA" ? "CA" : "US",
@@ -436,7 +443,7 @@ export async function addPerson(formData: FormData) {
   if (!user) redirect("/account/login");
   const { allocateExtension, appPassword, extensionCapacity, paidPlan, provisionExtension } = await import("@/lib/pbx");
   const plan = paidPlan(user.id);
-  if (!plan) redirect("/account/phone?error=Pay%20for%20a%20plan%20before%20adding%20people.");
+  if (!plan) redirect(PLAN_SETUP_PATH);
   const first = String(formData.get("first_name") || "").trim().slice(0, 40);
   const last = String(formData.get("last_name") || "").trim().slice(0, 40);
   const email = String(formData.get("email") || "").trim().slice(0, 120);
@@ -501,6 +508,7 @@ export async function savePerson(formData: FormData) {
   if (!user) redirect("/account/login");
   const { paidPlan, updateExtensionProfile } = await import("@/lib/pbx");
   const plan = paidPlan(user.id);
+  if (!plan) redirect(PLAN_SETUP_PATH);
   const result = await updateExtensionProfile(Number(formData.get("id")), user.id, {
     first: String(formData.get("first_name") || ""),
     last: String(formData.get("last_name") || ""),
@@ -538,7 +546,7 @@ export async function saveDepartmentName(formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
   const { paidPlan: departmentPlan } = await import("@/lib/pbx");
-  if (!departmentPlan(user.id)) redirect("/account/phone?error=Pay%20for%20a%20plan%20before%20adding%20people.");
+  if (!departmentPlan(user.id)) redirect(PLAN_SETUP_PATH);
   const { applyDepartmentName } = await import("@/lib/pbx");
   const result = await applyDepartmentName(user.id, String(formData.get("company_name") || ""));
   audit(user.email, "pbx.department", result.ok ? "saved" : (result.detail || result.message).slice(0, 400));
@@ -557,7 +565,9 @@ export async function savePhoneHours(formData: FormData) {
   if (!/^\d{2}:\d{2}$/.test(open) || !/^\d{2}:\d{2}$/.test(close)) redirect("/account/phone?error=Use%20hours%20like%2009%3A00.");
   const { paidPlan: hoursPlan } = await import("@/lib/pbx");
   const { planAllows: hoursAllowed } = await import("@/lib/plan-features");
-  if (!hoursAllowed(hoursPlan(user.id), "business_hours")) redirect("/account/phone?error=Business%20hours%20are%20not%20included%20on%20your%20plan.");
+  const hoursSubscription = hoursPlan(user.id);
+  if (!hoursSubscription) redirect(PLAN_SETUP_PATH);
+  if (!hoursAllowed(hoursSubscription, "business_hours")) redirect("/account/phone?error=Business%20hours%20are%20not%20included%20on%20your%20plan.");
   getDb().prepare(
     `INSERT INTO pbx_departments (user_id, name, xapi_id, number_from, number_to, open_time, close_time, last_message)
      VALUES (?, ?, 0, '', '', ?, ?, '')

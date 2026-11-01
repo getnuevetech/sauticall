@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { guardAccount } from "@/lib/guard";
 import { systemsForPlan } from "@/lib/ai-account";
 import { aiSettingsFor, listAiExtensions } from "@/lib/ai-account-store";
@@ -14,6 +16,7 @@ export default async function AccountAiPage({ searchParams }: { searchParams: Pr
   const user = await guardAccount();
   const query = await searchParams;
   const plan = paidPlan(user.id);
+  if (!plan) redirect(PLAN_SETUP_PATH);
   const systems = systemsForPlan(plan?.features || []);
   const extensions = listAiExtensions(user.id);
   const enabled = enabledSwitchCodes();

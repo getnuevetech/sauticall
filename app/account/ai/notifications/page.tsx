@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { addRecipientForm, practiceForm, saveCampaignForm } from "./actions";
 import { guardAccount } from "@/lib/guard";
 import { choiceLine, outcomeLabel, practiceAllowed } from "@/lib/ai-notify";
@@ -11,7 +13,9 @@ import { planAllows } from "@/lib/plan-features";
 export default async function AccountNotificationsPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string; outcome?: string }> }) {
   const user = await guardAccount();
   const query = await searchParams;
-  if (!planAllows(paidPlan(user.id), "ai_notifications")) {
+  const plan = paidPlan(user.id);
+  if (!plan) redirect(PLAN_SETUP_PATH);
+  if (!planAllows(plan, "ai_notifications")) {
     return (
       <div className="workspace-page">
         <header className="workspace-page-head">
