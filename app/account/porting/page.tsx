@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { PortForm } from "@/components/account/PortForm";
+import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { guardAccount } from "@/lib/guard";
 import { flagOn, getDb } from "@/lib/db";
 import { paidPlan } from "@/lib/pbx";
@@ -8,6 +10,7 @@ import { loadSite } from "@/lib/site";
 
 export default async function PortingPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
   const user = await guardAccount();
+  if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
   const params = await searchParams;
   const copy = loadSite().account;
   const text = (key: string) => (typeof copy[key] === "string" ? String(copy[key]) : "");

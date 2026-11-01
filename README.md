@@ -13,7 +13,7 @@ Open http://localhost:3000.
 
 ## Customer phone setup
 
-This is the path from a new account to a working trunk.
+This is the path from a new account to a working trunk. Until a plan is paid, the overview and the number, transfer, phone, AI, and minutes pages lead to choosing a plan. Numbers, people, and calling open after that plan is paid.
 
 1. Signup creates the VoIP.ms client for that customer. The client uses the customer ID mailbox, not the customer's personal email. If the mobile number is missing, the client is finished when the number or address is saved.
 2. The first paid plan adds that plan's phone-company balance to the VoIP.ms client once. A later plan does not add the plan balance again. A minute bundle adds its own payment.

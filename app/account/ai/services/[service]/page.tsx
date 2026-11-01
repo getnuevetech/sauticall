@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { acceptAiTerms, requestAiService, saveAccountAiForm, setAiService } from "../../actions";
 import { PromptEditor } from "@/components/account/PromptEditor";
 import { guardAccount } from "@/lib/guard";
@@ -29,6 +30,7 @@ export default async function AccountAiServicePage({
   const query = await searchParams;
   const tab = workspaceTab(query.tab);
   const plan = paidPlan(user.id);
+  if (!plan) redirect(PLAN_SETUP_PATH);
   const system = systemsForPlan(plan?.features || []).find((item) => item.code === service);
   if (!system) notFound();
   const profile = workspaceProfile(service);

@@ -30,7 +30,7 @@ export default async function ManagePlanPage({ searchParams }: { searchParams: P
       {params.error ? <p className="form-feedback form-error" role="alert">{customerMessage(params.error, "Payment could not be started. Please try again, or contact support.")}</p> : null}
       <section className="ws-card bill-now">
         <span>Current plan</span>
-        {current ? <p>You&apos;re on {current.name} · {wholeMoney(current.price)}/month · {current.seats || 1} {current.seats === 1 ? "person" : "people"} · {current.includedMinutes.toLocaleString("en-US")} outbound minutes.</p> : <p>You do not have a paid plan yet. Choose one below.</p>}
+        {current ? <p>You&apos;re on {current.name} · {wholeMoney(current.price)}/month · {current.seats || 1} {current.seats === 1 ? "person" : "people"} · {current.includedMinutes.toLocaleString("en-US")} outbound minutes.</p> : <p>You do not have a paid plan yet. Numbers, people, and calling stay closed until you choose a plan below.</p>}
       </section>
       <div className="ws-plans">
         {ordered.map((plan, index) => {

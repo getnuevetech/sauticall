@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { PhoneNumbers } from "@/components/account/PhoneNumbers";
+import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { guardAccount } from "@/lib/guard";
 import { flagOn, getDb } from "@/lib/db";
 import { publishBoughtNumbers, scheduleAutomaticTrunks } from "@/lib/lines";
@@ -22,6 +24,7 @@ const E911: Record<string, string> = {
 
 export default async function NumbersPage({ searchParams }: { searchParams: Promise<{ saved?: string; address?: string; error?: string }> }) {
   const user = await guardAccount();
+  if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
   const params = await searchParams;
   const copy = loadSite().account;
   const text = (key: string) => (typeof copy[key] === "string" ? String(copy[key]) : "");

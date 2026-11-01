@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { PhoneSystem } from "@/components/account/PhoneSystem";
+import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { guardAccount } from "@/lib/guard";
 import { QUEUE_STRATEGIES, RING_STRATEGIES, groupMembers, strategyLabel, type CallGroup } from "@/lib/call-groups";
 import { getDb } from "@/lib/db";
@@ -22,6 +24,7 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
   const user = await guardAccount();
   const params = await searchParams;
   const plan = paidPlan(user.id);
+  if (!plan) redirect(PLAN_SETUP_PATH);
   const limit = plan ? extensionCapacity(plan) : 0;
   const rows = getDb().prepare("SELECT id, number, former_number, first_name, last_name, email, status, welcome_note, last_message, ai_role, ai_name FROM pbx_extensions WHERE user_id = ? ORDER BY number").all(user.id) as Extension[];
   const hours = getDb().prepare("SELECT name, open_time, close_time, last_message FROM pbx_departments WHERE user_id = ?").get(user.id) as { name: string; open_time: string; close_time: string; last_message: string } | undefined;

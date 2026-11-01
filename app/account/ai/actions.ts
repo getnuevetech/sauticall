@@ -8,6 +8,8 @@ import { NOTIFICATION_ACKS, knownSwitch } from "@/lib/ai-system";
 import { acceptAgreement, requestActivation, setCustomerEnabled } from "@/lib/ai-store";
 import { knownAccountAi } from "@/lib/ai-account";
 import { accountAiPath } from "@/lib/ai-workspace";
+import { PLAN_SETUP_PATH } from "@/lib/account-start";
+import { paidPlan } from "@/lib/pbx";
 
 async function callerHash() {
   const headerList = await headers();
@@ -27,6 +29,7 @@ function nextOf(formData: FormData, fallback: string) {
 
 export async function acceptAiTerms(formData: FormData) {
   const user = await guardAccount();
+  if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
   const feature = serviceOf(formData);
   if (!feature) redirect("/account/ai?error=Choose%20a%20service");
   const codes = feature === "notifications"
@@ -40,6 +43,7 @@ export async function acceptAiTerms(formData: FormData) {
 
 export async function requestAiService(formData: FormData) {
   const user = await guardAccount();
+  if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
   const feature = serviceOf(formData);
   if (!feature) redirect("/account/ai?error=Choose%20a%20service");
   const result = requestActivation(user.id, feature);
@@ -50,7 +54,7 @@ export async function requestAiService(formData: FormData) {
 
 export async function saveAccountAiForm(formData: FormData) {
   const user = await guardAccount();
-  const { paidPlan } = await import("@/lib/pbx");
+  if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
   const { saveAccountAi } = await import("@/lib/ai-account-store");
   const next = nextOf(formData, "/account/ai");
   const result = saveAccountAi(user.id, paidPlan(user.id), {
@@ -64,9 +68,9 @@ export async function saveAccountAiForm(formData: FormData) {
 
 export async function saveAccountPromptForm(formData: FormData) {
   const user = await guardAccount();
+  if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
   const feature = String(formData.get("feature") || "");
   const next = nextOf(formData, knownAccountAi(feature) ? `/account/ai/services/${feature}?tab=instructions` : "/account/ai");
-  const { paidPlan } = await import("@/lib/pbx");
   const { saveAccountPrompt } = await import("@/lib/ai-account-store");
   const result = saveAccountPrompt(user.id, paidPlan(user.id), { feature, body: String(formData.get("instructions") || "") });
   if (!result.ok) redirect(`${next}${next.includes("?") ? "&" : "?"}error=${encodeURIComponent(result.message)}`);
@@ -75,9 +79,9 @@ export async function saveAccountPromptForm(formData: FormData) {
 
 export async function restoreAccountPromptForm(formData: FormData) {
   const user = await guardAccount();
+  if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
   const feature = String(formData.get("feature") || "");
   const next = nextOf(formData, knownAccountAi(feature) ? `/account/ai/services/${feature}?tab=instructions` : "/account/ai");
-  const { paidPlan } = await import("@/lib/pbx");
   const { restoreAccountPrompt } = await import("@/lib/ai-account-store");
   const result = restoreAccountPrompt(user.id, paidPlan(user.id), feature);
   if (!result.ok) redirect(`${next}${next.includes("?") ? "&" : "?"}error=${encodeURIComponent(result.message)}`);
@@ -86,6 +90,7 @@ export async function restoreAccountPromptForm(formData: FormData) {
 
 export async function setAiService(formData: FormData) {
   const user = await guardAccount();
+  if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
   const feature = serviceOf(formData);
   if (!feature) redirect("/account/ai?error=Choose%20a%20service");
   const result = setCustomerEnabled(user.id, feature, formData.get("enabled") === "on");

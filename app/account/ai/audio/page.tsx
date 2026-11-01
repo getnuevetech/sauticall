@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { generateAudioForm, keepAudioForm, uploadAudioForm } from "./actions";
 import { guardAccount } from "@/lib/guard";
 import { listClips, listVoices } from "@/lib/ai-audio-store";
@@ -14,7 +16,9 @@ function sourceLabel(source: string) {
 export default async function AccountAudioPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string; id?: string }> }) {
   const user = await guardAccount();
   const query = await searchParams;
-  if (!planAllows(paidPlan(user.id), "ai_voice")) {
+  const plan = paidPlan(user.id);
+  if (!plan) redirect(PLAN_SETUP_PATH);
+  if (!planAllows(plan, "ai_voice")) {
     return (
       <div className="workspace-page">
         <header className="workspace-page-head">

@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { CallsVoicemail } from "@/components/account/CallsVoicemail";
+import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { guardAccount } from "@/lib/guard";
 import { flagOn, getDb, readDoc } from "@/lib/db";
 import { minuteBalance } from "@/lib/minutes";
@@ -11,6 +13,7 @@ export default async function MinutesPage({ searchParams }: { searchParams: Prom
   const user = await guardAccount();
   const params = await searchParams;
   const usage = accountUsage(user.id);
+  if (!usage.plan) redirect(PLAN_SETUP_PATH);
   const balance = minuteBalance(user.id);
   const bundles = readDoc<{ name: string; minutes: number; price: number; enabled?: boolean }[]>("minute_bundles").filter((bundle) => bundle.enabled !== false && Number(bundle.minutes) > 0 && Number(bundle.price) > 0);
   const gateways = getDb().prepare("SELECT id, public_label, secret FROM gateways WHERE enabled = 1 ORDER BY priority").all() as { id: number; public_label: string; secret: string }[];

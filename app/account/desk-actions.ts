@@ -8,6 +8,7 @@ import { planAllows } from "@/lib/plan-features";
 import { safeCustomerError } from "@/lib/customer-message";
 import { audit } from "@/lib/db";
 import { createCustomerTicket, customerReply } from "@/lib/tickets";
+import { PLAN_SETUP_PATH } from "@/lib/account-start";
 
 async function accountUser() {
   const user = await currentUser();
@@ -17,7 +18,9 @@ async function accountUser() {
 
 export async function createRingGroup(formData: FormData) {
   const user = await accountUser();
-  if (!planAllows(paidPlan(user.id), "ring_groups")) redirect("/account/phone?error=Ring%20groups%20are%20not%20included%20on%20your%20plan.");
+  const ringPlan = paidPlan(user.id);
+  if (!ringPlan) redirect(PLAN_SETUP_PATH);
+  if (!planAllows(ringPlan, "ring_groups")) redirect("/account/phone?error=Ring%20groups%20are%20not%20included%20on%20your%20plan.");
   const result = await createCallGroup({
     userId: user.id,
     kind: "ring",
@@ -32,7 +35,9 @@ export async function createRingGroup(formData: FormData) {
 
 export async function createQueue(formData: FormData) {
   const user = await accountUser();
-  if (!planAllows(paidPlan(user.id), "queues")) redirect("/account/phone?error=Call%20queues%20are%20not%20included%20on%20your%20plan.");
+  const queuePlan = paidPlan(user.id);
+  if (!queuePlan) redirect(PLAN_SETUP_PATH);
+  if (!planAllows(queuePlan, "queues")) redirect("/account/phone?error=Call%20queues%20are%20not%20included%20on%20your%20plan.");
   const result = await createCallGroup({
     userId: user.id,
     kind: "queue",
@@ -47,6 +52,7 @@ export async function createQueue(formData: FormData) {
 
 export async function chooseDaytimeGroup(formData: FormData) {
   const user = await accountUser();
+  if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
   const result = await setDaytimeGroup(user.id, Number(formData.get("group_id") || 0));
   audit(user.email, "pbx.daytime", String(formData.get("group_id") || 0));
   if (!result.ok) redirect(`/account/phone?error=${encodeURIComponent(safeCustomerError(result.message, "Call routing could not be updated. Please try again, or contact support."))}`);
@@ -55,6 +61,7 @@ export async function chooseDaytimeGroup(formData: FormData) {
 
 export async function deleteCallGroup(formData: FormData) {
   const user = await accountUser();
+  if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
   const result = await removeCallGroup(user.id, Number(formData.get("group_id") || 0));
   audit(user.email, "pbx.group.remove", String(formData.get("group_id") || 0));
   if (!result.ok) redirect(`/account/phone?error=${encodeURIComponent(safeCustomerError(result.message, "The group could not be removed. Please try again, or contact support."))}`);

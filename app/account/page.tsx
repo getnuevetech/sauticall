@@ -6,6 +6,7 @@ import { personFirstName, relativeWhen } from "@/lib/account-display";
 import { verificationStatus } from "@/lib/account-verify";
 import { systemsForPlan } from "@/lib/ai-account";
 import { Icon } from "@/components/Icon";
+import { accountStartSteps, nextStartStep } from "@/lib/account-start";
 
 type Activity = { title: string; detail: string; at: string };
 
@@ -26,15 +27,10 @@ export default async function AccountHome() {
   const includedAi = systemsForPlan(plan?.features || []).filter((item) => item.included);
   const aiIncluded = includedAi.length > 0;
   const activated = numbers > 0;
-  const steps = [
-    { title: "Create your account", detail: "Your workspace is ready.", href: "/account", done: true, action: "" },
-    { title: "Connect a business number", detail: "Get a new number or transfer your existing one.", href: "/account/numbers", done: numbers > 0, action: "Get started" },
-    { title: "Set your business hours", detail: "Choose when you want to take calls.", href: "/account/phone", done: hours, action: "Set hours" },
-    { title: "Choose how calls are answered", detail: "Set up your AI receptionist or call routing.", href: aiIncluded ? "/account/ai" : "/account/phone", done: groups > 0, action: "Set up" },
-    { title: "Make a test call", detail: "See everything working before you go live.", href: "/account/phone", done: calls > 0, action: "Start" },
-  ];
+  const steps = accountStartSteps({ hasPlan: Boolean(plan), numbers, hours, groups, calls, aiIncluded });
   const doneCount = steps.filter((step) => step.done).length;
-  const next = steps.find((step) => !step.done);
+  const next = nextStartStep(steps);
+  const openHref = plan ? "" : "/account/billing/plan";
   const created = getDb().prepare("SELECT created_at FROM users WHERE id = ?").get(user.id) as { created_at: string } | undefined;
   const requests = getDb().prepare("SELECT kind, status, created_at FROM account_requests WHERE user_id = ? ORDER BY id DESC LIMIT 4").all(user.id) as { kind: string; status: string; created_at: string }[];
   const check = verificationStatus(user.id);
@@ -50,7 +46,7 @@ export default async function AccountHome() {
         <h1>Welcome back, {personFirstName(user.name)}</h1>
         {doneCount < steps.length ? <span className="ws-pill progress"><i /> Setup in progress</span> : <span className="ws-pill live">Ready</span>}
       </div>
-      <p>{doneCount < steps.length ? "Let's get your business ready for its first call." : "Your business phone is ready for calls."}</p>
+      <p>{!plan ? "Choose a plan to open numbers, people, and calling." : doneCount < steps.length ? "Let's get your business ready for its first call." : "Your business phone is ready for calls."}</p>
       {missing.length ? <p>Confirm your {missing.join(", ")}. <Link href="/account/verify">Finish account confirmation</Link></p> : null}
       {lines.some((line) => line.status === "trunk_waiting" && line.trunk_id === 0 && line.trunk_attempts >= 3) ? <p>A phone connection is waiting for the team. <Link href="/account/numbers">See your numbers</Link></p> : null}
       {next ? (
@@ -59,7 +55,7 @@ export default async function AccountHome() {
             <h2>Your next step: {next.title.toLowerCase()}</h2>
             <p>{next.detail}</p>
             <div className="ws-actions">
-              {next.title.startsWith("Connect") ? (
+              {next.kind === "number" ? (
                 <>
                   <Link className="ws-btn primary" href="/account/numbers">Get a number</Link>
                   <Link className="ws-btn ghost" href="/account/porting">Transfer my number</Link>
@@ -78,10 +74,10 @@ export default async function AccountHome() {
         </section>
       ) : null}
       <div className="ws-stats">
-        <Link className="ws-stat" href="/account/numbers"><span className="ws-ico"><Icon name="phone" size={18} /></span><span><b>{numbers}</b>{numbers === 0 ? "Add your first number" : "Business numbers"}</span></Link>
-        <Link className="ws-stat" href="/account/phone"><span className="ws-ico"><Icon name="users" size={18} /></span><span><b>{seats ? `${people} of ${seats}` : String(people)}</b>{people < seats ? "Invite your team" : "Team members"}</span></Link>
-        <Link className="ws-stat" href="/account/minutes"><span className="ws-ico"><Icon name="mic" size={18} /></span><span><b>{activated ? `${usage.remaining} left` : `${usage.included.toLocaleString("en-US")} included`}</b>{activated ? "Outbound minutes" : "Available after activation"}</span></Link>
-        <Link className="ws-stat" href="/account/ai"><span className="ws-ico"><Icon name="spark" size={18} /></span><span><b>{aiIncluded ? `${includedAi.length} on this plan` : "None on this plan"}</b>{aiIncluded ? includedAi.map((item) => item.label).slice(0, 2).join(", ") : "AI systems"}</span></Link>
+        <Link className="ws-stat" href={openHref || "/account/numbers"}><span className="ws-ico"><Icon name="phone" size={18} /></span><span><b>{numbers}</b>{!plan ? "Choose a plan first" : numbers === 0 ? "Add your first number" : "Business numbers"}</span></Link>
+        <Link className="ws-stat" href={openHref || "/account/phone"}><span className="ws-ico"><Icon name="users" size={18} /></span><span><b>{seats ? `${people} of ${seats}` : String(people)}</b>{!plan ? "Available after a plan" : people < seats ? "Invite your team" : "Team members"}</span></Link>
+        <Link className="ws-stat" href={openHref || "/account/minutes"}><span className="ws-ico"><Icon name="mic" size={18} /></span><span><b>{activated ? `${usage.remaining} left` : `${usage.included.toLocaleString("en-US")} included`}</b>{!plan ? "Included with a plan" : activated ? "Outbound minutes" : "Available after activation"}</span></Link>
+        <Link className="ws-stat" href={openHref || "/account/ai"}><span className="ws-ico"><Icon name="spark" size={18} /></span><span><b>{aiIncluded ? `${includedAi.length} on this plan` : "None on this plan"}</b>{aiIncluded ? includedAi.map((item) => item.label).slice(0, 2).join(", ") : "AI systems"}</span></Link>
       </div>
       <div className="ws-columns">
         <section className="ws-card">
@@ -110,7 +106,7 @@ export default async function AccountHome() {
                 <p>{plan.includedMinutes.toLocaleString("en-US")} outbound minutes / month</p>
               </>
             ) : <p style={{ marginTop: 28 }}>Choose a plan to open numbers, people, and calling.</p>}
-            <p><Link href="/account/billing/plan">Manage plan</Link></p>
+            <p><Link href="/account/billing/plan">{plan ? "Manage plan" : "Choose a plan"}</Link></p>
           </section>
           <section className="ws-help">
             <h2>A little help getting started?</h2>
