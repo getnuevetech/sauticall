@@ -4,7 +4,7 @@ import { SipReveal } from "@/components/admin/OpsBits";
 import { requirePermission } from "@/lib/access";
 import { flagOn } from "@/lib/db";
 import { formatAddress, parseEmergency } from "@/lib/e911";
-import { formatDid, lineStatusLabel, listCompanies, listLines, maskCredential, trunkStep, unmatchedTrunkLogs, type LineView } from "@/lib/phone-ops";
+import { formatDid, lineStatusLabel, listCompanies, listLines, maskCredential, trunkAdminSummary, trunkProgress, trunkTone, unmatchedTrunkLogs, type LineView } from "@/lib/phone-ops";
 import { publishAllBoughtNumbers, scheduleAutomaticTrunks } from "@/lib/lines";
 import { trunkAttemptLabel } from "@/lib/trunk-tries";
 
@@ -12,7 +12,7 @@ const E911: Record<string, string> = {
   missing: "Emergency address missing",
   saved: "Emergency address saved here",
   sent: "Emergency address sent to the phone company",
-  needs_person: "Emergency address needs a person",
+  needs_person: "Emergency address needs a review",
   done: "Emergency address marked done",
 };
 
@@ -26,8 +26,31 @@ function addressText(raw: string) {
 }
 
 function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUser">; address: string; maskedUser: string }) {
-  const steps = trunkStep({ hasAccount: line.hasAccount, trunkId: line.trunkId, status: line.status });
+  const progress = trunkProgress({
+    hasAccount: line.hasAccount,
+    departmentOnPbx: line.departmentOnPbx,
+    extensionOnPbx: line.extensionOnPbx,
+    routeLabel: line.routeLabel,
+    routeOnPbx: line.routeOnPbx,
+    trunkId: line.trunkId,
+    status: line.status,
+    inboundOnPbx: line.inboundOnPbx,
+    outboundOnPbx: line.outboundOnPbx,
+    outboundAssigned: line.outboundAssigned,
+    departmentLimited: line.departmentLimited,
+  });
+  const summary = trunkAdminSummary(progress);
   const sharedTrunk = line.siblings.filter((item) => line.trunkId && item.trunkId === line.trunkId);
+  const steps = [
+    ["Provider account", progress.provider],
+    ["Department", progress.department],
+    ["Default extension", progress.extension],
+    ["Default route", progress.route],
+    ["3CX trunk", progress.trunk],
+    ["Inbound route", progress.inbound],
+    ["Outbound rule", progress.outbound],
+    ["Department limit", progress.limit],
+  ] as const;
   return (
     <aside className="ops-drawer">
       <div className="ops-drawer-head">
@@ -41,19 +64,20 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
       <p><Link href={`/admin/customers/${line.userId}`}>{line.email}</Link></p>
       <h3>Provisioning steps</h3>
       <ul className="ops-steps">
-        <li><span className={steps.provider === "Ready" ? "ok" : "bad"} /> Provider account <strong>{steps.provider}</strong></li>
-        <li><span className={steps.trunk === "Failed" ? "bad" : steps.trunk === "Ready" ? "ok" : "muted"} /> 3CX trunk <strong>{steps.trunk}</strong></li>
-        <li><span className="muted" /> Routing <strong>{steps.routing}</strong></li>
+        {steps.map(([label, value]) => <li key={label}><span className={trunkTone(value)} /> {label} <strong>{value}</strong></li>)}
       </ul>
       <p>Automatic tries: <strong>{trunkAttemptLabel(line)}</strong>. Automatic tries stop after 3. Retry failed step is not limited.</p>
       {line.status === "trunk_waiting" ? (
         <div>
-          <p className="ops-alert">{line.trunkId ? "The 3CX trunk id is saved. Provisioning stays incomplete until the trunk is registered, both routes are on 3CX, and an administrator records the inbound and outbound test calls." : line.attempts >= 3 ? "Automatic tries stopped at 3 of 3. Retry here as many times as you need, or create the trunk in 3CX and save its id." : "Add this trunk in the 3CX admin. The automatic request was refused."}</p>
+          <p className="ops-alert">{summary}{line.trunkId ? "" : line.attempts >= 3 ? " Automatic tries stopped at 3 of 3. Retry here as many times as you need, or create the trunk in 3CX and save its id." : ""}</p>
           <ol className="ops-steps">
-            <li>Create a SIP trunk for {line.company}.</li>
-            <li>Use registrar {line.sipHost || "the saved POP"}. The SIP user and password are below. Use the saved password.</li>
-            <li>Use trunk number {formatDid(line.did)}. Route inbound calls to {line.extension ? `extension ${line.extension}` : "the saved extension"}.</li>
-            <li>Add an outbound rule limited to extensions {line.from && line.to ? `${line.from}–${line.to}` : "the company’s reserved range"}.</li>
+            <li>Create department {line.department} on 3CX{line.from && line.to ? ` for extensions ${line.from}–${line.to}` : ""}.</li>
+            <li>Create the default extension{line.extension ? ` ${line.extension}` : ""} from the account name and email.</li>
+            <li>{line.routeLabel.startsWith("AI") ? `Use ${line.routeLabel} as the default route.` : "Create a ring group for that extension and use it as the default route."}</li>
+            <li>Create a SIP trunk for {line.company}. Use registrar {line.sipHost || "the saved POP"}. The SIP user and password are below.</li>
+            <li>Set the trunk default route for office hours and after hours to {line.routeLabel || "the ring group or AI receptionist"}.</li>
+            <li>Add an outbound rule for extensions {line.from && line.to ? `${line.from}–${line.to}` : "the company’s reserved range"} and assign that rule to {line.department}.</li>
+            <li>Limit the trunk to {line.department}.</li>
           </ol>
         </div>
       ) : null}
@@ -66,10 +90,14 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
       <p>{line.trunkId ? `3CX trunk id ${line.trunkId}${line.trunkNumber ? `, internal number ${line.trunkNumber}` : ""}.` : "No 3CX trunk id is stored yet."}</p>
       <h3>Routing configuration</h3>
       <dl className="ops-facts">
-        <div><dt>Inbound destination</dt><dd>{line.extension ? `Extension ${line.extension}` : "Not saved"}</dd></div>
-        <div><dt>Outbound scope</dt><dd>{line.from && line.to ? `Extensions ${line.from}–${line.to}` : "The company’s reserved range"}</dd></div>
+        <div><dt>Department</dt><dd>{line.departmentOnPbx ? `${line.department} on 3CX` : `${line.department} not on 3CX`}</dd></div>
+        <div><dt>Default extension</dt><dd>{line.extensionOnPbx ? `Extension ${line.extension} on 3CX` : line.extension ? `Extension ${line.extension} not on 3CX` : "Not created"}</dd></div>
+        <div><dt>Inbound destination</dt><dd>{line.routeLabel || "Not created"}</dd></div>
+        <div><dt>Hours</dt><dd>Office hours and after hours</dd></div>
+        <div><dt>Outbound scope</dt><dd>{line.from && line.to ? `Extensions ${line.from}–${line.to}, assigned to ${line.department}` : `Assigned to ${line.department}`}</dd></div>
+        <div><dt>Trunk limit</dt><dd>{line.departmentLimited ? `Limited to ${line.department}` : `Not limited to ${line.department}`}</dd></div>
       </dl>
-      <p className="ops-muted">Saved configuration. Not verified live.</p>
+      <p className="ops-muted">{summary}</p>
       <h3>Assigned numbers</h3>
       <p>{formatDid(line.did)} is this line. {line.siblings.length ? `${line.siblings.length} other number${line.siblings.length === 1 ? "" : "s"} use this company’s provider account.` : "No other number is on this provider account."}</p>
       {sharedTrunk.length ? <p>{sharedTrunk.map((item) => formatDid(item.did)).join(", ")} {sharedTrunk.length === 1 ? "is" : "are"} on the same phone-system trunk.</p> : null}
@@ -93,20 +121,20 @@ function LineDrawer({ line, address, maskedUser }: { line: Omit<LineView, "sipUs
         <input type="hidden" name="id" value={line.id} />
         <input type="hidden" name="company" value={line.userId} />
         <button className="btn btn-secondary" type="submit">Check trunk and routes in 3CX</button>
-        <p className="ops-muted">Reads registration, the inbound route, and the outbound rule from 3CX, then updates this line. It does not place a call and does not mark the trunk finished.</p>
+        <p className="ops-muted">Reads the department, registration, the inbound route, and the outbound rule from 3CX, then updates this line. It does not place a call and does not mark the trunk finished.</p>
       </form>
       <form action={confirmTrunkCalls}>
         <input type="hidden" name="id" value={line.id} />
         <input type="hidden" name="company" value={line.userId} />
         <button className="btn btn-secondary" type="submit">Record successful test calls</button>
-        <p className="ops-muted">Available after the trunk id is stored and both routes are saved. 3CX must show the trunk registered. This does not place a call.</p>
+        <p className="ops-muted">Available after the department limit, inbound route, and outbound rule are saved. 3CX must show the trunk registered. This does not place a call.</p>
       </form>
       <form action={linkTrunk} className="ops-stack">
         <input type="hidden" name="id" value={line.id} />
         <input type="hidden" name="company" value={line.userId} />
         <label>3CX trunk id <input name="trunk_id" inputMode="numeric" defaultValue={line.trunkId ? String(line.trunkId) : ""} placeholder="Id from the 3CX trunk" required /></label>
         <button className="btn btn-primary" type="submit">Save this trunk and try routing</button>
-        <p className="ops-muted">Reads that trunk from 3CX, then tries the inbound route and the outbound rule. It does not place a call.</p>
+        <p className="ops-muted">Reads that trunk from 3CX, then tries the default route, the department limit, and the outbound rule. It does not place a call.</p>
       </form>
       <form action={completeTrunk} className="ops-stack">
         <input type="hidden" name="id" value={line.id} />
@@ -207,9 +235,9 @@ export default async function LinesPage({ searchParams }: { searchParams: Promis
               {rows.map((row) => (
                 <tr key={row.id} data-current={selected?.id === row.id ? "true" : undefined}>
                   <td><strong>{row.company}</strong><small>{row.siblings.length ? `${row.siblings.length + 1} numbers on this account` : "One number on this account"}</small></td>
-                  {tab === "routing" ? <td>{row.extension ? `Extension ${row.extension}` : "Not saved"}</td> : <td>{formatDid(row.did)}</td>}
+                  {tab === "routing" ? <td>{row.routeLabel || "Not created"}</td> : <td>{formatDid(row.did)}</td>}
                   {tab === "routing" ? <td>{row.from && row.to ? `${row.from}–${row.to}` : "Reserved range"}</td> : <td>VoIP.ms</td>}
-                  <td><span className={`ops-badge ${row.status === "trunk_live" ? "ok" : row.status === "trunk_waiting" ? "warn" : "muted"}`}>{tab === "routing" ? "Not verified" : lineStatusLabel(row.status)}</span></td>
+                  <td><span className={`ops-badge ${row.status === "trunk_live" ? "ok" : row.status === "trunk_waiting" ? "warn" : "muted"}`}>{tab === "routing" ? (row.inboundOnPbx && row.outboundOnPbx && row.departmentLimited ? "Routes on 3CX" : "Routes incomplete") : lineStatusLabel(row.status)}</span></td>
                   <td>{trunkAttemptLabel(row)}</td>
                   <td><Link className="btn btn-secondary" href={`/admin/lines?tab=${tab}&line=${row.id}&company=${company || ""}&status=${params.status || "all"}&q=${encodeURIComponent(params.q || "")}`}>View</Link></td>
                 </tr>

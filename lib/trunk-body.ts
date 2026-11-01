@@ -142,17 +142,19 @@ export function manualTrunkNote(input: {
   account: string;
   host: string;
   reason: string;
+  routeLabel?: string;
 }) {
   const reason = input.reason.replace(/\s+/g, " ").trim().slice(0, 240);
   const host = input.host || "the saved POP";
+  const route = input.routeLabel || `extension ${input.extension}`;
   return [
     reason,
     `VoIP.ms SIP account ${input.account} at ${host} is ready. 3CX did not accept an automatic trunk, so add it in the 3CX admin.`,
-    `Company ${input.company}.`,
+    `Company ${input.company}. Limit the trunk to this department.`,
     `Registrar ${host}, SIP user ${input.account}. Use the SIP password already stored for this company.`,
     `Main trunk number ${input.dialed}, in national format.`,
-    `Route inbound ${input.did} to extension ${input.extension}.`,
-    `Add an outbound rule limited to extensions ${input.from}–${input.to}.`,
+    `Set the default route for office hours and after hours to ${route}.`,
+    `Add an outbound rule limited to extensions ${input.from}–${input.to} and assign it to ${input.company}.`,
     "Enter the trunk id from 3CX on this line. SautiCall will read that trunk and try the inbound and outbound rules. If those are refused too, finish both rules in 3CX and record that the routing was finished there.",
   ].join(" ");
 }

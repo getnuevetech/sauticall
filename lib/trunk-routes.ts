@@ -43,12 +43,20 @@ export function portIsComplete(body: unknown) {
   }));
 }
 
+function groupIdOf(value: unknown) {
+  if (typeof value === "number" || typeof value === "string") return Number(value);
+  if (!value || typeof value !== "object") return 0;
+  const record = value as { GroupId?: unknown; Id?: unknown };
+  return Number(record.GroupId || record.Id) || 0;
+}
+
 export function inboundRuleFound(body: unknown, trunkId: number, did: string) {
   const digits = trunkDigits(did);
   return records(body).some((record) => {
-    const id = Number(record.TrunkId);
-    const listed = trunkDigits(String(record.DID || record.Did || ""));
-    const hasTrunk = "TrunkId" in record && Number.isFinite(id) && id > 0;
+    const trunkDn = record.TrunkDN && typeof record.TrunkDN === "object" ? Number((record.TrunkDN as { Id?: unknown }).Id) : 0;
+    const id = Number(record.TrunkId) || trunkDn;
+    const listed = trunkDigits(String(record.DID || record.Did || record.Data || ""));
+    const hasTrunk = ("TrunkId" in record || "TrunkDN" in record) && Number.isFinite(id) && id > 0;
     const hasDid = listed.length >= 10;
     const trunkMatch = trunkId > 0 && id === trunkId;
     const didMatch = digits.length >= 10 && listed === digits;
@@ -72,4 +80,42 @@ export function outboundRuleFound(body: unknown, trunkId: number, from: string, 
       return String(item.From || "") === from && String(item.To || "") === to;
     });
   });
+}
+
+export function outboundRuleId(body: unknown, trunkId: number, from: string, to: string) {
+  for (const record of records(body)) {
+    const id = Number(record.Id);
+    if (!Number.isInteger(id) || id < 1) continue;
+    if (outboundRuleFound(record, trunkId, from, to)) return id;
+  }
+  return 0;
+}
+
+export function outboundAssignedToDepartment(body: unknown, trunkId: number, from: string, to: string, groupId: number) {
+  if (!groupId) return false;
+  return records(body).some((record) => {
+    const routes = items(record.Routes);
+    const usesTrunk = routes.some((route) => route && typeof route === "object" && Number((route as { TrunkId?: unknown }).TrunkId) === trunkId);
+    if (!usesTrunk || trunkId < 1) return false;
+    const ranges = items(record.DNRanges);
+    const scoped = !from || !to || ranges.some((range) => {
+      if (!range || typeof range !== "object") return false;
+      const item = range as { From?: unknown; To?: unknown };
+      return String(item.From || "") === from && String(item.To || "") === to;
+    });
+    if (!scoped) return false;
+    return items(record.GroupIds).some((group) => groupIdOf(group) === groupId);
+  });
+}
+
+export function trunkDepartmentLimit(body: unknown, groupId: number) {
+  let saw = false;
+  let hit = false;
+  for (const record of records(body)) {
+    if (!("Groups" in record)) continue;
+    saw = true;
+    if (items(record.Groups).some((group) => groupIdOf(group) === groupId)) hit = true;
+  }
+  if (!saw) return "unknown" as const;
+  return hit ? "yes" as const : "no" as const;
 }

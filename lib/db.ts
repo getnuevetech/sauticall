@@ -156,6 +156,11 @@ function migrate(database: Database.Database) {
   if (lineCols.size && !lineCols.has("trunk_number")) database.exec("ALTER TABLE phone_lines ADD COLUMN trunk_number TEXT NOT NULL DEFAULT ''");
   if (lineCols.size && !lineCols.has("trunk_routes")) database.exec("ALTER TABLE phone_lines ADD COLUMN trunk_routes INTEGER NOT NULL DEFAULT 0");
   if (lineCols.size && !lineCols.has("trunk_attempts")) database.exec("ALTER TABLE phone_lines ADD COLUMN trunk_attempts INTEGER NOT NULL DEFAULT 0");
+  if (lineCols.size && !lineCols.has("trunk_inbound")) database.exec("ALTER TABLE phone_lines ADD COLUMN trunk_inbound INTEGER NOT NULL DEFAULT 0");
+  if (lineCols.size && !lineCols.has("trunk_outbound")) database.exec("ALTER TABLE phone_lines ADD COLUMN trunk_outbound INTEGER NOT NULL DEFAULT 0");
+  if (lineCols.size && !lineCols.has("trunk_department")) database.exec("ALTER TABLE phone_lines ADD COLUMN trunk_department INTEGER NOT NULL DEFAULT 0");
+  if (lineCols.size && !lineCols.has("trunk_rule_group")) database.exec("ALTER TABLE phone_lines ADD COLUMN trunk_rule_group INTEGER NOT NULL DEFAULT 0");
+  if (lineCols.size && !lineCols.has("route_label")) database.exec("ALTER TABLE phone_lines ADD COLUMN route_label TEXT NOT NULL DEFAULT ''");
   const clientCols = new Set((database.prepare("PRAGMA table_info(voip_clients)").all() as { name: string }[]).map((column) => column.name));
   if (clientCols.size && !clientCols.has("funded_cents")) database.exec("ALTER TABLE voip_clients ADD COLUMN funded_cents INTEGER NOT NULL DEFAULT 0");
   if (clientCols.size && !clientCols.has("funded_plan")) database.exec("ALTER TABLE voip_clients ADD COLUMN funded_plan TEXT NOT NULL DEFAULT ''");
@@ -250,6 +255,11 @@ function migrate(database: Database.Database) {
       trunk_number TEXT NOT NULL DEFAULT '',
       trunk_routes INTEGER NOT NULL DEFAULT 0,
       trunk_attempts INTEGER NOT NULL DEFAULT 0,
+      trunk_inbound INTEGER NOT NULL DEFAULT 0,
+      trunk_outbound INTEGER NOT NULL DEFAULT 0,
+      trunk_department INTEGER NOT NULL DEFAULT 0,
+      trunk_rule_group INTEGER NOT NULL DEFAULT 0,
+      route_label TEXT NOT NULL DEFAULT '',
       last_message TEXT NOT NULL DEFAULT '',
       e911_json TEXT NOT NULL DEFAULT '',
       e911_status TEXT NOT NULL DEFAULT 'missing',
