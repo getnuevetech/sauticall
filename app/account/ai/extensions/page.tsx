@@ -41,6 +41,7 @@ export default async function AiExtensionsPage({ searchParams }: { searchParams:
         <form className="contact-form" action={createVirtualAgentForm}>
           <h2>Create an AI extension</h2>
           <input type="hidden" name="request_id" value={requestId} />
+          <input type="hidden" name="next" value="/account/ai/extensions" />
           <label>Name <input name="name" required placeholder="Front desk" /></label>
           <label>Purpose
             <select name="agent_type" defaultValue={choices[0]?.code || "receptionist"}>

@@ -95,7 +95,8 @@ export async function createVirtualAgentForm(formData: FormData) {
   const agentType = String(formData.get("agent_type") || "");
   const feature = knownAccountAi(agentType) ? (await import("@/lib/ai-account")).accountAiFeature(agentType) : "";
   const { planAllows } = await import("@/lib/plan-features");
-  if (!feature || !planAllows(plan, feature)) redirect("/account/ai/extensions?error=That%20AI%20extension%20is%20not%20included%20on%20this%20plan.");
+  const next = nextOf(formData, "/account/ai");
+  if (!feature || !planAllows(plan, feature)) redirect(`${next}${next.includes("?") ? "&" : "?"}error=${encodeURIComponent("That AI extension is not included on this plan.")}`);
   const { getDb } = await import("@/lib/db");
   const { publishVirtualAgent, saveVirtualAgent } = await import("@/lib/ai-virtual-store");
   const now = new Date().toISOString();
@@ -111,15 +112,15 @@ export async function createVirtualAgentForm(formData: FormData) {
     allowedTransfers: String(formData.get("transfers") || "").split(",").map((item) => item.trim()).filter(Boolean),
     now,
   });
-  if (!saved.ok) redirect(`/account/ai/extensions?error=${encodeURIComponent(saved.message)}`);
+  if (!saved.ok) redirect(`${next}${next.includes("?") ? "&" : "?"}error=${encodeURIComponent(saved.message)}`);
   const published = publishVirtualAgent(getDb(), {
     userId: user.id,
     agentId: saved.id,
     idempotencyKey: String(formData.get("request_id") || crypto.randomUUID()),
     now,
   });
-  if (!published.ok) redirect(`/account/ai/extensions/${saved.id}?error=${encodeURIComponent(published.message)}`);
-  redirect(`/account/ai/extensions/${saved.id}?saved=1`);
+  if (!published.ok) redirect(`${next}${next.includes("?") ? "&" : "?"}error=${encodeURIComponent(published.message)}`);
+  redirect(`${next}${next.includes("?") ? "&" : "?"}saved=extension`);
 }
 
 export async function setAiService(formData: FormData) {

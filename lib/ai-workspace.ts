@@ -272,9 +272,17 @@ export function nextSetupStep(code: AccountAiCode, facts: SetupFacts, planName: 
   const base = `/account/ai/services/${code}`;
   if (!facts.included) return { href: "/account/billing/plan", label: "See plans", summary: `Not included on ${planName || "this account"}.` };
   if (facts.termsOpen) return { href: `${base}?tab=overview`, label: "Review access", summary: "Finish the terms or review step before turning this on." };
+  if (profile.virtualDestination) {
+    return {
+      href: "/account/ai#configure",
+      label: "Configure",
+      summary: facts.extensionAssigned
+        ? "Virtual destination saved. The number stays on the ring group until 3CX certifies it."
+        : "Configure the name, prompt, number, and answering mode. No phone is assigned.",
+    };
+  }
   if (!facts.named) return { href: `${base}?tab=configuration`, label: "Add a name", summary: "Included. Add a name to configure this service." };
   if (!facts.hasInstructions) return { href: `${base}?tab=instructions`, label: profile.instructionTab, summary: "Configured. Add the instructions for this service." };
-  if (profile.virtualDestination && !facts.extensionAssigned) return { href: "/account/ai/extensions", label: "Create AI extension", summary: "Instructions are saved. Create the virtual destination under AI extensions. No phone is assigned." };
   if (profile.usesExtension && !facts.extensionAssigned) return { href: `${base}?tab=configuration`, label: "Assign an extension", summary: "Instructions are saved. Assign an extension when this service should belong to a person." };
   if (profile.usesSwitch && !facts.serviceOn) return { href: `${base}?tab=overview`, label: "Turn on", summary: "Setup is saved. Turn the service on when you want it available. Live calls stay off." };
   return { href: `${base}?tab=activity`, label: "View activity", summary: "Set up on this account. Live calls stay off." };
@@ -287,5 +295,6 @@ export function aiSaveNotice(saved: string | undefined) {
   if (saved === "configured") return "Settings saved. Routing was not changed, and no call was placed.";
   if (saved === "prompt") return "Instructions saved. No call was placed and routing was not changed.";
   if (saved === "restored") return "Starting template restored. No call was placed and routing was not changed.";
+  if (saved === "extension") return "AI extension saved. The phone number was not moved, and no call was placed.";
   return "";
 }

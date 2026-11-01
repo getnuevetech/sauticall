@@ -30,12 +30,14 @@ test("a service that is not on the plan shows plan access only", () => {
 });
 
 test("the next action follows plan, name, instructions, extension, then enablement", () => {
-  assert.equal(nextSetupStep("receptionist", open, "Team").href, "/account/ai/services/receptionist?tab=configuration");
-  const named = nextSetupStep("receptionist", { ...open, named: true }, "Team");
-  assert.equal(named.href, "/account/ai/services/receptionist?tab=instructions");
-  const written = nextSetupStep("receptionist", { ...open, named: true, hasInstructions: true }, "Team");
-  assert.equal(written.label, "Create AI extension");
-  assert.equal(written.href, "/account/ai/extensions");
+  const receptionist = nextSetupStep("receptionist", open, "Team");
+  assert.equal(receptionist.href, "/account/ai#configure");
+  assert.equal(receptionist.label, "Configure");
+  const ready = nextSetupStep("receptionist", { ...open, named: true, hasInstructions: true, extensionAssigned: true, serviceOn: true }, "Team");
+  assert.equal(ready.href, "/account/ai#configure");
+  assert.match(ready.summary, /ring group/);
+  const named = nextSetupStep("outbound_assistant", open, "Team");
+  assert.equal(named.href, "/account/ai/services/outbound_assistant?tab=configuration");
   const assigned = nextSetupStep("tts", { ...open, named: true, hasInstructions: true }, "Team");
   assert.equal(assigned.href, "/account/ai/services/tts?tab=activity");
   assert.match(assigned.summary, /Live calls stay off/);
