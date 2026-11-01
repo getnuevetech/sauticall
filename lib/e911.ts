@@ -1,5 +1,4 @@
 import { callVoipms } from "./carriers";
-import { customerMessage } from "./customer-message";
 import { flagOn, getDb } from "./db";
 import { emergencyCarrierParams, parseEmergency, type EmergencyAddress } from "./e911-address";
 
@@ -73,12 +72,9 @@ export async function sendEmergency(lineId: number) {
   }
   getDb().prepare("UPDATE phone_lines SET e911_json = ? WHERE id = ?").run(JSON.stringify(address), line.id);
   if (!flagOn("numbers.live_order")) {
-    const changed = line.e911_status === "sent" || line.e911_status === "done";
-    const message = changed
-      ? "The address changed here. Buying numbers is turned off, so the phone company was not updated."
-      : "Saved. It is sent to the phone company when a number is bought.";
-    getDb().prepare("UPDATE phone_lines SET e911_status = ?, e911_message = ? WHERE id = ?").run(changed ? "needs_person" : "saved", message, line.id);
-    return { ok: !changed, message };
+    const message = "Emergency address saved.";
+    getDb().prepare("UPDATE phone_lines SET e911_status = 'saved', e911_message = ? WHERE id = ?").run(message, line.id);
+    return { ok: true, message };
   }
   const did = didForCarrier(line.did);
   const checked = await callVoipms("e911Validate", emergencyCarrierParams(address, did));
@@ -87,8 +83,10 @@ export async function sendEmergency(lineId: number) {
     console.error(`[sauticall] e911 ${detail}`);
     const { recordFailure } = await import("./failure-log");
     recordFailure({ area: "emergency", userId: line.user_id, subject: line.did, detail });
-    getDb().prepare("UPDATE phone_lines SET e911_status = 'needs_person', e911_message = ? WHERE id = ?").run(detail.slice(0, 400), line.id);
-    return { ok: false, message: customerMessage(plainStatus(checked.status), "The emergency address was saved. The team will finish sending it.") };
+    const rejected = checked.status === "invalid_address";
+    const message = rejected ? "The phone company did not accept this address." : "Emergency address saved.";
+    getDb().prepare("UPDATE phone_lines SET e911_status = ?, e911_message = ? WHERE id = ?").run(rejected ? "needs_person" : "saved", message, line.id);
+    return { ok: false, message };
   }
   const update = line.e911_status === "sent" || line.e911_status === "done";
   let result = await callVoipms(update ? "e911Update" : "e911Provision", emergencyCarrierParams(address, did));
@@ -99,8 +97,10 @@ export async function sendEmergency(lineId: number) {
     const { recordFailure } = await import("./failure-log");
     recordFailure({ area: "emergency", userId: line.user_id, subject: line.did, detail });
   }
-  getDb().prepare("UPDATE phone_lines SET e911_status = ?, e911_message = ? WHERE id = ?").run(result.ok ? "sent" : "needs_person", detail.slice(0, 400), line.id);
-  return { ok: result.ok, message: result.ok ? "Emergency address sent to the phone company." : customerMessage(plainStatus(result.status), "The emergency address was saved. The team will finish sending it.") };
+  const rejected = !result.ok && result.status === "invalid_address";
+  const message = result.ok ? "Emergency address sent to the phone company." : rejected ? "The phone company did not accept this address." : "Emergency address saved.";
+  getDb().prepare("UPDATE phone_lines SET e911_status = ?, e911_message = ? WHERE id = ?").run(result.ok ? "sent" : rejected ? "needs_person" : "saved", message, line.id);
+  return { ok: result.ok, message };
 }
 
 export async function syncEmergency(userId: number) {

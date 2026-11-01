@@ -2,6 +2,10 @@ export const CLIENT_MAIL_HOST = "sauticall.com";
 
 export type CustomerKind = "individual" | "business";
 
+export function accountKindChoice(value: string): CustomerKind | "" {
+  return value === "individual" || value === "business" ? value : "";
+}
+
 export function kindFromPlan(plan: { seats?: number; custom?: boolean } | null | undefined): CustomerKind {
   if (!plan) return "individual";
   if (plan.custom) return "business";

@@ -197,6 +197,17 @@ function stripTrunkMetadata(value: unknown): unknown {
   return next;
 }
 
+function listedValues(value: unknown): unknown[] | null {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.value)) return record.value;
+  if (Array.isArray(record.delta)) return record.delta;
+  return null;
+}
+
+const TRUNK_RESPONSE_ONLY = new Set(["Id", "Groups", "IsOnline", "ConfigurationIssue", "RoutingRules"]);
+
 export function trunkPassthroughBody(input: {
   seed: Record<string, unknown> | null;
   name: string;
@@ -208,20 +219,61 @@ export function trunkPassthroughBody(input: {
 }) {
   const number = digits(input.number);
   const body = stripTrunkMetadata(input.seed ? structuredClone(input.seed) : {}) as Record<string, unknown>;
-  body.Name = input.name;
+  for (const key of TRUNK_RESPONSE_ONLY) delete body[key];
+  delete body.Name;
   body.AuthID = input.authId;
   if ("AuthUser" in body) body.AuthUser = input.authId;
   body.AuthPassword = { Value: input.password };
   if (number) body.ExternalNumber = number;
+  body.DidNumbers = number ? [number] : [];
   const gateway = body.Gateway && typeof body.Gateway === "object" && !Array.isArray(body.Gateway)
     ? body.Gateway as Record<string, unknown>
     : {};
   body.Gateway = gateway;
+  gateway.Name = input.name;
   if (input.host) gateway.Host = input.host;
   if (!gateway.Port) gateway.Port = 5060;
   if (!gateway.TemplateFilename && input.template) gateway.TemplateFilename = input.template;
-  if (number) keepDid(body, number);
-  return fillNullDeltas(body) as Record<string, unknown>;
+  for (const field of ["InboundParams", "OutboundParams", "SourceIdentification"]) {
+    const listed = listedValues(gateway[field]);
+    if (listed) gateway[field] = listed;
+    else delete gateway[field];
+  }
+  return body;
+}
+
+export function trunkConnectionClass(message: string) {
+  const text = message.toLowerCase();
+  if (text.includes("connection is turned off") || text.includes("not enabled")) return "blocked_connection_disabled";
+  if (text.includes("credentials are not configured") || text.includes("missing credentials")) return "blocked_missing_credentials";
+  if (text.includes("rejected the credentials") || text.includes("access token") || text.includes("401")) return "authentication_failed";
+  if (/\b400\b/.test(text) || text.includes("not valid")) return "provider_validation_failed";
+  return "";
+}
+
+export function redactTrunkBody(body: Record<string, unknown>) {
+  const copy = structuredClone(body);
+  const password = copy.AuthPassword;
+  if (password && typeof password === "object" && !Array.isArray(password)) {
+    (password as Record<string, unknown>).Value = "[hidden]";
+  }
+  return copy;
+}
+
+export function trunkIdForDid(body: unknown, did: string) {
+  const record = body && typeof body === "object" ? body as { value?: unknown } : {};
+  const rows = Array.isArray(record.value) ? record.value : [];
+  const target = digits(did);
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const item = row as { Id?: unknown; ExternalNumber?: unknown; DidNumbers?: unknown };
+    const external = digits(String(item.ExternalNumber || ""));
+    const listed = listedValues(item.DidNumbers) || [];
+    const hit = external === target || listed.some((entry) => digits(String(entry)) === target);
+    const id = Number(item.Id);
+    if (hit && Number.isInteger(id) && id > 0) return id;
+  }
+  return 0;
 }
 
 function keepDid(body: Record<string, unknown>, number: string) {

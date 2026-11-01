@@ -8,7 +8,7 @@ import { enforceUser } from "./minutes";
 import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "./outbound-rule";
 import { extensionRange, paidPlan, readExtensionPlan } from "./pbx";
 import { firstListedId, idFromPbx } from "./pbx-id";
-import { manualTrunkNote, mentionsDelta, readTrunkIdentity, redactProvisioning, trunkDialedNumber, trunkGroupBody, trunkPassthroughBody, trunkProvisionVerdict, trunkTemplateName, wrapCollections } from "./trunk-body";
+import { manualTrunkNote, mentionsDelta, readTrunkIdentity, redactProvisioning, redactTrunkBody, trunkConnectionClass, trunkDialedNumber, trunkGroupBody, trunkIdForDid, trunkPassthroughBody, trunkProvisionVerdict, trunkTemplateName, wrapCollections } from "./trunk-body";
 import { shownAccountName } from "./pbx-user";
 import { carrierDidRef, numberIsBought, orderTimedOut } from "./number-order";
 import { automaticStopNote, trunkMayAutoTry } from "./trunk-tries";
@@ -112,21 +112,24 @@ export async function attachTrunk(lineId: number) {
   const number = trunkDialedNumber(line.did);
   const department = getDb().prepare("SELECT xapi_id, name FROM pbx_departments WHERE user_id = ?").get(line.user_id) as { xapi_id: number; name: string } | undefined;
   const extension = extensionFor(line.user_id);
-  const trunkName = `SautiCall ${line.did}`.replace(/'/g, "");
+  const company = department?.name || departmentName(line.user_id);
+  const gatewayName = `${company || "SautiCall"} - VoIP.ms ${number}`.replace(/'/g, "").slice(0, 80);
   let trunkId = line.trunk_id || 0;
   if (trunkId) {
     const saved = await pbxRequest(`Trunks(${trunkId})?$select=Id`);
     if (!saved.ok) trunkId = 0;
   }
   if (!trunkId) {
-    const found = await pbxRequest(`Trunks?$filter=${encodeURIComponent(`Name eq '${trunkName}'`)}&$select=Id&$top=1`);
-    trunkId = found.ok ? firstListedId(found.body) : 0;
+    const found = await pbxRequest("Trunks?$top=100&$select=Id,ExternalNumber,DidNumbers");
+    trunkId = found.ok ? trunkIdForDid(found.body, number) : 0;
   }
   const seeded = trunkId ? { ok: true, message: "", body: null } : await pbxRequest(`Trunks/Pbx.InitTrunk(template=${encodeURIComponent(`'${template}'`)})`);
   const seed = seeded.ok ? trunkSeed(seeded.body) : null;
-  const handoff = (reason: string) => {
+  const handoff = (reason: string, requestBody?: Record<string, unknown>) => {
+    const kind = trunkConnectionClass(reason);
+    const posted = requestBody ? JSON.stringify(redactTrunkBody(requestBody)) : "";
     const note = hideSecret(manualTrunkNote({
-      company: department?.name || departmentName(line.user_id),
+      company,
       did: line.did,
       dialed: number,
       extension,
@@ -134,31 +137,39 @@ export async function attachTrunk(lineId: number) {
       to: span.to,
       account: sub.account,
       host: sub.sip_host || "",
-      reason,
+      reason: [kind, reason, posted].filter(Boolean).join(" "),
     }), sub.password);
     openTask(line.id, line.user_id, line.did, note);
     recordFailure({ area: "trunk", userId: line.user_id, subject: line.did, detail: note });
     return { ok: false as const, message: note.slice(0, 500) };
   };
   if (!trunkId && (!seeded.ok || !seed)) return handoff(seeded.message || "3CX did not return a trunk template.");
+  if (!trunkId && seed) {
+    const proposed = String(seed.Number || "").replace(/\D/g, "");
+    if (proposed) {
+      const taken = await pbxRequest(`Trunks?$filter=${encodeURIComponent(`Number eq '${proposed}'`)}&$select=Id&$top=1`);
+      if (taken.ok && firstListedId(taken.body)) return handoff(`Trunk number ${proposed} is already used. InitTrunk must be requested again before another trunk is created.`);
+    }
+  }
+  const postedBody = trunkId ? null : trunkPassthroughBody({
+    seed,
+    name: gatewayName,
+    number,
+    authId: sub.account,
+    password: sub.password,
+    host: sub.sip_host || "",
+    template,
+  });
   const created = trunkId
     ? { ok: true, status: 200, message: "An existing trunk was found and was not created again.", body: null, location: "" }
     : await pbxRequest("Trunks", {
       method: "POST",
-      body: trunkPassthroughBody({
-        seed,
-        name: `SautiCall ${line.did}`,
-        number,
-        authId: sub.account,
-        password: sub.password,
-        host: sub.sip_host || "",
-        template,
-      }),
+      body: postedBody,
       contentType: "application/json",
     });
   if (!trunkId) trunkId = idFromPbx(created.body, created.location) || readTrunkIdentity(created.body).id;
   const createdIdentity = readTrunkIdentity(created.body);
-  if (!created.ok || !trunkId) return handoff(created.message || "3CX did not add the trunk.");
+  if (!created.ok || !trunkId) return handoff(created.message || "3CX did not add the trunk.", postedBody || undefined);
   let trunkNumber = createdIdentity.number || line.trunk_number || "";
   let departmentNote = "";
   if (department?.xapi_id) {

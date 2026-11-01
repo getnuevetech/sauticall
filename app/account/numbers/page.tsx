@@ -13,11 +13,8 @@ import { customerMessage } from "@/lib/customer-message";
 import { loadSite } from "@/lib/site";
 
 const E911: Record<string, string> = {
-  missing: "Emergency address missing",
-  saved: "Emergency address saved",
-  sent: "Emergency address sent",
-  needs_person: "The emergency address needs another look. The team has the details.",
-  done: "Emergency address marked done",
+  missing: "Add an emergency address.",
+  needs_person: "The phone company did not accept this address.",
 };
 
 export default async function NumbersPage({ searchParams }: { searchParams: Promise<{ saved?: string; address?: string; error?: string }> }) {
@@ -43,7 +40,7 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
         : params.saved === "held"
           ? text("numbersHeld")
           : params.saved === "ordering"
-            ? "We're buying that number on your phone-company account. This page updates when it finishes."
+            ? "Your trunk will be ready in a few minutes."
           : params.saved === "1"
             ? text("numbersSaved")
             : params.address
@@ -71,7 +68,7 @@ export default async function NumbersPage({ searchParams }: { searchParams: Prom
         zip: address?.zip || "",
       }}
       lookup={placesConfigured()}
-      owned={lines.map((line) => ({ did: line.did, status: customerTrunkStatus({ status: line.status, trunkId: line.trunk_id, attempts: line.trunk_attempts, routes: line.trunk_routes === 1 }), detail: line.status === "not_on_carrier" ? "" : E911[line.e911_status] || "In progress" }))}
+      owned={lines.map((line) => ({ did: line.did, status: customerTrunkStatus({ status: line.status, trunkId: line.trunk_id, attempts: line.trunk_attempts, routes: line.trunk_routes === 1 }), detail: line.status === "not_on_carrier" ? "" : E911[line.e911_status] || "" }))}
       requests={rows.map((row) => {
         let payload: { did?: string; detail?: string; emergency?: EmergencyAddress } = {};
         try {

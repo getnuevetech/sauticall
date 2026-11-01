@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clientMailbox, customerCodeWithoutHyphen, formatCustomerCode, kindFromPlan, nextCustomerCode } from "../lib/customer-code.ts";
+import { accountKindChoice, clientMailbox, customerCodeWithoutHyphen, formatCustomerCode, kindFromPlan, nextCustomerCode } from "../lib/customer-code.ts";
 import { parseGoogleAddress } from "../lib/google-address.ts";
 import { addressReady } from "../lib/e911-address.ts";
 import { bestTrunk, outboundChoice, trunkOutcome } from "../lib/outbound-path.ts";
 
 test("customer IDs use I and B with seven digits and no hyphen", () => {
+  assert.equal(accountKindChoice(""), "");
+  assert.equal(accountKindChoice("solo"), "");
+  assert.equal(accountKindChoice("business"), "business");
+  assert.equal(accountKindChoice("individual"), "individual");
   assert.equal(kindFromPlan({ seats: 1 }), "individual");
   assert.equal(kindFromPlan(null), "individual");
   assert.equal(kindFromPlan({ seats: 5 }), "business");

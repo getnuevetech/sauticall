@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { logout } from "@/app/account/actions";
 import { screenFor } from "@/lib/admin-labels";
@@ -37,11 +37,13 @@ export function AdminFrame({
   name,
   email,
   groups,
+  trunkAlerts = 0,
   children,
 }: {
   name: string;
   email: string;
   groups: Group[];
+  trunkAlerts?: number;
   children: React.ReactNode;
 }) {
   const path = usePathname();
@@ -53,6 +55,26 @@ export function AdminFrame({
   const trail = crumb(path, groups);
   const initials = name.trim().split(/\s+/).filter(Boolean);
   const mark = initials.length === 0 ? "SC" : initials.length === 1 ? initials[0].slice(0, 2).toUpperCase() : `${initials[0][0]}${initials[initials.length - 1][0]}`.toUpperCase();
+  useEffect(() => {
+    if (!trunkAlerts) return;
+    if (sessionStorage.getItem("sc-trunk-buzz") === String(trunkAlerts)) return;
+    sessionStorage.setItem("sc-trunk-buzz", String(trunkAlerts));
+    const context = new AudioContext();
+    const tone = (frequency: number, at: number) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.frequency.value = frequency;
+      gain.gain.value = 0.04;
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(at);
+      oscillator.stop(at + 0.12);
+    };
+    const start = context.currentTime + 0.05;
+    tone(880, start);
+    tone(660, start + 0.18);
+    window.setTimeout(() => void context.close(), 800);
+  }, [trunkAlerts]);
 
   return (
     <div className={`admin-portal${open ? " nav-open" : ""}`}>
@@ -101,6 +123,13 @@ export function AdminFrame({
             ) : null}
           </div>
         </header>
+        {trunkAlerts ? (
+          <Link className="ap-buzzer" href="/admin/lines" role="status">
+            <span className="ap-buzzer-dot" aria-hidden="true" />
+            <strong>{trunkAlerts === 1 ? "1 trunk needs attention" : `${trunkAlerts} trunks need attention`}</strong>
+            <span>A customer is waiting. Open Lines & trunks and finish the connection.</span>
+          </Link>
+        ) : null}
         <div className="admin-main">{children}</div>
       </div>
     </div>

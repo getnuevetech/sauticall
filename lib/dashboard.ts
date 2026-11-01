@@ -278,7 +278,7 @@ export function dashboardFor(user: Staff) {
     });
     const openTasks = tasks.filter((task) => task.status === "open").length;
     if (openTasks) attention.push({ href: "/admin/lines", title: `${openTasks} trunk${openTasks === 1 ? "" : "s"} to finish on the server`, detail: "3CX did not take the number automatically" });
-    const missingAddress = lines.filter((line) => line.e911_status !== "done").length;
+    const missingAddress = lines.filter((line) => line.e911_status === "missing" || line.e911_status === "needs_person").length;
     if (missingAddress) attention.push({ href: "/admin/lines", title: `${missingAddress} emergency address${missingAddress === 1 ? "" : "es"} not finished`, detail: "These numbers still need a completed address" });
   }
 

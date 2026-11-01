@@ -155,10 +155,16 @@ set_env() {
 }
 
 set_env SAUTICALL_COOKIE_SECURE 1
-set_env SAUTICALL_PUBLIC_ORIGIN "https://${NAME}"
+if [[ -n "${DOMAIN:-}" && ! "${DOMAIN}" =~ ^[0-9]+(\.[0-9]+){3}$ ]]; then
+  PUBLIC_ORIGIN="https://${DOMAIN}"
+else
+  PUBLIC_ORIGIN="https://sauticall.com"
+fi
+set_env SAUTICALL_PUBLIC_ORIGIN "${PUBLIC_ORIGIN}"
 systemctl restart sauticall
 
 echo "HTTPS is on for https://${NAME}."
+echo "Checkout and email links use ${PUBLIC_ORIGIN}."
 if [[ -z "${DOMAIN:-}" ]]; then
   echo "This certificate lasts about six days. Certbot renews it on its own."
 fi

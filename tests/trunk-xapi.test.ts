@@ -21,27 +21,30 @@ test("the VoIP.ms template is initialized and empty deltas are arrays", () => {
     seed: {
       "@odata.type": "#Pbx.Trunk",
       Number: "10000",
-      DidNumbers: { "@odata.type": "#Collection(String)", delta: null },
+      DidNumbers: ["10000"],
       Gateway: {
         "@odata.type": "#Pbx.Gateway",
         TemplateFilename: "voipms.pv.xml",
-        InboundParams: { "@odata.type": "#Collection(Pbx.GatewayParameterBinding)", value: [{ Name: "Contact" }], delta: null },
-        OutboundParams: { "@odata.type": "#Collection(Pbx.GatewayParameterBinding)", delta: [{ Name: "From" }] },
+        InboundParams: [{ ParamId: 9, ValueId: 1, Custom: "" }],
+        OutboundParams: { value: [{ ParamId: 4, ValueId: 2, Custom: "" }] },
       },
     },
-    name: "SautiCall 2176050015",
+    name: "TellMeItsReal - VoIP.ms 2176050015",
     number: "2176050015",
     authId: "577137_I0000001",
     password: "sip-secret",
     host: "houston1.voip.ms",
     template: "voipms.pv.xml",
   });
+  assert.equal(posted.Name, undefined);
+  assert.equal((posted.Gateway as { Name: string; TemplateFilename: string; Host: string }).Name, "TellMeItsReal - VoIP.ms 2176050015");
   assert.equal((posted.Gateway as { TemplateFilename: string; Host: string }).TemplateFilename, "voipms.pv.xml");
   assert.equal((posted.Gateway as { Host: string }).Host, "houston1.voip.ms");
-  assert.deepEqual(posted.DidNumbers, { "@odata.type": "#Collection(String)", delta: ["2176050015"] });
-  const gateway = posted.Gateway as { InboundParams: { delta: { Name: string }[] }; OutboundParams: { delta: { Name: string }[] } };
-  assert.equal(gateway.InboundParams.delta[0].Name, "Contact");
-  assert.equal(gateway.OutboundParams.delta[0].Name, "From");
+  assert.deepEqual(posted.DidNumbers, ["2176050015"]);
+  const gateway = posted.Gateway as { InboundParams: { ParamId: number }[]; OutboundParams: { ParamId: number }[] };
+  assert.equal(gateway.InboundParams[0].ParamId, 9);
+  assert.equal(gateway.OutboundParams[0].ParamId, 4);
+  assert.equal(JSON.stringify(posted).includes("\"delta\""), false);
   assert.equal(JSON.stringify(posted).includes("sip-secret"), true);
   assert.equal(redactProvisioning(`password sip-secret token Bearer abc.def`, ["sip-secret"]).includes("sip-secret"), false);
   assert.match(redactProvisioning("Authorization Bearer abc.def-ghi", []), /Bearer \[hidden\]/);
