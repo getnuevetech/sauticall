@@ -36,7 +36,7 @@ function ProviderCard({ id, name, detail, current }: { id: string; name: string;
   );
 }
 
-export default async function ConnectionsPage({ searchParams }: { searchParams: Promise<{ provider?: string; saved?: string }> }) {
+export default async function ConnectionsPage({ searchParams }: { searchParams: Promise<{ provider?: string; saved?: string; error?: string }> }) {
   await requirePermission("settings.connections");
   const query = await searchParams;
   const provider = query.provider === "3cx" ? "3cx" : "voipms";
@@ -48,6 +48,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
         <p className="ops-kicker">Integrations / System connections</p>
         <h1>System connections</h1>
         <p>Configure provider access and inspect connection checks.</p>
+        {query.error ? <p className="ops-alert" role="alert">{query.error}</p> : null}
         {query.saved ? <p className="form-feedback">{query.saved === "places" ? "Google address lookup saved. No address was sent." : "Connection saved. No number was bought and no trunk was added."}</p> : null}
         <div className="ops-pick">
           <ProviderCard id="voipms" name="VoIP.ms" detail="SIP trunking, DIDs and SMS" current={provider === "voipms"} />
@@ -119,7 +120,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
             </>
           ) : (
             <>
-              <label>API base URL <input name="base_url" defaultValue={config.base_url || ""} autoComplete="off" /></label>
+              <label>3CX hostname <input name="base_url" defaultValue={config.base_url || ""} placeholder="https://kwiktech.3cx.us" autoComplete="off" /></label>
               <label>Client ID <input name="client_id" defaultValue={config.client_id || ""} autoComplete="off" /></label>
               <SecretField name="secret" label="Client secret" stored={connection.hasSecret} />
               <label>Trunk template <input name="trunk_template" defaultValue={config.trunk_template && config.trunk_template !== "GenericSIPTrunk.pv.xml" ? config.trunk_template : "voipms.pv.xml"} /></label>

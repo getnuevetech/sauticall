@@ -1,4 +1,5 @@
-import { authorizeTool } from "./ai-virtual.ts";
+import { speakingDirections } from "./ai-choices.ts";
+import { authorizeTool, ensureVirtualSchema } from "./ai-virtual.ts";
 import { getConnection, test3cx } from "./carriers.ts";
 import {
   classifyCallControlProbe,
@@ -7,6 +8,7 @@ import {
   freshTalk,
   greetingResponse,
   liveCallDecision,
+  pbxOrigin,
   mediaWasOpen,
   readRealtimeEvent,
   stepTalk,
@@ -15,6 +17,7 @@ import {
   resolveProgrammableCall,
   selectRealtimeEngine,
   spokenVoice,
+  transferDestination,
   type RealtimeProtocol,
 } from "./call-control-plan.ts";
 import { getDb } from "./db.ts";
@@ -26,12 +29,6 @@ import WebSocket from "ws";
 
 type Listener = { stop: () => void; startedAt: string };
 const runtime = globalThis as { sauticallCallControl?: Listener };
-
-function originOf(address: string) {
-  const url = new URL(address);
-  if (url.protocol !== "https:") throw new Error("The 3CX address must use https.");
-  return url.origin;
-}
 
 function bindings(): RouteBinding[] {
   return getDb().prepare(
@@ -80,7 +77,7 @@ export function callControlReport() {
 
 function safeHost(address: string) {
   try {
-    return new URL(address).host;
+    return new URL(pbxOrigin(address)).host;
   } catch {
     return "";
   }
@@ -117,7 +114,7 @@ export async function probeExistingCallControl(now: string) {
   let callControlStatus = 0;
   let version = "";
   try {
-    const origin = originOf(connection.public.base_url);
+    const origin = pbxOrigin(connection.public.base_url);
     const tokenResponse = await fetch(`${origin}/connect/token`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -181,7 +178,7 @@ export async function startExistingCallControl(now: string) {
   const connection = getConnection("3cx");
   const { CallControlClient } = await import("@3cx/call-control-sdk");
   const client = new CallControlClient({
-    pbxBase: originOf(connection.public.base_url),
+    pbxBase: pbxOrigin(connection.public.base_url),
     appId: connection.public.client_id,
     appSecret: connection.secret,
     websocket: { maxReconnects: 5, reconnectDelayMs: 2000 },
@@ -245,8 +242,9 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
   const startedAt = new Date().toISOString();
   const callerDid = String(participant.info.party_did || participant.info.party_caller_id || "");
   const resolved = resolveProgrammableCall({ bindings: bindings(), appId, callerDid, callControlVerified: true });
+  ensureVirtualSchema(getDb());
   const agent = resolved.ok
-    ? getDb().prepare("SELECT id, user_id, status, greeting, instructions, business_summary, voice_label, fallback_label, published_version_id, agent_type FROM ai_agents WHERE id = ?").get(resolved.binding.agentId) as {
+    ? getDb().prepare("SELECT id, user_id, status, greeting, instructions, business_summary, voice_label, language, after_hours, allowed_transfers, fallback_label, published_version_id, agent_type FROM ai_agents WHERE id = ?").get(resolved.binding.agentId) as {
       id: number;
       user_id: number;
       status: string;
@@ -254,6 +252,9 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
       instructions: string;
       business_summary: string;
       voice_label: string;
+      language: string;
+      after_hours: string;
+      allowed_transfers: string;
       fallback_label: string;
       published_version_id: number;
       agent_type: string;
@@ -278,7 +279,7 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
     await finishWithoutAudio(participant, agent, decision.transfer, decision.outcome, startedAt);
     return;
   }
-  const allowed = transferAllowlist(agent.user_id);
+  const allowed = transferAllowlist(agent.user_id, agent.allowed_transfers);
   const knowledge = getDb().prepare(
     "SELECT c.body FROM ai_knowledge_chunks c JOIN ai_knowledge_sources s ON s.id = c.source_id WHERE s.user_id = ? AND s.agent_id = ?",
   ).all(agent.user_id, agent.id) as { body: string }[];
@@ -287,6 +288,7 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
     publication?.compiled || agent.instructions,
     "Say the opening sentence once, then wait. Do not repeat the greeting and do not start a second welcome.",
     `APPROVED KNOWLEDGE:\n${knowledge.map((item) => item.body).join("\n").slice(0, 6000) || agent.business_summary}`,
+    speakingDirections({ voiceLabel: agent.voice_label, language: agent.language, afterHours: agent.after_hours }),
     "Do not place an outbound call. Transfer only through the approved tool.",
   ].join("\n\n");
   const counts = { bytesIn: 0, bytesOut: 0, outcome: "connected" };
@@ -312,12 +314,7 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
         await participant.drop();
         return "Call ended.";
       }
-      let destination = "";
-      try {
-        destination = String((JSON.parse(args) as { destination?: string }).destination || "");
-      } catch {
-        destination = "";
-      }
+      const destination = transferDestination(args, allowed);
       const allowedTool = authorizeTool({
         tool: "transfer_to_approved_destination",
         sessionTenantId: agent.user_id,
@@ -326,9 +323,10 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
         allowedDestinations: allowed,
       });
       if (!allowedTool.allowed) return allowedTool.reason;
+      writer.clear();
       await participant.transfer(destination);
       counts.outcome = `transferred ${destination}`;
-      return `Transferred to ${destination}.`;
+      return `Transferred to ${destination}. Say nothing else.`;
     },
   });
   registerStop(() => socket.stop());
@@ -358,12 +356,14 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
   }
 }
 
-function transferAllowlist(userId: number) {
+function transferAllowlist(userId: number, saved: string) {
   const extensions = getDb().prepare(
     "SELECT number FROM pbx_extensions WHERE user_id = ? AND status != 'removed' AND ai_role != 'receptionist' AND number != ''",
   ).all(userId) as { number: string }[];
   const groups = getDb().prepare("SELECT number FROM call_groups WHERE user_id = ? AND number != ''").all(userId) as { number: string }[];
-  return [...extensions, ...groups].map((row) => row.number);
+  const all = [...extensions, ...groups].map((row) => row.number);
+  const picked = saved.split(",").map((item) => item.trim()).filter((item) => all.includes(item));
+  return picked.length ? picked : all;
 }
 
 async function finishWithoutAudio(participant: ParticipantLike, agent: { id: number; user_id: number; published_version_id: number } | undefined, transfer: string, outcome: string, startedAt: string) {
@@ -423,7 +423,7 @@ function openProviderSocket(input: {
       socket.send(JSON.stringify(greetingResponse(input.greeting)));
       resolve({
         sendPcm: (pcm8k) => {
-          if (socket.readyState !== WebSocket.OPEN || talk.greetingOpen) return;
+          if (socket.readyState !== WebSocket.OPEN || talk.greetingOpen || talk.holding) return;
           socket.send(JSON.stringify({ type: "input_audio_buffer.append", audio: upsample8kTo24k(pcm8k).toString("base64") }));
         },
         stop: () => socket.close(),
@@ -441,6 +441,7 @@ function openProviderSocket(input: {
       if (parsed.type === "response_started" || parsed.type === "response_finished") apply(parsed);
       if (parsed.type === "audio" && apply({ type: "audio", id: parsed.id }).play) input.onPcm(downsample24kTo8k(parsed.pcm24k));
       if (parsed.type === "speech_started") apply({ type: "caller_spoke" });
+      if (parsed.type === "tool" && parsed.name === "transfer_to_approved_destination" && transferDestination(parsed.arguments, input.transfers)) apply({ type: "transfer" });
       if (parsed.type === "tool") {
         void input.onTool(parsed.name, parsed.arguments).then((result) => {
           if (socket.readyState !== WebSocket.OPEN) return;

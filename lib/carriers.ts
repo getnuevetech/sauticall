@@ -1,3 +1,4 @@
+import { pbxOrigin } from "./call-control-plan";
 import { getDb } from "./db";
 import { carrierSearchType, didMatches, type DigitSearch } from "./did-search";
 import { didInfoIsAbsent, normalizeRequestedDid, readDids, type ListedDid } from "./did-list";
@@ -198,13 +199,7 @@ export async function portStatus(portId: string) {
 }
 
 function httpsHost(input: string) {
-  const url = new URL(input);
-  if (url.protocol !== "https:") throw new Error("The 3CX address must use https.");
-  const host = url.hostname.toLowerCase();
-  if (host === "localhost" || host.endsWith(".local") || host === "169.254.169.254" || host.startsWith("127.") || host.startsWith("10.") || host.startsWith("192.168.") || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) {
-    throw new Error("Use the public 3CX hostname.");
-  }
-  return url.origin;
+  return pbxOrigin(input);
 }
 
 export async function testVoipms() {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { savePlans } from "@/app/admin/actions";
 import { catalogMoney, planChanges, planImpact } from "@/lib/catalog";
+import { ACCENT_REGIONS, ACCENTS, defaultAccentIds } from "@/lib/ai-choices";
 import { PLAN_FEATURES, type FeatureKey } from "@/lib/plan-features";
 import type { Plan } from "@/lib/types";
 
@@ -21,6 +22,7 @@ function blankPlan(): Plan {
     carrierCredit: 0,
     seats: 1,
     features: ["numbers", "softphone", "voicemail"],
+    accents: [],
     note: "",
     popular: false,
     ctaLabel: "Choose this plan",
@@ -68,7 +70,7 @@ export function PlanStudio({
         next.delete(key);
         if (key === "ai") next.delete("ai_any_language");
       }
-      return { ...current, features: PLAN_FEATURES.map((feature) => feature.key).filter((feature) => next.has(feature)) };
+      return { ...current, features: PLAN_FEATURES.map((feature) => feature.key).filter((feature) => next.has(feature)), accents: checked && key === "ai" && !(current.accents || []).length ? defaultAccentIds({ features: [...next], custom: current.custom }) : current.accents || [] };
     });
   }
 
@@ -145,6 +147,50 @@ export function PlanStudio({
                   })}
                 </div>
               ))}
+            </section>
+          ) : null}
+          {tab === "features" ? (
+            <section className="ops-card">
+              <h2>Accents</h2>
+              <p>Customers on this plan only see the accents checked here. A higher plan can include more accents than a smaller one. The connected voice speaks in the accent the customer picks.</p>
+              {ACCENT_REGIONS.map((region) => {
+                const regionAccents = ACCENTS.filter((accent) => accent.region === region);
+                const selected = new Set(draft.accents || []);
+                const allOn = regionAccents.every((accent) => selected.has(accent.id));
+                return (
+                  <div key={region} className="ops-stack">
+                    <h3>{region}</h3>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={allOn}
+                        onChange={(event) => {
+                          const ids = new Set(draft.accents || []);
+                          for (const accent of regionAccents) {
+                            if (event.target.checked) ids.add(accent.id);
+                            else ids.delete(accent.id);
+                          }
+                          patch({ accents: ACCENTS.filter((accent) => ids.has(accent.id)).map((accent) => accent.id) });
+                        }}
+                      /> All {region}
+                    </label>
+                    {regionAccents.map((accent) => (
+                      <label key={accent.id}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(accent.id)}
+                          onChange={(event) => {
+                            const ids = new Set(draft.accents || []);
+                            if (event.target.checked) ids.add(accent.id);
+                            else ids.delete(accent.id);
+                            patch({ accents: ACCENTS.filter((item) => ids.has(item.id)).map((item) => item.id) });
+                          }}
+                        /> {accent.label}
+                      </label>
+                    ))}
+                  </div>
+                );
+              })}
             </section>
           ) : null}
           {tab === "presentation" ? (

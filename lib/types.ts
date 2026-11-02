@@ -23,6 +23,7 @@ export type Plan = {
   carrierCredit: number;
   seats?: number;
   features: string[];
+  accents?: string[];
   note: string;
   popular: boolean;
   ctaLabel: string;
