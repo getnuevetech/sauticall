@@ -316,4 +316,57 @@
   .ws-search{display:none}
   .ws-content{padding:6px 16px 36px}
   .ws-phone{display:none}
+  .ai-studio-grid,.ai-service-grid,.ai-prompt-grid,.ai-config{grid-template-columns:1fr}
+  .ai-subnav{flex-direction:row;overflow:auto}
 }
+.ai-studio{max-width:1180px}
+.ai-kicker{display:flex;gap:8px;align-items:center;color:#667085;font-weight:650;margin:0 0 8px}
+.ai-kicker a{color:#2f5bff}
+.ai-title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ai-badge{display:inline-flex;align-items:center;border-radius:999px;background:#eef2ff;color:#2f49d6;font-size:.78rem;font-weight:750;padding:4px 10px}
+.ai-studio-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(280px,.9fr);gap:16px;align-items:start}
+.ai-card{background:#fff;border:1px solid #e7edf5;border-radius:16px;padding:18px}
+.ai-card h2{font-size:1.05rem;margin:0 0 4px}
+.ai-card h3{margin:0 0 8px}
+.ai-hint,.ai-card small{color:#667085;font-size:.84rem}
+.ai-card-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}
+.ai-table{width:100%;border-collapse:collapse}
+.ai-table th{text-align:left;font-size:.78rem;color:#667085;font-weight:700;padding:8px 10px;border-bottom:1px solid #eef2f7}
+.ai-table td{padding:12px 10px;border-bottom:1px solid #f2f4f7;color:#1d2433;vertical-align:middle}
+.ai-table tr:last-child td{border-bottom:0}
+.ai-person small{display:block;color:#667085;font-weight:600}
+.ai-status{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:.84rem}
+.ai-status i{width:8px;height:8px;border-radius:50%;background:#f5a524}
+.ai-status.ok{color:#067647}
+.ai-status.ok i{background:#12b76a}
+.ai-status.warn{color:#b54708}
+.ai-route-line{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid #f2f4f7}
+.ai-route-line strong{display:block;color:#172033}
+.ai-note{background:#f5f8ff;border:1px solid #e0e8ff;border-radius:12px;padding:10px 12px;color:#344054}
+.ai-service-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ai-service{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;background:#fff;border:1px solid #e7edf5;border-radius:16px;padding:16px}
+.ai-service p{margin:4px 0 8px}
+.ai-pill{border-radius:999px;background:#f2f4f7;color:#667085;font-size:.75rem;font-weight:750;padding:4px 8px}
+.ai-config{display:grid;grid-template-columns:210px minmax(0,1fr) 300px;gap:16px;align-items:start}
+.ai-subnav{display:grid;gap:4px;background:#fff;border:1px solid #e7edf5;border-radius:16px;padding:8px}
+.ai-subnav a{padding:10px 12px;border-radius:10px;color:#475467;font-weight:700}
+.ai-subnav a.active,.ai-subnav a:hover{background:#eef2ff;color:#2f49d6}
+.ai-prompt-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(260px,.8fr);gap:16px;align-items:start}
+.ai-card label,.ai-field{display:grid;gap:6px;font-weight:750;color:#172033;margin:0 0 14px}
+.ai-card label input,.ai-card label select,.ai-card label textarea,.ai-field input,.ai-field select,.ai-field textarea{border:1px solid #e1e7f2;border-radius:10px;padding:10px 12px;background:#fff;color:#1d2433;font-weight:500;width:100%}
+.ai-field small{font-weight:600}
+.ai-field.compact{margin:0}
+.ai-split{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ai-inline-actions{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:12px}
+.ai-unsaved{background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:10px 12px;color:#9a3412}
+.ai-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px}
+.ai-guide-list{display:grid;gap:12px;margin:0;padding:0;list-style:none}
+.ai-guide-list li{display:grid;gap:2px}
+.ai-guide-list strong{color:#172033}
+.ai-locked{background:#f8f5ff;border:1px solid #ebe4ff;border-radius:12px;padding:12px;color:#344054}
+.ai-greeting-lock{background:#f8fafc;border:1px solid #e7edf5;border-radius:12px;padding:12px}
+.ai-search input{width:100%}
+.ai-transfer-table table{width:100%;border-collapse:collapse}
+.ai-transfer-table th,.ai-transfer-table td{text-align:left;padding:8px;border-bottom:1px solid #f2f4f7}
+.ai-transfer-table input[type=checkbox]{width:auto}
+.ai-hours{display:grid;grid-template-columns:1fr 1fr;gap:12px}
