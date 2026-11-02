@@ -81,7 +81,10 @@ export default async function AccountAiPage({ searchParams }: { searchParams: Pr
                   <p>{customerAgentMessage(agent.status)}</p>
                   <p>{agent.greeting || "No greeting saved yet."}</p>
                 </div>
-                <Link className="ws-btn ghost" href={`/account/ai/extensions/${agent.id}`}>Edit</Link>
+                <div className="ai-form-actions">
+                  <Link className="ws-btn ghost" href={`/account/ai/extensions/${agent.id}`}>Edit</Link>
+                  <Link className="ws-btn ghost" href={`/account/ai/extensions/${agent.id}?tab=settings`}>Delete</Link>
+                </div>
               </article>
             ))}
             <form className="contact-form" action={createVirtualAgentForm}>
