@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
-import { classifyCallControlProbe, describeStoredConnection, fallbackExtension, liveCallDecision, matchRealtimeProtocol, mediaWasOpen, readRealtimeEvent, realtimeSessionUpdate, resolveProgrammableCall, selectRealtimeEngine, spokenVoice } from "../lib/call-control-plan.ts";
+import { classifyCallControlProbe, describeStoredConnection, fallbackExtension, isPhoneExtensionNumber, liveCallDecision, matchRealtimeProtocol, mediaWasOpen, phoneExtensionRouteMessage, readRealtimeEvent, realtimeSessionUpdate, resolveProgrammableCall, selectRealtimeEngine, spokenVoice } from "../lib/call-control-plan.ts";
 import { downsample24kTo8k, upsample8kTo24k } from "../lib/pcm-rate.ts";
 import { recordLiveSession } from "../lib/ai-virtual.ts";
 import type { RouteBinding } from "../lib/ai-platform.ts";
@@ -38,6 +38,15 @@ test("a chat model is not treated as telephone audio", () => {
   assert.equal(selectRealtimeEngine([{ ...engine, enabled: false }]), null);
   assert.equal(spokenVoice("Marin"), "marin");
   assert.equal(spokenVoice("custom"), "alloy");
+});
+
+test("a phone extension is not the Service Principal route point", () => {
+  assert.equal(isPhoneExtensionNumber("529"), true);
+  assert.equal(isPhoneExtensionNumber("ai-receptionist"), false);
+  const message = phoneExtensionRouteMessage("529", "ai-receptionist");
+  assert.match(message, /529 is a phone extension/);
+  assert.match(message, /dial ai-receptionist/);
+  assert.match(message, /Do not route the call to extension 529/);
 });
 
 test("one existing route point resolves the tenant and blocks the other company", () => {
