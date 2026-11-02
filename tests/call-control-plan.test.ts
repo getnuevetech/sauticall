@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
-import { classifyCallControlProbe, describeStoredConnection, fallbackExtension, isPhoneExtensionNumber, liveCallDecision, matchRealtimeProtocol, mediaWasOpen, phoneExtensionRouteMessage, readRealtimeEvent, realtimeSessionUpdate, resolveProgrammableCall, selectRealtimeEngine, servicePrincipalDial, servicePrincipalDirections, spokenVoice } from "../lib/call-control-plan.ts";
+import { classifyCallControlProbe, describeStoredConnection, fallbackExtension, freshTalk, greetingResponse, isPhoneExtensionNumber, liveCallDecision, matchRealtimeProtocol, mediaWasOpen, phoneExtensionRouteMessage, readRealtimeEvent, realtimeSessionUpdate, resolveProgrammableCall, selectRealtimeEngine, servicePrincipalDial, servicePrincipalDirections, spokenVoice, stepTalk } from "../lib/call-control-plan.ts";
 import { downsample24kTo8k, upsample8kTo24k } from "../lib/pcm-rate.ts";
 import { recordLiveSession } from "../lib/ai-virtual.ts";
 import type { RouteBinding } from "../lib/ai-platform.ts";
@@ -74,6 +74,29 @@ test("the live decision never places an outbound call", () => {
   assert.equal(fallbackExtension("Ring group Main · 800"), "800");
   assert.equal(mediaWasOpen(320, 0), false);
   assert.equal(mediaWasOpen(320, 320), true);
+});
+
+test("one call keeps a single greeting and drops a second voice", () => {
+  const greeting = greetingResponse("Thank you for calling.");
+  assert.match(greeting.response.instructions, /Say exactly this one sentence/);
+  assert.match(greeting.response.instructions, /Thank you for calling\./);
+  let state = freshTalk();
+  const first = stepTalk(state, { type: "response_started", id: "greet" });
+  state = first.state;
+  assert.equal(first.cancel, "");
+  assert.equal(stepTalk(state, { type: "audio", id: "greet" }).play, true);
+  const overlap = stepTalk(state, { type: "response_started", id: "other" });
+  assert.equal(overlap.cancel, "other");
+  assert.equal(stepTalk(overlap.state, { type: "audio", id: "other" }).play, false);
+  const echo = stepTalk(state, { type: "caller_spoke" });
+  assert.equal(echo.cancel, "");
+  assert.equal(echo.clearPlayback, false);
+  state = stepTalk(state, { type: "response_finished", id: "greet" }).state;
+  assert.equal(state.greetingOpen, false);
+  state = stepTalk(state, { type: "response_started", id: "answer" }).state;
+  const interrupt = stepTalk(state, { type: "caller_spoke" });
+  assert.equal(interrupt.cancel, "answer");
+  assert.equal(interrupt.clearPlayback, true);
 });
 
 test("provider audio is converted and tool calls stay explicit", () => {

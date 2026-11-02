@@ -4,9 +4,12 @@ import {
   classifyCallControlProbe,
   describeStoredConnection,
   fallbackExtension,
+  freshTalk,
+  greetingResponse,
   liveCallDecision,
   mediaWasOpen,
   readRealtimeEvent,
+  stepTalk,
   realtimeSessionUpdate,
   realtimeSocketUrl,
   resolveProgrammableCall,
@@ -183,8 +186,14 @@ export async function startExistingCallControl(now: string) {
     appSecret: connection.secret,
     websocket: { maxReconnects: 5, reconnectDelayMs: 2000 },
   });
+  const calls = new Map<number, { stop: () => void }>();
   client.on("participantConnected", (participant) => {
-    void handleParticipant(participant, connection.public.client_id).catch((error) => {
+    if (calls.has(participant.id)) return;
+    const entry: { stop: () => void } = { stop: () => undefined };
+    calls.set(participant.id, entry);
+    void handleParticipant(participant, connection.public.client_id, (stop) => {
+      entry.stop = stop;
+    }).catch((error) => {
       const message = error instanceof Error ? error.message : "The call handler failed.";
       recordLiveSession(getDb(), {
         userId: 0,
@@ -197,12 +206,20 @@ export async function startExistingCallControl(now: string) {
         startedAt: now,
         endedAt: new Date().toISOString(),
       });
+    }).finally(() => {
+      if (calls.get(participant.id) === entry) calls.delete(participant.id);
     });
+  });
+  client.on("participantDisconnected", (participantId: number) => {
+    calls.get(participantId)?.stop();
+    calls.delete(participantId);
   });
   await client.connect();
   runtime.sauticallCallControl = {
     startedAt: now,
     stop: () => {
+      for (const call of calls.values()) call.stop();
+      calls.clear();
       client.disconnect();
       runtime.sauticallCallControl = undefined;
     },
@@ -224,7 +241,7 @@ type ParticipantLike = {
   drop: () => Promise<void>;
 };
 
-async function handleParticipant(participant: ParticipantLike, appId: string) {
+async function handleParticipant(participant: ParticipantLike, appId: string, registerStop: (stop: () => void) => void) {
   const startedAt = new Date().toISOString();
   const callerDid = String(participant.info.party_did || participant.info.party_caller_id || "");
   const resolved = resolveProgrammableCall({ bindings: bindings(), appId, callerDid, callControlVerified: true });
@@ -268,7 +285,7 @@ async function handleParticipant(participant: ParticipantLike, appId: string) {
   const publication = getDb().prepare("SELECT compiled FROM ai_prompt_publications WHERE user_id = ? AND agent_id = ? ORDER BY id DESC LIMIT 1").get(agent.user_id, agent.id) as { compiled: string } | undefined;
   const instructions = [
     publication?.compiled || agent.instructions,
-    `GREETING TO SPEAK FIRST: ${agent.greeting || "Thank you for calling. How can I help you today?"}`,
+    "Say the opening sentence once, then wait. Do not repeat the greeting and do not start a second welcome.",
     `APPROVED KNOWLEDGE:\n${knowledge.map((item) => item.body).join("\n").slice(0, 6000) || agent.business_summary}`,
     "Do not place an outbound call. Transfer only through the approved tool.",
   ].join("\n\n");
@@ -282,6 +299,7 @@ async function handleParticipant(participant: ParticipantLike, appId: string) {
     secret,
     instructions,
     voice: spokenVoice(agent.voice_label),
+    greeting: agent.greeting,
     transfers: allowed,
     onPcm: (pcm8k) => {
       counts.bytesOut += pcm8k.length;
@@ -313,6 +331,7 @@ async function handleParticipant(participant: ParticipantLike, appId: string) {
       return `Transferred to ${destination}.`;
     },
   });
+  registerStop(() => socket.stop());
   stream.on("data", (chunk: Buffer) => {
     counts.bytesIn += chunk.length;
     socket.sendPcm(chunk);
@@ -376,6 +395,7 @@ function openProviderSocket(input: {
   secret: string;
   instructions: string;
   voice: string;
+  greeting: string;
   transfers: string[];
   onPcm: (pcm8k: Buffer) => void;
   onBargeIn: () => void;
@@ -389,16 +409,21 @@ function openProviderSocket(input: {
       socket.close();
       reject(new Error("The realtime voice provider did not connect."));
     }, 8000);
+    let talk = freshTalk();
+    const apply = (event: Parameters<typeof stepTalk>[1]) => {
+      const next = stepTalk(talk, event);
+      talk = next.state;
+      if (next.cancel && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "response.cancel", response_id: next.cancel }));
+      if (next.clearPlayback) input.onBargeIn();
+      return next;
+    };
     socket.on("open", () => {
       clearTimeout(timer);
       socket.send(JSON.stringify(realtimeSessionUpdate({ instructions: input.instructions, voice: input.voice, transfers: input.transfers })));
-      socket.send(JSON.stringify({
-        type: "response.create",
-        response: { tool_choice: "none", instructions: "Say the configured greeting and then wait.", input: [] },
-      }));
+      socket.send(JSON.stringify(greetingResponse(input.greeting)));
       resolve({
         sendPcm: (pcm8k) => {
-          if (socket.readyState !== WebSocket.OPEN) return;
+          if (socket.readyState !== WebSocket.OPEN || talk.greetingOpen) return;
           socket.send(JSON.stringify({ type: "input_audio_buffer.append", audio: upsample8kTo24k(pcm8k).toString("base64") }));
         },
         stop: () => socket.close(),
@@ -413,8 +438,9 @@ function openProviderSocket(input: {
         return;
       }
       const parsed = readRealtimeEvent(event);
-      if (parsed.type === "audio") input.onPcm(downsample24kTo8k(parsed.pcm24k));
-      if (parsed.type === "speech_started") input.onBargeIn();
+      if (parsed.type === "response_started" || parsed.type === "response_finished") apply(parsed);
+      if (parsed.type === "audio" && apply({ type: "audio", id: parsed.id }).play) input.onPcm(downsample24kTo8k(parsed.pcm24k));
+      if (parsed.type === "speech_started") apply({ type: "caller_spoke" });
       if (parsed.type === "tool") {
         void input.onTool(parsed.name, parsed.arguments).then((result) => {
           if (socket.readyState !== WebSocket.OPEN) return;
