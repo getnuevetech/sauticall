@@ -6,6 +6,7 @@ import { PromptEditor } from "@/components/account/PromptEditor";
 import { guardAccount } from "@/lib/guard";
 import { knownAccountAi, systemsForPlan } from "@/lib/ai-account";
 import { aiSettingsFor, listAiExtensions, listPromptVersions } from "@/lib/ai-account-store";
+import { listAccountAgents } from "@/lib/ai-virtual-store";
 import { listClips } from "@/lib/ai-audio-store";
 import { outcomeLabel } from "@/lib/ai-notify";
 import { listCampaigns, listRecipients } from "@/lib/ai-notify-store";
@@ -35,8 +36,9 @@ export default async function AccountAiServicePage({
   if (!system) notFound();
   const profile = workspaceProfile(service);
   const settings = aiSettingsFor(user.id, service);
-  const extensions = profile.usesExtension ? listAiExtensions(user.id) : [];
+  const extensions = profile.usesExtension && !profile.virtualDestination ? listAiExtensions(user.id) : [];
   const assigned = extensions.find((item) => item.ai_role === service);
+  const virtualReady = profile.virtualDestination && listAccountAgents(user.id).some((item) => item.agent_type === service);
   const enabled = enabledSwitchCodes();
   const switchCode = switchCodeFor(service);
   const agreement = switchCode ? currentAgreement(switchCode) : undefined;
@@ -54,7 +56,7 @@ export default async function AccountAiServicePage({
     included: system.included,
     named: Boolean(settings?.display_name || assigned?.ai_name),
     hasInstructions: Boolean(settings?.greeting.trim()),
-    extensionAssigned: Boolean(assigned),
+    extensionAssigned: profile.virtualDestination ? virtualReady : Boolean(assigned),
     serviceOn: state?.code === "active",
     termsOpen: Boolean(state && BLOCKED.has(state.code)),
   };
@@ -146,7 +148,9 @@ export default async function AccountAiServicePage({
               <input type="hidden" name="feature" value={service} />
               <input type="hidden" name="next" value={here} />
               <label>Name <input name="display_name" defaultValue={settings?.display_name || assigned?.ai_name || ""} required placeholder="Front desk" /></label>
-              {profile.usesExtension ? (
+              {profile.virtualDestination ? (
+                <p>This service uses a virtual destination. <Link className="text-link" href="/account/ai/extensions">Open AI extensions</Link> to name it, save the prompt, and choose the phone number. A phone-system user is not created.</p>
+              ) : profile.usesExtension ? (
                 <label>AI extension
                   <select name="extension_id" defaultValue={assigned ? String(assigned.id) : ""}>
                     <option value="">Not assigned</option>
@@ -155,7 +159,7 @@ export default async function AccountAiServicePage({
                 </label>
               ) : null}
               {multilingual ? <p>Language. This plan includes more than one language. A live call still follows the phone system.</p> : null}
-              <p>{profile.usesExtension ? `Assigning an extension names it for ${system.label}. Routing on the phone system is not changed from here.` : profile.workflow}</p>
+              <p>{profile.virtualDestination ? "Saving the name does not move the phone number." : profile.usesExtension ? `Assigning an extension names it for ${system.label}. Routing on the phone system is not changed from here.` : profile.workflow}</p>
               {service === "tts" ? <p><Link className="text-link" href="/account/ai/audio">Open voice and stored audio</Link></p> : null}
               {service === "notifications" ? <p><Link className="text-link" href="/account/ai/notifications">Open the notification workflow</Link></p> : null}
               <button className="ws-btn primary" type="submit">Save settings</button>

@@ -460,7 +460,7 @@ export async function addPerson(formData: FormData) {
     allowed: systemsForPlan(plan.features).filter((item) => item.included).map((item) => item.code),
   });
   if (!aiChoice.ok) redirect(`/account/phone?error=${encodeURIComponent(aiChoice.message)}`);
-  const count = getDb().prepare("SELECT COUNT(*) AS n FROM pbx_extensions WHERE user_id = ? AND status != 'removed'").get(user.id) as { n: number };
+  const count = getDb().prepare("SELECT COUNT(*) AS n FROM pbx_extensions WHERE user_id = ? AND status != 'removed' AND ai_role != 'receptionist'").get(user.id) as { n: number };
   if (count.n >= extensionCapacity(plan)) redirect("/account/phone?error=This%20plan%20has%20no%20room%20for%20another%20person.");
   const { departmentNameIssue: nameIssue } = await import("@/lib/pbx-user");
   const department = getDb().prepare("SELECT name FROM pbx_departments WHERE user_id = ?").get(user.id) as { name: string } | undefined;

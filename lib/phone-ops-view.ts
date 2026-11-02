@@ -74,6 +74,7 @@ export function trunkTone(label: string) {
     || label === "On 3CX, assigned to the department"
     || label.startsWith("Ring group")
     || label.startsWith("AI receptionist")
+    || label.startsWith("AI virtual destination")
   ) return "ok" as const;
   if (label === "Saved") return "muted" as const;
   return "bad" as const;
@@ -95,7 +96,7 @@ export function trunkAdminSummary(input: ReturnType<typeof trunkProgress>) {
   const missing: string[] = [];
   if (input.department !== "On 3CX") missing.push("the department");
   if (input.extension !== "On 3CX") missing.push("the default extension");
-  if (input.route === "Not created") missing.push("the ring group or AI receptionist");
+  if (input.route === "Not created") missing.push("the ring group");
   if (input.trunk === "Not created" || input.trunk === "Not started" || input.trunk === "Failed") missing.push("the 3CX trunk");
   if (input.inbound !== "On 3CX") missing.push("the inbound route");
   if (input.outbound === "Not on 3CX") missing.push("the outbound rule");

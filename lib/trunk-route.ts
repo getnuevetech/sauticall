@@ -20,13 +20,27 @@ export function receptionistAddress(email: string, userId: number) {
   return `${local.slice(0, 40)}+ai${userId}@${domain}`.slice(0, 120);
 }
 
-export function defaultTrunkDestination(input: { ai: boolean; aiExtension: string; ringName: string; ringNumber: string }) {
-  if (input.ai) {
-    if (!input.aiExtension) return null;
-    return { to: "Extension" as const, number: input.aiExtension, label: `AI receptionist extension ${input.aiExtension}`, kind: "ai" as const };
+export function defaultTrunkDestination(input: { certifiedRoute?: string; certifiedLabel?: string; ringName: string; ringNumber: string }) {
+  const certified = (input.certifiedRoute || "").trim();
+  if (certified) {
+    return {
+      to: "Extension" as const,
+      number: certified,
+      label: (input.certifiedLabel || "").trim() || `AI virtual destination ${certified}`,
+      kind: "virtual" as const,
+    };
   }
   if (!input.ringNumber) return null;
-  return { to: "RingGroup" as const, number: input.ringNumber, label: `Ring group ${input.ringName || "Main"} · ${input.ringNumber}`, kind: "ring" as const };
+  return {
+    to: "RingGroup" as const,
+    number: input.ringNumber,
+    label: `Ring group ${input.ringName || "Main"} · ${input.ringNumber}`,
+    kind: "ring" as const,
+  };
+}
+
+export function retiredPhoneAiRoute(label: string) {
+  return /^AI receptionist extension\b/i.test(label.trim());
 }
 
 export function signupPersonName(full: string, email: string) {

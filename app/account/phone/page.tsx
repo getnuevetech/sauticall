@@ -10,7 +10,6 @@ import { customerMessage, extensionCustomerMessage } from "@/lib/customer-messag
 import { accountNeedsMfa } from "@/lib/mfa";
 import { DEPARTMENT_NAME_RULES, shownAccountName } from "@/lib/pbx-user";
 import { extensionSetup } from "@/lib/account-display";
-import { systemsForPlan } from "@/lib/ai-account";
 import { publishBoughtNumbers, scheduleAutomaticTrunks } from "@/lib/lines";
 import { scheduleDefaultAccount } from "@/lib/trunk-prereq";
 import { customerConnectionNote } from "@/lib/trunk-tries";
@@ -76,7 +75,6 @@ export default async function PhonePage({ searchParams }: { searchParams: Promis
         aiRole: row.ai_role,
         aiName: row.ai_name,
       }))}
-      aiChoices={systemsForPlan(plan?.features || []).filter((item) => item.included).map((item) => ({ code: item.code, label: item.label }))}
       groups={groups.map((group) => ({
         id: group.id,
         kind: group.kind,

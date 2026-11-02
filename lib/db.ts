@@ -6,6 +6,7 @@ import { customerCodeWithoutHyphen } from "./customer-code";
 import { upgradeContent } from "./content-upgrade";
 import { seedDesk } from "./desk-seed";
 import { AI_SWITCHES, DRAFT_NOTIFICATION_AGREEMENT, agreementDigest } from "./ai-system";
+import { ensureVirtualSchema } from "./ai-virtual";
 import { defaultExtensionPlan } from "./extension-numbers";
 import { dataDir } from "./paths";
 import {
@@ -655,6 +656,7 @@ function migrate(database: Database.Database) {
   if (!extensionCols.has("ai_name")) database.exec("ALTER TABLE pbx_extensions ADD COLUMN ai_name TEXT NOT NULL DEFAULT ''");
   const engineCols = new Set((database.prepare("PRAGMA table_info(ai_engines)").all() as { name: string }[]).map((column) => column.name));
   if (!engineCols.has("secret")) database.exec("ALTER TABLE ai_engines ADD COLUMN secret TEXT NOT NULL DEFAULT ''");
+  ensureVirtualSchema(database);
   stripCustomerHyphens(database);
 }
 

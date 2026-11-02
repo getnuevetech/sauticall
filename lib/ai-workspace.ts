@@ -8,6 +8,7 @@ type WorkspaceProfile = {
   instructionTab: string;
   editorLabel: string;
   usesExtension: boolean;
+  virtualDestination: boolean;
   usesSwitch: boolean;
   guidance: string[];
   template: string;
@@ -19,11 +20,12 @@ const WORKSPACES: Record<AccountAiCode, WorkspaceProfile> = {
     instructionTab: "Prompt & instructions",
     editorLabel: "Greeting, business information, caller questions, and routing",
     usesExtension: true,
+    virtualDestination: true,
     usesSwitch: true,
     guidance: [
       "Write how this receptionist greets callers, what the business is willing to share, which questions to ask, and how a caller should reach a person.",
       "SautiCall safety rules stay on and are not edited here.",
-      "Saving these instructions does not place a call or change phone-system routing.",
+      "Saving these instructions does not place a call or move the phone number. Calls stay on the ring group until the virtual destination is certified.",
     ],
     template: [
       "Greeting:",
@@ -38,12 +40,13 @@ const WORKSPACES: Record<AccountAiCode, WorkspaceProfile> = {
       "Routing instructions:",
       "Offer a person on this account when the caller asks for one. Do not promise a transfer that is not already on the phone system.",
     ].join("\n"),
-    workflow: "Inbound answering uses this receptionist only. Saving it does not assign a live call.",
+    workflow: "This receptionist is a virtual destination. It does not use a desk phone or softphone. Until 3CX certifies it, calls stay on the Main ring group.",
   },
   personal_assistant: {
     instructionTab: "Prompt & instructions",
     editorLabel: "Screening, availability, and information it may share",
     usesExtension: true,
+    virtualDestination: true,
     usesSwitch: true,
     guidance: [
       "Write how calls for this person are screened, when they are available, and which details the assistant may share.",
@@ -66,6 +69,7 @@ const WORKSPACES: Record<AccountAiCode, WorkspaceProfile> = {
     instructionTab: "Prompt & instructions",
     editorLabel: "Objective, conversation boundaries, and completion",
     usesExtension: true,
+    virtualDestination: false,
     usesSwitch: true,
     guidance: [
       "Write the one task this outbound conversation may complete, what it must not discuss, and how the conversation is finished.",
@@ -88,6 +92,7 @@ const WORKSPACES: Record<AccountAiCode, WorkspaceProfile> = {
     instructionTab: "Prompt & instructions",
     editorLabel: "Requirements and constraints for the proposed phone setup",
     usesExtension: false,
+    virtualDestination: false,
     usesSwitch: true,
     guidance: [
       "Write the requirements and constraints for a phone-system proposal. A person still reviews the proposal.",
@@ -107,6 +112,7 @@ const WORKSPACES: Record<AccountAiCode, WorkspaceProfile> = {
     instructionTab: "Script & instructions",
     editorLabel: "Approved message, introduction, and recipient choice",
     usesExtension: false,
+    virtualDestination: false,
     usesSwitch: true,
     guidance: [
       "Write the approved message, the introduction people hear, and the wording for press 1, press 2, and press 9.",
@@ -129,6 +135,7 @@ const WORKSPACES: Record<AccountAiCode, WorkspaceProfile> = {
     instructionTab: "Script & instructions",
     editorLabel: "Script, pronunciation, and speaking style",
     usesExtension: false,
+    virtualDestination: false,
     usesSwitch: false,
     guidance: [
       "Write the words to speak, how unusual names should sound, and the speaking style.",
@@ -151,6 +158,7 @@ const WORKSPACES: Record<AccountAiCode, WorkspaceProfile> = {
     instructionTab: "Recognition settings",
     editorLabel: "Recognition hints and expected responses",
     usesExtension: false,
+    virtualDestination: false,
     usesSwitch: false,
     guidance: [
       "List words callers are likely to say and the responses this account expects. Speech to text is not a general instruction box.",
@@ -227,7 +235,16 @@ export function serviceChecks(code: AccountAiCode, facts: SetupFacts): SetupChec
     detail: facts.named ? "A name is saved for this service." : "Needs a name.",
     done: facts.named,
   });
-  if (profile.usesExtension) {
+  if (profile.virtualDestination) {
+    items.push({
+      key: "extension",
+      label: "Virtual destination",
+      detail: facts.extensionAssigned
+        ? "A virtual destination is saved. Calls stay on the ring group until 3CX certifies it."
+        : "Create this under AI extensions. A phone extension is not used.",
+      done: facts.extensionAssigned,
+    });
+  } else if (profile.usesExtension) {
     items.push({
       key: "extension",
       label: "Extension",
@@ -255,6 +272,15 @@ export function nextSetupStep(code: AccountAiCode, facts: SetupFacts, planName: 
   const base = `/account/ai/services/${code}`;
   if (!facts.included) return { href: "/account/billing/plan", label: "See plans", summary: `Not included on ${planName || "this account"}.` };
   if (facts.termsOpen) return { href: `${base}?tab=overview`, label: "Review access", summary: "Finish the terms or review step before turning this on." };
+  if (profile.virtualDestination) {
+    return {
+      href: "/account/ai#configure",
+      label: "Configure",
+      summary: facts.extensionAssigned
+        ? "Virtual destination saved. The number stays on the ring group until 3CX certifies it."
+        : "Configure the name, prompt, number, and answering mode. No phone is assigned.",
+    };
+  }
   if (!facts.named) return { href: `${base}?tab=configuration`, label: "Add a name", summary: "Included. Add a name to configure this service." };
   if (!facts.hasInstructions) return { href: `${base}?tab=instructions`, label: profile.instructionTab, summary: "Configured. Add the instructions for this service." };
   if (profile.usesExtension && !facts.extensionAssigned) return { href: `${base}?tab=configuration`, label: "Assign an extension", summary: "Instructions are saved. Assign an extension when this service should belong to a person." };
@@ -269,5 +295,6 @@ export function aiSaveNotice(saved: string | undefined) {
   if (saved === "configured") return "Settings saved. Routing was not changed, and no call was placed.";
   if (saved === "prompt") return "Instructions saved. No call was placed and routing was not changed.";
   if (saved === "restored") return "Starting template restored. No call was placed and routing was not changed.";
+  if (saved === "extension") return "AI extension saved. The phone number was not moved, and no call was placed.";
   return "";
 }

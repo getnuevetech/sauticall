@@ -32,7 +32,8 @@ export function saveAccountAi(userId: number, plan: Plan | null, input: { featur
   const displayName = input.displayName.trim().slice(0, 40);
   if (!displayName) return { ok: false as const, message: "Name this AI system." };
   const database = getDb();
-  const assignExtension = workspaceProfile(input.feature).usesExtension;
+  const profile = workspaceProfile(input.feature);
+  const assignExtension = profile.usesExtension && !profile.virtualDestination;
   const extensionId = assignExtension ? input.extensionId : 0;
   if (extensionId) {
     const named = validateAiExtension({ role: input.feature, name: displayName, allowed: [input.feature] });
