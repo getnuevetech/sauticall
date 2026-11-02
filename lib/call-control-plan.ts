@@ -43,6 +43,19 @@ export function fallbackExtension(label: string) {
   return match?.[1] || "";
 }
 
+export function isPhoneExtensionNumber(value: string) {
+  return /^\d{2,6}$/.test(value.trim());
+}
+
+export function phoneExtensionRouteMessage(extension: string, servicePrincipalId: string) {
+  const number = extension.trim();
+  const principal = servicePrincipalId.trim();
+  const target = principal
+    ? `SautiCall listens as Service Principal ${principal}. From a registered extension, dial ${principal}. In 3CX Admin, open Integrations, then API, and assign the outside number to that Service Principal.`
+    : "SautiCall listens as the Service Principal saved on the 3CX connection. In 3CX Admin, open Integrations, then API, and assign the outside number to that Service Principal.";
+  return `${number} is a phone extension. No phone is registered on it, so 3CX ends the call before the AI can answer. ${target} Do not route the call to extension ${number}.`;
+}
+
 export function mediaWasOpen(bytesIn: number, bytesOut: number) {
   return bytesIn > 0 && bytesOut > 0;
 }

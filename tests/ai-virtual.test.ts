@@ -59,6 +59,9 @@ test("a programmable AI extension does not create a phone user or move the numbe
   assert.equal((db.prepare("SELECT COUNT(*) AS n FROM ai_manual_tasks").get() as { n: number }).n, 1);
   assert.equal((db.prepare("SELECT route_label FROM phone_lines WHERE user_id = 1").get() as { route_label: string }).route_label, "AI receptionist extension 529");
   assert.equal((db.prepare("SELECT state FROM ai_did_assignments WHERE user_id = 1").get() as { state: string }).state, "held");
+  const extension = recordVirtualBinding(db, { userId: 1, agentId: clean.id, resourceId: "529", note: "", now });
+  assert.equal(extension.ok, false);
+  if (!extension.ok) assert.match(extension.message, /phone extension/);
   const recorded = recordVirtualBinding(db, { userId: 1, agentId: clean.id, resourceId: "client-front-desk", note: "Created in 3CX Admin", now });
   assert.equal(recorded.ok && recorded.certified, false);
   assert.equal(recorded.ok && recorded.routeMoved, false);

@@ -64,6 +64,7 @@ export function callControlReport() {
   return {
     stored,
     host: connection.public.base_url ? safeHost(connection.public.base_url) : "",
+    servicePrincipalId: connection.public.client_id || "",
     xapi: connection.last_message,
     realtime: realtime ? { name: realtime.name, protocol: realtime.protocol } : null,
     textEngines: engines.filter((engine) => engine.enabled).map((engine) => engine.name),
