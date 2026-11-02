@@ -32,8 +32,12 @@ export function selectRealtimeEngine(engines: EngineCandidate[]) {
   return null;
 }
 
-export function spokenVoice(label: string, gender = "") {
-  return spokenVoiceFor(label, gender);
+export function spokenVoice(label: string, gender = "", protocol: "openai" | "xai" = "openai") {
+  return spokenVoiceFor(label, gender, protocol);
+}
+
+export function fallbackVoice(protocol: "openai" | "xai") {
+  return protocol === "xai" ? "eve" : "alloy";
 }
 
 export function transferDestination(args: string, allowed: readonly string[]) {
@@ -228,6 +232,8 @@ export type RealtimeEvent =
   | { type: "speech_started" }
   | { type: "response_started"; id: string }
   | { type: "response_finished"; id: string }
+  | { type: "session_updated" }
+  | { type: "provider_error"; message: string }
   | { type: "tool"; name: string; arguments: string; callId: string }
   | { type: "ignore" };
 
@@ -259,12 +265,16 @@ export function freshTalk(): TalkState {
   return { active: "", greetingOpen: true, dropped: [], holding: false };
 }
 
-export function stepTalk(state: TalkState, event: { type: "response_started"; id: string } | { type: "response_finished"; id: string } | { type: "audio"; id: string } | { type: "caller_spoke" } | { type: "transfer" }) {
+export function stepTalk(state: TalkState, event: { type: "response_started"; id: string } | { type: "response_finished"; id: string } | { type: "audio"; id: string } | { type: "caller_spoke" } | { type: "transfer" } | { type: "greeting_timeout" }) {
   const idle = { play: false, cancel: "", forwardCaller: !state.greetingOpen && !state.holding, clearPlayback: false };
   if (event.type === "transfer") {
     return { state: { ...state, active: "", greetingOpen: false, holding: true }, ...idle, cancel: state.active, forwardCaller: false, clearPlayback: true };
   }
   if (state.holding) return { state, ...idle, forwardCaller: false };
+  if (event.type === "greeting_timeout") {
+    if (!state.greetingOpen) return { state, ...idle };
+    return { state: { ...state, active: "", greetingOpen: false }, ...idle, forwardCaller: true };
+  }
   if (event.type === "response_started") {
     const id = event.id || "current";
     if (id === state.active) return { state, ...idle };
@@ -273,14 +283,40 @@ export function stepTalk(state: TalkState, event: { type: "response_started"; id
   }
   if (event.type === "audio") {
     const id = event.id || state.active;
-    return { state, ...idle, play: Boolean(state.active) && id === state.active && !state.dropped.includes(id) };
+    return { state, ...idle, play: Boolean(state.active) && (id === state.active || state.active === "current") && !state.dropped.includes(id) };
   }
   if (event.type === "response_finished") {
-    if (!event.id || event.id !== state.active) return { state, ...idle };
+    if (event.id && state.dropped.includes(event.id)) return { state, ...idle };
+    if (!state.greetingOpen && !state.active) return { state, ...idle };
+    const sameTurn = !event.id || !state.active || event.id === state.active || state.active === "current";
+    if (!sameTurn) return { state, ...idle };
+    if (!event.id && !state.active) return { state, ...idle };
     return { state: { ...state, active: "", greetingOpen: false }, ...idle, forwardCaller: true };
   }
   if (state.greetingOpen) return { state, ...idle, forwardCaller: false };
   return { state: { ...state, active: "" }, ...idle, forwardCaller: true, cancel: state.active, clearPlayback: Boolean(state.active) };
+}
+
+export type ProviderSetup = { greeted: boolean; retried: boolean };
+
+export function freshProviderSetup(): ProviderSetup {
+  return { greeted: false, retried: false };
+}
+
+export function providerSetupAction(state: ProviderSetup, event: "session_updated" | "timeout" | "error") {
+  if (state.greeted) return { state, action: "wait" as const };
+  if (event === "error" && !state.retried) return { state: { ...state, retried: true }, action: "retry" as const };
+  return { state: { ...state, greeted: true }, action: "greet" as const };
+}
+
+export function followUpResponse() {
+  return {
+    type: "response.create" as const,
+    response: {
+      tool_choice: "none" as const,
+      instructions: "Answer the caller in one or two sentences. Do not repeat the greeting.",
+    },
+  };
 }
 
 export function readRealtimeEvent(event: Record<string, unknown>): RealtimeEvent {
@@ -288,8 +324,16 @@ export function readRealtimeEvent(event: Record<string, unknown>): RealtimeEvent
   if (type === "input_audio_buffer.speech_started" || type === "conversation.item.input_audio_buffer.speech_started") {
     return { type: "speech_started" };
   }
+  if (type === "session.updated") return { type: "session_updated" };
+  if (type === "error") {
+    const error = event.error && typeof event.error === "object" ? event.error as { message?: unknown } : {};
+    const message = typeof error.message === "string" ? error.message : typeof event.message === "string" ? event.message : "";
+    return { type: "provider_error", message: message.replace(/\s+/g, " ").trim().slice(0, 300) };
+  }
   if (type === "response.created") return { type: "response_started", id: responseId(event) };
-  if (type === "response.done" || type === "response.cancelled") return { type: "response_finished", id: responseId(event) };
+  if (type === "response.done" || type === "response.cancelled" || type === "response.audio.done" || type === "response.output_audio.done") {
+    return { type: "response_finished", id: responseId(event) };
+  }
   if (type === "response.audio.delta" || type === "response.output_audio.delta") {
     const delta = String(event.delta || "");
     if (!delta) return { type: "ignore" };
@@ -311,34 +355,51 @@ export function realtimeSocketUrl(protocol: "openai" | "xai", model: string) {
   return `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(chosen)}`;
 }
 
-export function realtimeSessionUpdate(input: { instructions: string; voice: string; transfers: string[] }) {
-  const transfers = input.transfers.map((item) => item.trim()).filter(Boolean).slice(0, 40);
+export function realtimeSessionUpdate(input: { instructions: string; voice: string; transfers: string[]; protocol?: "openai" | "xai"; plain?: boolean }) {
+  const transfers = input.plain ? [] : input.transfers.map((item) => item.trim()).filter(Boolean).slice(0, 40);
   const destination = transfers.length
     ? { type: "string", enum: transfers }
     : { type: "string" };
+  const instructions = `${input.instructions}\n\nAfter the greeting, answer the caller. When the caller asks for a person, department, or extension, call transfer_to_approved_destination immediately, then stop speaking.`;
+  const tools = [
+    {
+      type: "function",
+      name: "transfer_to_approved_destination",
+      description: "Transfer the caller to one listed extension. Call this only when the caller asks for a person, department, or extension.",
+      parameters: { type: "object", properties: { destination }, required: ["destination"] },
+    },
+    {
+      type: "function",
+      name: "end_call",
+      description: "End the call after the caller is finished.",
+      parameters: { type: "object", properties: {} },
+    },
+  ];
+  if (input.protocol === "xai") {
+    return {
+      type: "session.update",
+      session: {
+        voice: input.voice,
+        instructions,
+        turn_detection: { type: "server_vad" },
+        audio: {
+          input: { format: { type: "audio/pcm", rate: 24000 }, turn_detection: { type: "server_vad" } },
+          output: { format: { type: "audio/pcm", rate: 24000 } },
+        },
+        tools,
+      },
+    };
+  }
   return {
     type: "session.update",
     session: {
       type: "realtime",
-      instructions: `${input.instructions}\n\nWhen the caller asks for a person, department, or extension, call transfer_to_approved_destination immediately and stop talking. Do not explain the transfer first.`,
+      instructions,
       audio: {
         input: { format: { type: "audio/pcm", rate: 24000 }, turn_detection: { type: "server_vad" } },
         output: { format: { type: "audio/pcm", rate: 24000 }, voice: input.voice },
       },
-      tools: [
-        {
-          type: "function",
-          name: "transfer_to_approved_destination",
-          description: "Transfer the caller right now. Do not speak before this tool. Use one listed extension.",
-          parameters: { type: "object", properties: { destination }, required: ["destination"] },
-        },
-        {
-          type: "function",
-          name: "end_call",
-          description: "End the call after the caller is finished.",
-          parameters: { type: "object", properties: {} },
-        },
-      ],
+      tools,
     },
   };
 }

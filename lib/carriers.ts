@@ -2,7 +2,7 @@ import { pbxOrigin } from "./call-control-plan";
 import { getDb } from "./db";
 import { carrierSearchType, didMatches, type DigitSearch } from "./did-search";
 import { didInfoIsAbsent, normalizeRequestedDid, readDids, type ListedDid } from "./did-list";
-import { adminPbxError, pbxAccessMessage, pbxErrorText, pbxRoleIsAdmin, roleFromToken } from "./pbx-access";
+import { adminPbxError, pbxAccessMessage, pbxErrorText, pbxRoleIsAdmin, pbxTokenAccepted, pbxTokenScopes, roleFromToken } from "./pbx-access";
 import { matchOrderPop, readPopServers, voipFailureText } from "./provider-error";
 import { readRateCenters } from "./places";
 import { xapiWriteHeaders } from "./xapi-headers";
@@ -238,6 +238,29 @@ export async function testVoipms() {
 
 let cachedPbxToken: { key: string; origin: string; token: string; expires: number } | null = null;
 
+async function requestPbxToken(origin: string, clientId: string, secret: string, scope: string) {
+  const body = new URLSearchParams({ client_id: clientId, client_secret: secret, grant_type: "client_credentials" });
+  if (scope) body.set("scope", scope);
+  const tokenResponse = await fetch(`${origin}/connect/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body,
+    signal: AbortSignal.timeout(5000),
+  });
+  const token = (await tokenResponse.json().catch(() => null)) as { access_token?: string } | null;
+  if (!tokenResponse.ok || !token?.access_token) return "";
+  return token.access_token;
+}
+
+async function configurationStatus(origin: string, token: string) {
+  const defs = await fetch(`${origin}/xapi/v1/Defs?$select=Id`, {
+    headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+    signal: AbortSignal.timeout(5000),
+  });
+  await defs.arrayBuffer().catch(() => null);
+  return defs.status;
+}
+
 async function accessToken(connection: ReturnType<typeof getConnection>) {
   if (!connection.enabled) throw new Error("3CX connection is turned off.");
   if (!connection.public.base_url || !connection.public.client_id || !connection.secret) {
@@ -246,16 +269,24 @@ async function accessToken(connection: ReturnType<typeof getConnection>) {
   const origin = httpsHost(connection.public.base_url);
   const key = `${origin}|${connection.public.client_id}|${connection.secret.length}:${connection.secret.slice(-4)}`;
   if (cachedPbxToken && cachedPbxToken.key === key && cachedPbxToken.expires > Date.now()) return { origin: cachedPbxToken.origin, token: cachedPbxToken.token };
-  const tokenResponse = await fetch(`${origin}/connect/token`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: connection.public.client_id, client_secret: connection.secret, grant_type: "client_credentials" }),
-    signal: AbortSignal.timeout(5000),
-  });
-  const token = (await tokenResponse.json().catch(() => null)) as { access_token?: string } | null;
-  if (!tokenResponse.ok || !token?.access_token) throw new Error("3CX rejected the credentials.");
-  cachedPbxToken = { key, origin, token: token.access_token, expires: Date.now() + 10 * 60 * 1000 };
-  return { origin, token: token.access_token };
+  let fallback = "";
+  for (const scope of pbxTokenScopes()) {
+    const token = await requestPbxToken(origin, connection.public.client_id, connection.secret, scope);
+    if (!token) continue;
+    fallback = token;
+    let status = 0;
+    try {
+      status = await configurationStatus(origin, token);
+    } catch {
+      status = 0;
+    }
+    if (pbxTokenAccepted(status)) {
+      cachedPbxToken = { key, origin, token, expires: Date.now() + 10 * 60 * 1000 };
+      return { origin, token };
+    }
+  }
+  if (!fallback) throw new Error("3CX rejected the credentials.");
+  return { origin, token: fallback };
 }
 
 export async function pbxRequest(path: string, init: { method?: string; body?: unknown; contentType?: string; headers?: Record<string, string> } = {}) {
@@ -305,7 +336,7 @@ export async function test3cx() {
   try {
     const { origin, token } = await accessToken(connection);
     const defs = await fetch(`${origin}/xapi/v1/Defs?$select=Id`, {
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
       signal: AbortSignal.timeout(5000),
     });
     const version = defs.headers.get("x-3cx-version") || "";

@@ -39,7 +39,24 @@ function roleLabel(role: string) {
   return role.replace(/_/g, " ");
 }
 
+export function pbxTokenScopes() {
+  return ["", "mcp xapi"];
+}
+
+export function pbxTokenAccepted(defsStatus: number) {
+  return defsStatus !== 401;
+}
+
+export function explainConfigurationCheck(message: string) {
+  if (/^3CX answered 401\.?$/.test(message.trim())) return pbxAccessMessage(401, "", "");
+  return message;
+}
+
 export function pbxAccessMessage(status: number, role: string, detail: string) {
+  if (status === 401) {
+    const extra = detail ? ` ${detail}` : "";
+    return `3CX answered 401 on the configuration check.${extra} GET /xapi/v1/Defs refused the token after sign-in. Check Call Control tries that token again with Call Control scope. If it still answers 401, in 3CX Admin open Integrations, then API, and turn on 3CX Configuration API Access for this Service Principal. This check does not block a call that 3CX already sends to that principal.`;
+  }
   if (status !== 403) return detail || `3CX answered ${status}.`;
   const extra = detail && !/access denied/i.test(detail) ? ` ${detail}` : "";
   if (pbxRoleIsAdmin(role)) {

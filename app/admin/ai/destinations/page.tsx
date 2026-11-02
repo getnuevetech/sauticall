@@ -35,7 +35,8 @@ export default async function AiDestinationsPage({ searchParams }: { searchParam
             {report.switches.master && report.switches.receptionist ? "Receptionist switch on" : "Receptionist switch off"}
           </span>
         </div>
-        {report.xapi && !report.xapi.startsWith("Connected") ? <p className="ops-alert" role="alert">{report.xapi} This is the last configuration check. A call still reaches the AI only when 3CX sends it to the Service Principal below.</p> : <p>{report.xapi || "The 3CX connection has not been checked."}</p>}
+        {report.xapi && !report.xapi.startsWith("Connected") ? <p className="ops-alert" role="alert">{report.xapi}</p> : <p>{report.xapi || "The 3CX connection has not been checked."}</p>}
+        <p>A call reaches the receptionist when 3CX sends it to the Service Principal below.</p>
         {problems.map((problem) => <p className="ops-alert" role="alert" key={problem}>{problem}{problem.startsWith("No realtime") ? <> <Link href="/admin/ai">Open Engines</Link></> : null}</p>)}
         <div className="ops-toolbar">
           <form action={probeCallControlForm}><button className="btn btn-secondary" type="submit">Check Call Control</button></form>

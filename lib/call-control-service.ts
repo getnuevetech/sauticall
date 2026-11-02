@@ -5,22 +5,27 @@ import {
   classifyCallControlProbe,
   describeStoredConnection,
   fallbackExtension,
+  fallbackVoice,
+  followUpResponse,
+  freshProviderSetup,
   freshTalk,
   greetingResponse,
   liveCallDecision,
   pbxOrigin,
   mediaWasOpen,
+  providerSetupAction,
   readRealtimeEvent,
-  stepTalk,
   realtimeSessionUpdate,
   realtimeSocketUrl,
   resolveProgrammableCall,
   selectRealtimeEngine,
   spokenVoice,
+  stepTalk,
   transferDestination,
   type RealtimeProtocol,
 } from "./call-control-plan.ts";
 import { getDb } from "./db.ts";
+import { explainConfigurationCheck } from "./pbx-access.ts";
 import { listAiEngines, readAiEngineSecret } from "./ai-store.ts";
 import { noteCapability, recordLiveSession } from "./ai-virtual.ts";
 import { downsample24kTo8k, upsample8kTo24k } from "./pcm-rate.ts";
@@ -65,7 +70,7 @@ export function callControlReport() {
     stored,
     host: connection.public.base_url ? safeHost(connection.public.base_url) : "",
     servicePrincipalId: connection.public.client_id || "",
-    xapi: connection.last_message,
+    xapi: explainConfigurationCheck(connection.last_message),
     realtime: realtime ? { name: realtime.name, protocol: realtime.protocol } : null,
     textEngines: engines.filter((engine) => engine.enabled).map((engine) => engine.name),
     capabilities: caps,
@@ -301,7 +306,7 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
     model: realtime.model,
     secret,
     instructions,
-    voice: spokenVoice(agent.voice_label, agent.voice_gender),
+    voice: spokenVoice(agent.voice_label, agent.voice_gender, realtime.protocol),
     greeting: agent.greeting,
     transfers: allowed,
     onPcm: (pcm8k) => {
@@ -411,23 +416,54 @@ function openProviderSocket(input: {
       reject(new Error("The realtime voice provider did not connect."));
     }, 8000);
     let talk = freshTalk();
+    let setup = freshProviderSetup();
+    let setupTimer: ReturnType<typeof setTimeout> | null = null;
+    let greetingTimer: ReturnType<typeof setTimeout> | null = null;
+    const sessionUpdate = (plain: boolean) => realtimeSessionUpdate({
+      instructions: input.instructions,
+      voice: plain ? fallbackVoice(input.protocol) : input.voice,
+      transfers: input.transfers,
+      protocol: input.protocol,
+      plain,
+    });
+    const sendGreeting = () => {
+      if (setupTimer) clearTimeout(setupTimer);
+      setupTimer = null;
+      if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(greetingResponse(input.greeting)));
+    };
+    const armSetup = () => {
+      if (setupTimer) clearTimeout(setupTimer);
+      setupTimer = setTimeout(() => {
+        const next = providerSetupAction(setup, "timeout");
+        setup = next.state;
+        if (next.action === "greet") sendGreeting();
+      }, 2000);
+    };
     const apply = (event: Parameters<typeof stepTalk>[1]) => {
       const next = stepTalk(talk, event);
       talk = next.state;
-      if (next.cancel && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "response.cancel", response_id: next.cancel }));
+      if (next.cancel && next.cancel !== "current" && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "response.cancel", response_id: next.cancel }));
       if (next.clearPlayback) input.onBargeIn();
+      if (!talk.greetingOpen && greetingTimer) {
+        clearTimeout(greetingTimer);
+        greetingTimer = null;
+      }
       return next;
     };
     socket.on("open", () => {
       clearTimeout(timer);
-      socket.send(JSON.stringify(realtimeSessionUpdate({ instructions: input.instructions, voice: input.voice, transfers: input.transfers })));
-      socket.send(JSON.stringify(greetingResponse(input.greeting)));
+      socket.send(JSON.stringify(sessionUpdate(false)));
+      armSetup();
       resolve({
         sendPcm: (pcm8k) => {
           if (socket.readyState !== WebSocket.OPEN || talk.greetingOpen || talk.holding) return;
           socket.send(JSON.stringify({ type: "input_audio_buffer.append", audio: upsample8kTo24k(pcm8k).toString("base64") }));
         },
-        stop: () => socket.close(),
+        stop: () => {
+          if (setupTimer) clearTimeout(setupTimer);
+          if (greetingTimer) clearTimeout(greetingTimer);
+          socket.close();
+        },
       });
     });
     socket.on("message", (data) => {
@@ -439,8 +475,23 @@ function openProviderSocket(input: {
         return;
       }
       const parsed = readRealtimeEvent(event);
+      if (parsed.type === "session_updated" || parsed.type === "provider_error") {
+        const next = providerSetupAction(setup, parsed.type === "session_updated" ? "session_updated" : "error");
+        setup = next.state;
+        if (next.action === "retry" && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify(sessionUpdate(true)));
+          armSetup();
+        }
+        if (next.action === "greet") sendGreeting();
+        return;
+      }
       if (parsed.type === "response_started" || parsed.type === "response_finished") apply(parsed);
-      if (parsed.type === "audio" && apply({ type: "audio", id: parsed.id }).play) input.onPcm(downsample24kTo8k(parsed.pcm24k));
+      if (parsed.type === "audio" && apply({ type: "audio", id: parsed.id }).play) {
+        input.onPcm(downsample24kTo8k(parsed.pcm24k));
+        if (talk.greetingOpen && !greetingTimer) {
+          greetingTimer = setTimeout(() => apply({ type: "greeting_timeout" }), 12000);
+        }
+      }
       if (parsed.type === "speech_started") apply({ type: "caller_spoke" });
       if (parsed.type === "tool" && parsed.name === "transfer_to_approved_destination" && transferDestination(parsed.arguments, input.transfers)) apply({ type: "transfer" });
       if (parsed.type === "tool") {
@@ -450,6 +501,7 @@ function openProviderSocket(input: {
             type: "conversation.item.create",
             item: { type: "function_call_output", call_id: parsed.callId, output: result },
           }));
+          if (!talk.holding && parsed.name !== "end_call") socket.send(JSON.stringify(followUpResponse()));
         });
       }
     });
