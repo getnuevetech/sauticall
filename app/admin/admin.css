@@ -143,7 +143,12 @@
 .ops-card label,.ops-drawer label,.ops-stack label{display:grid;gap:4px;font-weight:700}
 .ops-wide{width:100%;justify-content:center}
 .ops-foot,.ops-muted{color:#667085;font-size:.86rem}
-.ops-alert{background:#fef3f2;color:#b42318;border-radius:12px;padding:10px 12px}
+.ops-alert{background:#fef3f2;color:#b42318;border-radius:12px;padding:10px 12px;margin:12px 0}
+.ops-note{background:#e8f8ef;color:#17663a;border-radius:12px;padding:10px 12px;margin:12px 0;font-weight:650}
+.ops-status{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 14px}
+.ops-destination{border:1px solid #e4e7ec;border-radius:14px;padding:14px 16px;margin:12px 0}
+.ops-destination h3{margin:0 0 6px;font-size:1.05rem}
+.ops-destination label{display:grid;gap:4px;font-weight:700}
 .ops-alert.quiet{background:#fffaeb;color:#b54708}
 .ops-details{border-top:1px solid #eef2f6;padding:8px 0}
 .ops-details summary{cursor:pointer;font-weight:700}
