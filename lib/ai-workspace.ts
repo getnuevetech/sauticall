@@ -296,5 +296,6 @@ export function aiSaveNotice(saved: string | undefined) {
   if (saved === "prompt") return "Instructions saved. No call was placed and routing was not changed.";
   if (saved === "restored") return "Starting template restored. No call was placed and routing was not changed.";
   if (saved === "extension") return "AI extension saved. The phone number was not moved, and no call was placed.";
+  if (saved === "deleted") return "Receptionist deleted. The phone number stays on the ring group. You can create another receptionist with the same name. No call was placed.";
   return "";
 }

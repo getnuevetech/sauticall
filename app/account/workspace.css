@@ -71,6 +71,8 @@
 .ws-btn.primary{background:#2f5bff;color:#fff}
 .ws-btn.primary:hover{background:#2448d6}
 .ws-btn.ghost{border-color:#d5ddea;background:#fff}
+.ws-btn.danger{background:#fff;color:#b42318;border-color:#fda29b}
+.ws-btn.danger:hover{background:#fff1f2}
 .ws-btn:disabled{background:#eef1f6;color:#98a2b3;border-color:#e6ebf2}
 .ws-phone{width:180px;height:110px;flex:none;position:relative}
 .ws-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:14px}
