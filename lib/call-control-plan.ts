@@ -49,21 +49,20 @@ export function isPhoneExtensionNumber(value: string) {
 
 export function servicePrincipalDial(clientId: string) {
   const id = clientId.trim();
-  return { id, dialable: /^[A-Za-z][A-Za-z0-9-]{1,30}$/.test(id) };
+  return { id, dialable: false };
 }
 
-export function servicePrincipalDirections(clientId: string) {
-  const { id, dialable } = servicePrincipalDial(clientId);
-  if (!id) return "The 3CX connection has no Client ID saved.";
-  if (!dialable) {
-    return `${id} is the API login. 3CX does not create an extension for it, and a phone cannot dial it. In Admin, open Integrations, then API. Add a Service Principal with a short Client ID such as ai-receptionist, turn on 3CX Call Control API access, and put the outside number in the DID field on that form. That name does not appear under Users. Dial it from a 3CX phone.`;
-  }
-  return `Open Admin, Integrations, then API. The Client ID is ${id}. 3CX does not list ${id} under Users or Extensions. From a 3CX phone, dial ${id}. On that same form, turn on 3CX Call Control API access and put the outside number in the DID field.`;
+export function servicePrincipalDirections(clientId: string, did = "") {
+  const id = clientId.trim();
+  const number = did.replace(/\D/g, "");
+  const name = id || "the Service Principal";
+  const call = number ? `Call ${number}.` : "Call the outside phone number.";
+  return `${name} is the Service Principal name on Integrations, API. A keypad cannot dial that name. On that same Service Principal, put the phone number in the DID field. ${call} 3CX then sends the call to ${name}. Leave a normal user extension out of this route. If no phone is registered on that user, 3CX ends the call.`;
 }
 
-export function phoneExtensionRouteMessage(extension: string, servicePrincipalId: string) {
+export function phoneExtensionRouteMessage(extension: string, servicePrincipalId: string, did = "") {
   const number = extension.trim();
-  return `${number} is a phone extension. No phone is registered on it, so 3CX ends the call before the AI can answer. ${servicePrincipalDirections(servicePrincipalId)} Do not route the call to extension ${number}.`;
+  return `${number} is a user extension. No phone is registered on it, so 3CX ends the call before the AI can answer. ${servicePrincipalDirections(servicePrincipalId, did)}`;
 }
 
 export function mediaWasOpen(bytesIn: number, bytesOut: number) {

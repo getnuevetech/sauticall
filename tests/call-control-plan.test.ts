@@ -42,15 +42,15 @@ test("a chat model is not treated as telephone audio", () => {
 
 test("a phone extension is not the Service Principal route point", () => {
   assert.equal(isPhoneExtensionNumber("529"), true);
-  assert.equal(isPhoneExtensionNumber("ai-receptionist"), false);
-  assert.equal(servicePrincipalDial("ai-receptionist").dialable, true);
-  assert.equal(servicePrincipalDial("4f8c2a1e-9b7d-4c3a-8e21-6d5b0a9c1f22").dialable, false);
-  assert.match(servicePrincipalDirections("ai-receptionist"), /does not list ai-receptionist under Users/);
-  assert.match(servicePrincipalDirections("4f8c2a1e-9b7d-4c3a-8e21-6d5b0a9c1f22"), /does not create an extension/);
-  const message = phoneExtensionRouteMessage("529", "ai-receptionist");
-  assert.match(message, /529 is a phone extension/);
-  assert.match(message, /dial ai-receptionist/);
-  assert.match(message, /Do not route the call to extension 529/);
+  assert.equal(isPhoneExtensionNumber("sauticall"), false);
+  assert.equal(servicePrincipalDial("sauticall").dialable, false);
+  const directions = servicePrincipalDirections("sauticall", "9708430420");
+  assert.match(directions, /keypad cannot dial/);
+  assert.match(directions, /Call 9708430420/);
+  assert.match(directions, /sends the call to sauticall/);
+  const message = phoneExtensionRouteMessage("529", "sauticall", "9708430420");
+  assert.match(message, /529 is a user extension/);
+  assert.match(message, /Call 9708430420/);
 });
 
 test("one existing route point resolves the tenant and blocks the other company", () => {

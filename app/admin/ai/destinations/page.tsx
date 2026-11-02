@@ -4,7 +4,7 @@ import { requirePermission } from "@/lib/access";
 import { engineLabel } from "@/lib/ai-virtual";
 import { listAllAgents, type VirtualAgent } from "@/lib/ai-virtual-store";
 import { callControlReport } from "@/lib/call-control-service";
-import { isPhoneExtensionNumber, phoneExtensionRouteMessage, servicePrincipalDial, servicePrincipalDirections } from "@/lib/call-control-plan";
+import { isPhoneExtensionNumber, phoneExtensionRouteMessage, servicePrincipalDirections } from "@/lib/call-control-plan";
 import { probeCallControlForm, recordVirtualBindingForm, startCallControlForm, stopCallControlForm } from "./actions";
 
 export default async function AiDestinationsPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
@@ -45,14 +45,13 @@ export default async function AiDestinationsPage({ searchParams }: { searchParam
         <p>These buttons do not place a call.</p>
 
         <h2>Where the call goes</h2>
-        <p>The Service Principal has no extension. It does not appear under Users. Extension 529 is a separate user, and it stays offline until a phone registers.</p>
-        <p>{servicePrincipalDirections(report.servicePrincipalId)} While Listen for calls is on, 3CX gives that call’s audio to SautiCall, and the realtime voice model speaks back on the same call.</p>
+        <p>{servicePrincipalDirections(report.servicePrincipalId, agents.find((agent) => agent.did)?.did || "")} While Listen for calls is on, SautiCall connects the realtime voice model to that call.</p>
         {agents.filter((agent) => isPhoneExtensionNumber(agent.client_id)).map((agent) => (
-          <p className="ops-alert" role="alert" key={agent.id}>{phoneExtensionRouteMessage(agent.client_id, report.servicePrincipalId)}</p>
+          <p className="ops-alert" role="alert" key={agent.id}>{phoneExtensionRouteMessage(agent.client_id, report.servicePrincipalId, agent.did)}</p>
         ))}
 
         <h2>Receptionists</h2>
-        <p>Save the Service Principal Client ID shown above. Do not paste a phone extension number, and do not paste the secret.</p>
+        <p>Save the Service Principal name from Integrations, API. Callers dial the phone number in its DID field. Do not paste the secret.</p>
         {agents.length === 0 ? <p>No receptionist is saved.</p> : agents.map((agent) => <Receptionist key={agent.id} agent={agent} servicePrincipalId={report.servicePrincipalId} />)}
 
         <h2>Recent calls</h2>
@@ -81,7 +80,7 @@ function Receptionist({ agent, servicePrincipalId }: { agent: VirtualAgent; serv
   const native = agent.execution_engine === "THREE_CX_NATIVE";
   const recorded = native ? agent.native_agent_id : agent.client_id;
   const status = receptionistStatus(agent, recorded);
-  const replaceExtension = !native && isPhoneExtensionNumber(recorded) && servicePrincipalDial(servicePrincipalId).dialable;
+  const replaceExtension = !native && isPhoneExtensionNumber(recorded) && Boolean(servicePrincipalId);
   return (
     <article className="ops-destination">
       <h3>{agent.name}</h3>
@@ -89,10 +88,10 @@ function Receptionist({ agent, servicePrincipalId }: { agent: VirtualAgent; serv
       <p><span className={`ops-badge ${status.tone}`}>{status.label}</span></p>
       <form className="ops-toolbar" action={recordVirtualBindingForm}>
         <input type="hidden" name="agent_id" value={agent.id} />
-        <label>{native ? "3CX agent id" : "Service Principal Client ID"}
-          <input name="resource_id" defaultValue={replaceExtension ? servicePrincipalId : recorded} aria-label={native ? `3CX agent id for ${agent.name}` : `Service Principal Client ID for ${agent.name}`} placeholder={native ? "Agent id from 3CX" : "Client ID from 3CX Integrations, API"} />
+          <label>{native ? "3CX agent id" : "Service Principal name"}
+          <input name="resource_id" defaultValue={replaceExtension ? servicePrincipalId : recorded} aria-label={native ? `3CX agent id for ${agent.name}` : `Service Principal name for ${agent.name}`} placeholder={native ? "Agent id from 3CX" : "Name shown as the Service Principal extension"} />
         </label>
-        <button className="btn btn-secondary" type="submit">{replaceExtension ? "Use the Service Principal" : "Save Client ID"}</button>
+        <button className="btn btn-secondary" type="submit">{replaceExtension ? "Use the Service Principal name" : "Save name"}</button>
       </form>
     </article>
   );
@@ -101,16 +100,16 @@ function Receptionist({ agent, servicePrincipalId }: { agent: VirtualAgent; serv
 function receptionistStatus(agent: VirtualAgent, recorded: string) {
   if (agent.status === "PAUSED") return { label: "Paused. Calls stay on the ring group.", tone: "warn" };
   if (agent.binding_status === "ACTIVE" && agent.route_target) return { label: "Certified. The number can route to this receptionist.", tone: "ok" };
-  if (isPhoneExtensionNumber(recorded)) return { label: `${recorded} is an offline phone extension. Calls end before the AI answers.`, tone: "bad" };
-  if (recorded) return { label: "Client ID saved. Assign the outside number to this Service Principal in 3CX.", tone: "pending" };
+  if (isPhoneExtensionNumber(recorded)) return { label: `${recorded} is a user extension. A keypad call to it ends while that user is offline.`, tone: "bad" };
+  if (recorded) return { label: "Name saved. Put the phone number in this Service Principal’s DID field, then call that number.", tone: "pending" };
   return { label: "Needs the 3CX Client ID.", tone: "warn" };
 }
 
 function savedMessage(saved: string | undefined) {
   if (saved === "probe") return "Checked the existing 3CX connection. No call was placed.";
-  if (saved === "listen") return "Listening. Dial the Client ID from a 3CX phone. It is not listed under Users. A normal extension stays offline, and 3CX ends that call.";
+  if (saved === "listen") return "Listening. Call the phone number in the Service Principal DID field. A keypad cannot dial the Service Principal name.";
   if (saved === "stopped") return "Stopped listening. No call was placed.";
-  if (saved) return "Client ID saved. Calls still ring the group.";
+  if (saved) return "Name saved. Call the phone number in the Service Principal DID field.";
   return "";
 }
 
