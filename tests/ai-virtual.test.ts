@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
-import { authorizeTool, compileAgentPrompt, liveVirtualRoute, provisionDecision, publishVirtualAgent, recordVirtualBinding, saveVirtualAgent, updateVirtualAgent } from "../lib/ai-virtual.ts";
+import { authorizeTool, compileAgentPrompt, deleteVirtualAgent, liveVirtualRoute, previewVirtualAgent, provisionDecision, publishVirtualAgent, recordVirtualBinding, saveKnowledge, saveVirtualAgent, updateVirtualAgent } from "../lib/ai-virtual.ts";
 import { retiredPhoneAiRoute } from "../lib/trunk-route.ts";
 
 function database() {
@@ -201,4 +201,81 @@ test("a saved receptionist can be edited without moving its phone route", () => 
     allowedTransfers: [],
     now,
   }).ok, false);
+});
+
+test("deleting a receptionist frees its name and leaves the phone route in place", () => {
+  const db = database();
+  const now = "2026-11-01T20:00:00.000Z";
+  const saved = saveVirtualAgent(db, {
+    userId: 1,
+    name: "Angy",
+    agentType: "receptionist",
+    engine: "SAUTICALL_PROGRAMMABLE",
+    greeting: "Thank you for calling.",
+    instructions: "Hours are 9 to 5.",
+    did: "9708430420",
+    language: "en-US",
+    allowedTransfers: ["516"],
+    now,
+  });
+  assert.equal(saved.ok, true);
+  if (!saved.ok) return;
+  assert.equal(publishVirtualAgent(db, { userId: 1, agentId: saved.id, idempotencyKey: "delete", now }).ok, true);
+  assert.equal(saveKnowledge(db, { userId: 1, agentId: saved.id, body: "We repair roofs.", now }).ok, true);
+  assert.equal(previewVirtualAgent(db, { userId: 1, agentId: saved.id, utterance: "What do you do?", now }).ok, true);
+  assert.equal(recordVirtualBinding(db, { userId: 1, agentId: saved.id, resourceId: "client-angy", note: "", now }).ok, true);
+  const other = saveVirtualAgent(db, {
+    userId: 2,
+    name: "Angy",
+    agentType: "receptionist",
+    engine: "SAUTICALL_PROGRAMMABLE",
+    greeting: "Hello",
+    instructions: "",
+    did: "3035550100",
+    language: "en-US",
+    allowedTransfers: [],
+    now,
+  });
+  assert.equal(other.ok, true);
+  if (!other.ok) return;
+  assert.equal(publishVirtualAgent(db, { userId: 2, agentId: other.id, idempotencyKey: "other-delete", now }).ok, true);
+  const templates = (db.prepare("SELECT COUNT(*) AS n FROM ai_prompt_templates").get() as { n: number }).n;
+  assert.equal(deleteVirtualAgent(db, { userId: 2, agentId: saved.id, confirmName: "Angy" }).ok, false);
+  assert.equal(deleteVirtualAgent(db, { userId: 1, agentId: saved.id, confirmName: "Front desk" }).ok, false);
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM ai_agents WHERE id = ?").get(saved.id) as { n: number }).n, 1);
+  const removed = deleteVirtualAgent(db, { userId: 1, agentId: saved.id, confirmName: "Angy" });
+  assert.equal(removed.ok, true);
+  assert.equal(removed.ok && removed.routeMoved, false);
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM ai_agents WHERE id = ?").get(saved.id) as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM ai_3cx_bindings WHERE agent_id = ?").get(saved.id) as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM ai_did_assignments WHERE agent_id = ?").get(saved.id) as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM ai_knowledge_sources WHERE agent_id = ?").get(saved.id) as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM ai_knowledge_chunks").get() as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM ai_sessions WHERE agent_id = ?").get(saved.id) as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM ai_prompt_publications WHERE agent_id = ?").get(saved.id) as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM ai_provisioning_jobs WHERE agent_id = ?").get(saved.id) as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM ai_manual_tasks WHERE agent_id = ?").get(saved.id) as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM ai_usage_ledger").get() as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM ai_tool_audit").get() as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM ai_prompt_templates").get() as { n: number }).n, templates);
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM ai_agents WHERE id = ?").get(other.id) as { n: number }).n, 1);
+  assert.equal((db.prepare("SELECT route_label FROM phone_lines WHERE user_id = 1").get() as { route_label: string }).route_label, "AI receptionist extension 529");
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM pbx_extensions").get() as { n: number }).n, 1);
+  const again = saveVirtualAgent(db, {
+    userId: 1,
+    name: "Angy",
+    agentType: "receptionist",
+    engine: "SAUTICALL_PROGRAMMABLE",
+    greeting: "Hello again.",
+    instructions: "We repair roofs.",
+    did: "9708430420",
+    language: "en-US",
+    allowedTransfers: ["800"],
+    now,
+  });
+  assert.equal(again.ok, true);
+  if (!again.ok) return;
+  assert.notEqual(again.id, saved.id);
+  assert.equal(publishVirtualAgent(db, { userId: 1, agentId: again.id, idempotencyKey: "recreate", now }).ok, true);
+  assert.equal(recordVirtualBinding(db, { userId: 1, agentId: again.id, resourceId: "client-angy", note: "", now }).ok, true);
 });

@@ -34,7 +34,10 @@ export default async function AiExtensionsPage({ searchParams }: { searchParams:
             <p>{engineLabel(agent.execution_engine)} · {agent.did || "No number selected"}</p>
             <p>{customerAgentMessage(agent.status)}</p>
           </div>
-          <Link className="ws-btn primary" href={`/account/ai/extensions/${agent.id}`}>Open</Link>
+          <div className="ai-form-actions">
+            <Link className="ws-btn primary" href={`/account/ai/extensions/${agent.id}`}>Open</Link>
+            <Link className="ws-btn ghost" href={`/account/ai/extensions/${agent.id}?tab=settings`}>Delete</Link>
+          </div>
         </article>
       ))}
       {choices.length === 0 ? <p>This plan does not include an AI receptionist or personal assistant.</p> : (

@@ -191,6 +191,21 @@ export async function saveKnowledgeForm(formData: FormData) {
   redirect(`${next}&saved=knowledge`);
 }
 
+export async function deleteVirtualAgentForm(formData: FormData) {
+  const user = await guardAccount();
+  if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
+  const agentId = Number(formData.get("agent_id") || 0);
+  const { getDb } = await import("@/lib/db");
+  const { deleteVirtualAgent } = await import("@/lib/ai-virtual-store");
+  const result = deleteVirtualAgent(getDb(), {
+    userId: user.id,
+    agentId,
+    confirmName: String(formData.get("confirm_name") || ""),
+  });
+  if (!result.ok) redirect(`/account/ai/extensions/${agentId}?tab=settings&error=${encodeURIComponent(result.message)}`);
+  redirect("/account/ai?saved=deleted");
+}
+
 export async function pauseVirtualAgentForm(formData: FormData) {
   const user = await guardAccount();
   if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);

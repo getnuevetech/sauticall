@@ -623,6 +623,42 @@ export function listKnowledge(database: Database.Database, userId: number, agent
   return database.prepare("SELECT id, body, created_at FROM ai_knowledge_sources WHERE user_id = ? AND agent_id = ? ORDER BY id DESC").all(userId, agentId) as { id: number; body: string; created_at: string }[];
 }
 
+export function deleteVirtualAgent(database: Database.Database, input: { userId: number; agentId: number; confirmName: string }) {
+  ensureVirtualSchema(database);
+  const agent = database.prepare("SELECT id, name FROM ai_agents WHERE id = ? AND user_id = ?").get(input.agentId, input.userId) as { id: number; name: string } | undefined;
+  if (!agent) return { ok: false as const, message: "That AI extension was not found on this account." };
+  if (input.confirmName.trim() !== agent.name) return { ok: false as const, message: `Type ${agent.name} to delete this receptionist.` };
+  const remove = database.transaction(() => {
+    const sessions = database.prepare("SELECT id FROM ai_sessions WHERE user_id = ? AND agent_id = ?").all(input.userId, agent.id) as { id: number }[];
+    if (sessions.length) {
+      const marks = sessions.map(() => "?").join(", ");
+      const ids = sessions.map((row) => row.id);
+      database.prepare(`DELETE FROM ai_tool_audit WHERE user_id = ? AND session_id IN (${marks})`).run(input.userId, ...ids);
+      database.prepare(`DELETE FROM ai_usage_ledger WHERE user_id = ? AND session_id IN (${marks})`).run(input.userId, ...ids);
+    }
+    database.prepare("DELETE FROM ai_sessions WHERE user_id = ? AND agent_id = ?").run(input.userId, agent.id);
+    const sources = database.prepare("SELECT id FROM ai_knowledge_sources WHERE user_id = ? AND agent_id = ?").all(input.userId, agent.id) as { id: number }[];
+    if (sources.length) {
+      const marks = sources.map(() => "?").join(", ");
+      database.prepare(`DELETE FROM ai_knowledge_chunks WHERE user_id = ? AND source_id IN (${marks})`).run(input.userId, ...sources.map((row) => row.id));
+    }
+    database.prepare("DELETE FROM ai_knowledge_sources WHERE user_id = ? AND agent_id = ?").run(input.userId, agent.id);
+    database.prepare("DELETE FROM ai_prompt_publications WHERE user_id = ? AND agent_id = ?").run(input.userId, agent.id);
+    database.prepare("DELETE FROM ai_manual_tasks WHERE user_id = ? AND agent_id = ?").run(input.userId, agent.id);
+    database.prepare("DELETE FROM ai_provisioning_jobs WHERE user_id = ? AND agent_id = ?").run(input.userId, agent.id);
+    database.prepare("DELETE FROM ai_did_assignments WHERE user_id = ? AND agent_id = ?").run(input.userId, agent.id);
+    database.prepare("DELETE FROM ai_3cx_bindings WHERE user_id = ? AND agent_id = ?").run(input.userId, agent.id);
+    const removed = database.prepare("DELETE FROM ai_agents WHERE id = ? AND user_id = ?").run(agent.id, input.userId);
+    if (removed.changes !== 1) throw new Error("receptionist was not removed");
+  });
+  try {
+    remove();
+  } catch {
+    return { ok: false as const, message: "That AI extension was not found on this account." };
+  }
+  return { ok: true as const, routeMoved: false as const, name: agent.name };
+}
+
 export function pauseVirtualAgent(database: Database.Database, input: { userId: number; agentId: number; paused: boolean; now: string }) {
   ensureVirtualSchema(database);
   const agent = database.prepare("SELECT id, status FROM ai_agents WHERE id = ? AND user_id = ?").get(input.agentId, input.userId) as { id: number; status: string } | undefined;

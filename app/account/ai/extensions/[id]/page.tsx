@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { pauseVirtualAgentForm, previewVirtualAgentForm, saveKnowledgeForm, updateVirtualAgentForm } from "../../actions";
+import { deleteVirtualAgentForm, pauseVirtualAgentForm, previewVirtualAgentForm, saveKnowledgeForm, updateVirtualAgentForm } from "../../actions";
 import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { customerAgentMessage, engineLabel } from "@/lib/ai-virtual";
 import { accountAgent, type VirtualAgent } from "@/lib/ai-virtual-store";
@@ -105,6 +105,13 @@ export default async function AiExtensionPage({ params, searchParams }: { params
             <button className="ws-btn primary" type="submit">{agent.status === "PAUSED" ? "Resume configuration" : "Pause"}</button>
           </form>
           <p>{agent.status === "PAUSED" ? "Calls stay on the backup destination while this is paused." : "Pausing keeps the number on the ring group. It does not delete the configuration."}</p>
+          <h2>Delete this receptionist</h2>
+          <p>Deleting removes the greeting, knowledge, and saved 3CX Client ID for {agent.name}. The phone number stays on the ring group, and no call is placed. You can create another receptionist with the same name afterward.</p>
+          <form action={deleteVirtualAgentForm}>
+            <input type="hidden" name="agent_id" value={agent.id} />
+            <label>Type {agent.name} to confirm <input name="confirm_name" required autoComplete="off" /></label>
+            <button className="ws-btn danger" type="submit">Delete receptionist</button>
+          </form>
         </article>
       ) : null}
     </div>
