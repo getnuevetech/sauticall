@@ -11,6 +11,11 @@ export type VirtualAgent = {
   language: string;
   greeting: string;
   instructions: string;
+  business_summary: string;
+  tone: string;
+  voice_label: string;
+  after_hours: string;
+  allowed_transfers: string;
   fallback_label: string;
   did: string;
   prompt_sync: string;
@@ -25,6 +30,8 @@ export type VirtualAgent = {
 
 const AGENT_SQL = `
   SELECT a.id, a.user_id, a.name, a.agent_type, a.execution_engine, a.status, a.language, a.greeting, a.instructions,
+         COALESCE(a.business_summary, '') AS business_summary, COALESCE(a.tone, '') AS tone, COALESCE(a.voice_label, '') AS voice_label,
+         COALESCE(a.after_hours, '') AS after_hours, COALESCE(a.allowed_transfers, '') AS allowed_transfers,
          a.fallback_label, a.did, a.prompt_sync, a.config_revision,
          COALESCE(b.client_id, '') AS client_id, COALESCE(b.native_agent_id, '') AS native_agent_id,
          COALESCE(b.route_target, '') AS route_target, COALESCE(b.binding_status, '') AS binding_status,
@@ -89,4 +96,4 @@ export function listManualTasks() {
   }[];
 }
 
-export { listAgentSessions, listKnowledge, listPromptTemplates, pauseVirtualAgent, previewVirtualAgent, publishVirtualAgent, recordVirtualBinding, saveKnowledge, saveVirtualAgent } from "./ai-virtual";
+export { listAgentSessions, listKnowledge, listPromptTemplates, pauseVirtualAgent, previewVirtualAgent, publishVirtualAgent, recordVirtualBinding, saveKnowledge, saveVirtualAgent, updateVirtualAgent } from "./ai-virtual";
