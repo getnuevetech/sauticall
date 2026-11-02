@@ -318,10 +318,13 @@ export function freshTalk(): TalkState {
   return { active: "", greetingOpen: true, dropped: [], holding: false };
 }
 
-export function stepTalk(state: TalkState, event: { type: "response_started"; id: string } | { type: "response_finished"; id: string } | { type: "audio"; id: string } | { type: "caller_spoke" } | { type: "transfer" } | { type: "greeting_timeout" }) {
+export function stepTalk(state: TalkState, event: { type: "response_started"; id: string } | { type: "response_finished"; id: string } | { type: "audio"; id: string } | { type: "caller_spoke" } | { type: "transfer" } | { type: "transfer_failed" } | { type: "greeting_timeout" }) {
   const idle = { play: false, cancel: "", forwardCaller: !state.greetingOpen && !state.holding, clearPlayback: false };
   if (event.type === "transfer") {
     return { state: { ...state, active: "", greetingOpen: false, holding: true }, ...idle, cancel: state.active, forwardCaller: false, clearPlayback: true };
+  }
+  if (event.type === "transfer_failed") {
+    return { state: { ...state, active: "", greetingOpen: false, holding: false }, ...idle, forwardCaller: true };
   }
   if (state.holding) return { state, ...idle, forwardCaller: false };
   if (event.type === "greeting_timeout") {
@@ -360,6 +363,25 @@ export function providerSetupAction(state: ProviderSetup, event: "session_update
   if (state.greeted) return { state, action: "wait" as const };
   if (event === "error" && !state.retried) return { state: { ...state, retried: true }, action: "retry" as const };
   return { state: { ...state, greeted: true }, action: "greet" as const };
+}
+
+export function transferFailureLine(failure: string, who: string) {
+  const name = who.trim() || "That extension";
+  if (/doesnt exist/i.test(failure)) return `${name} is not available. That extension is not on the phone system. I can take a message, try another person, or let you go.`;
+  if (/busy/i.test(failure)) return `${name} is busy right now. I can take a message, try another person, or let you go.`;
+  if (/not registered|unregister/i.test(failure)) return `${name} is not at the phone. I can take a message, try another person, or let you go.`;
+  if (/no answer|timeout/i.test(failure)) return `${name} did not answer. I can take a message, try another person, or let you go.`;
+  return `${name} is not available right now. I can take a message, try another person, or let you go.`;
+}
+
+export function unavailableSpeech(line: string) {
+  return {
+    type: "response.create" as const,
+    response: {
+      tool_choice: "none" as const,
+      instructions: `Say exactly this, then stop and wait: ${line}`,
+    },
+  };
 }
 
 export function followUpResponse() {

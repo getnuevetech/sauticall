@@ -4,7 +4,7 @@ import { deleteVirtualAgentForm, pauseVirtualAgentForm, previewVirtualAgentForm,
 import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { customerAgentMessage, engineLabel, listAgentSessions, listKnowledge, listPromptTemplates, listTransferTargets } from "@/lib/ai-virtual";
 import { accountAgent, type VirtualAgent } from "@/lib/ai-virtual-store";
-import { AccentSelect, ChoiceSelect, GenderSelect, GreetingSelect, HoursFields, ToneSelect, TransferFields } from "@/components/account/ClosedChoices";
+import { AccentSelect, ChoiceSelect, GenderSelect, GreetingSelect, HoursFields, InstructionTemplateSelect, ToneSelect, TransferFields } from "@/components/account/ClosedChoices";
 import { accentSelection, languagesForPlan } from "@/lib/ai-choices";
 import { getDb } from "@/lib/db";
 import { guardAccount } from "@/lib/guard";
@@ -175,7 +175,9 @@ function ReceptionistEditor({ agent, numbers, tab, accents, languages, targets }
       {showVoice ? <GenderSelect value={agent.voice_gender} /> : null}
       {showVoice ? <AccentSelect accents={accents} value={agent.voice_label} /> : null}
       {showPrompt ? <GreetingSelect value={agent.greeting} /> : null}
+      {showPrompt ? <InstructionTemplateSelect /> : null}
       {showPrompt ? <label>Instructions <textarea name="instructions" rows={6} defaultValue={agent.instructions} /></label> : null}
+      {showPrompt ? <p>Receptionist replaces the instructions with a short call script. It tells the caller when an extension is not available, then offers a message, another person, or ending the call.</p> : null}
       {showRoute ? <HoursFields stored={agent.after_hours} targets={targets} /> : null}
       {showRoute ? <TransferFields targets={targets} selected={transfers} /> : null}
       <p>Name, business summary, and instructions stay as text because they are the words this receptionist may use. Saving does not move the phone route, and no call is placed.</p>

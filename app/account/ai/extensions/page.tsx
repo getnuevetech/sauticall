@@ -5,7 +5,7 @@ import { createVirtualAgentForm } from "../actions";
 import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { systemsForPlan } from "@/lib/ai-account";
 import { customerAgentMessage, engineLabel, listTransferTargets } from "@/lib/ai-virtual";
-import { AccentSelect, ChoiceSelect, GenderSelect, GreetingSelect, HoursFields, ToneSelect, TransferFields } from "@/components/account/ClosedChoices";
+import { AccentSelect, ChoiceSelect, GenderSelect, GreetingSelect, HoursFields, InstructionTemplateSelect, ToneSelect, TransferFields } from "@/components/account/ClosedChoices";
 import { accentSelection, languagesForPlan } from "@/lib/ai-choices";
 import { listAccountAgents } from "@/lib/ai-virtual-store";
 import { guardAccount } from "@/lib/guard";
@@ -73,6 +73,7 @@ export default async function AiExtensionsPage({ searchParams }: { searchParams:
           <GenderSelect value="neutral" />
           <AccentSelect accents={accents} value={accents[0]?.id || ""} />
           <GreetingSelect value="" />
+          <InstructionTemplateSelect />
           <label>Instructions <textarea name="instructions" rows={6} placeholder="Questions to ask, and answers this receptionist may give." /></label>
           <HoursFields stored="" targets={targets} />
           <TransferFields targets={targets} selected={[]} />

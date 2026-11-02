@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
-import { classifyCallControlProbe, describeStoredConnection, fallbackExtension, fallbackVoice, freshProviderSetup, freshTalk, greetingResponse, isPhoneExtensionNumber, liveCallDecision, matchRealtimeProtocol, mediaWasOpen, pbxOrigin, pbxTransferDestination, phoneExtensionRouteMessage, providerSetupAction, readRealtimeEvent, realtimeSessionUpdate, resolveProgrammableCall, selectRealtimeEngine, servicePrincipalDial, servicePrincipalDirections, spokenVoice, stepTalk, transferAttempts, transferCanRetry, transferDestination, transferFailureText } from "../lib/call-control-plan.ts";
+import { classifyCallControlProbe, describeStoredConnection, fallbackExtension, fallbackVoice, freshProviderSetup, freshTalk, greetingResponse, isPhoneExtensionNumber, liveCallDecision, matchRealtimeProtocol, mediaWasOpen, pbxOrigin, pbxTransferDestination, phoneExtensionRouteMessage, providerSetupAction, readRealtimeEvent, realtimeSessionUpdate, resolveProgrammableCall, selectRealtimeEngine, servicePrincipalDial, servicePrincipalDirections, spokenVoice, stepTalk, transferAttempts, transferCanRetry, transferDestination, transferFailureLine, transferFailureText, unavailableSpeech } from "../lib/call-control-plan.ts";
 import { downsample24kTo8k, upsample8kTo24k } from "../lib/pcm-rate.ts";
 import { recordLiveSession } from "../lib/ai-virtual.ts";
 import type { RouteBinding } from "../lib/ai-platform.ts";
@@ -172,6 +172,15 @@ test("provider audio is converted and tool calls stay explicit", () => {
   assert.equal(transferCanRetry(missing, "528", "Extension.528."), false);
   assert.equal(transferCanRetry("3CX transfer returned 422", "528", "Extension.528."), true);
   assert.equal(transferCanRetry("3CX transfer returned 500", "528", "Extension.528."), false);
+  const missingLine = transferFailureLine(missing, "extension 528");
+  assert.match(missingLine, /not available/);
+  assert.match(missingLine, /take a message/);
+  assert.match(unavailableSpeech(missingLine).response.instructions, /Say exactly this/);
+  const held = stepTalk(freshTalk(), { type: "transfer" });
+  assert.equal(held.state.holding, true);
+  const resumed = stepTalk(held.state, { type: "transfer_failed" });
+  assert.equal(resumed.state.holding, false);
+  assert.equal(resumed.forwardCaller, true);
   assert.equal(transferFailureText({ response: { status: 422, data: "destination" } }), "3CX transfer returned 422 destination");
   const handoff = stepTalk(freshTalk(), { type: "transfer" });
   assert.equal(handoff.clearPlayback, true);

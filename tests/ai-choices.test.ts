@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACCENTS, accentsForPlan, defaultAccentIds, isOfficeTime, packOfficeHours, readOfficeHours, speakingDirections, spokenVoiceFor as spokenVoice, storedVoice } from "../lib/ai-choices.ts";
+import { ACCENTS, accentsForPlan, defaultAccentIds, isOfficeTime, packOfficeHours, promptTemplateText, readOfficeHours, speakingDirections, spokenVoiceFor as spokenVoice, storedVoice } from "../lib/ai-choices.ts";
 
 test("the accent catalog covers every region and stays unique", () => {
   assert.ok(ACCENTS.length >= 100);
@@ -37,4 +37,10 @@ test("office hours are two times and a chosen after-hours action", () => {
   assert.equal(readOfficeHours("Take a message").action, "message");
   assert.match(speakingDirections({ voiceLabel: "en-ng", language: "en-NG", afterHours: hours.packed }), /Nigerian/);
   assert.match(speakingDirections({ voiceLabel: "en-ng", language: "en-NG", afterHours: hours.packed }), /immediately/);
+  const receptionist = promptTemplateText("receptionist");
+  assert.match(receptionist, /not available/);
+  assert.match(receptionist, /take a message/);
+  assert.equal(promptTemplateText("missing"), "");
+  assert.equal(receptionist.includes("get_addressbook"), false);
+  assert.equal(receptionist.includes("spam_detected"), false);
 });

@@ -1,4 +1,4 @@
-import { AFTER_ACTIONS, GENDERS, GREETINGS, OFFICE_TIMES, TONES, greetingValue, officeTimeLabel, readOfficeHours, type Accent } from "@/lib/ai-choices";
+import { AFTER_ACTIONS, GENDERS, GREETINGS, OFFICE_TIMES, PROMPT_TEMPLATES, TONES, greetingValue, officeTimeLabel, readOfficeHours, type Accent } from "@/lib/ai-choices";
 
 export function ChoiceSelect({ label, name, value, options, required = false }: { label: string; name: string; value: string; options: { value: string; label: string }[]; required?: boolean }) {
   const known = options.some((option) => option.value === value);
@@ -28,6 +28,17 @@ export function AccentSelect({ accents, value }: { accents: Accent[]; value: str
             {accents.filter((accent) => accent.region === region).map((accent) => <option key={accent.id} value={accent.id}>{accent.label}</option>)}
           </optgroup>
         ))}
+      </select>
+    </label>
+  );
+}
+
+export function InstructionTemplateSelect() {
+  return (
+    <label>Instruction template
+      <select name="instruction_template" defaultValue="">
+        <option value="">Keep the instructions below</option>
+        {PROMPT_TEMPLATES.map((template) => <option key={template.id} value={template.id}>{template.label}</option>)}
       </select>
     </label>
   );
