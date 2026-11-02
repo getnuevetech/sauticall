@@ -1,3 +1,4 @@
+import { spokenVoiceFor } from "./ai-choices.ts";
 import type { CapabilityStatus } from "./ai-virtual.ts";
 import type { RouteBinding } from "./ai-platform.ts";
 
@@ -12,8 +13,6 @@ export type EngineCandidate = {
   enabled: boolean;
   hasSecret: boolean;
 };
-
-const OPENAI_VOICES = new Set(["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"]);
 
 export function matchRealtimeProtocol(engine: EngineCandidate): RealtimeProtocol {
   if (!engine.enabled || !engine.hasSecret) return "";
@@ -34,8 +33,21 @@ export function selectRealtimeEngine(engines: EngineCandidate[]) {
 }
 
 export function spokenVoice(label: string) {
-  const voice = label.trim().toLowerCase();
-  return OPENAI_VOICES.has(voice) ? voice : "alloy";
+  return spokenVoiceFor(label);
+}
+
+export function transferDestination(args: string, allowed: readonly string[]) {
+  let raw = "";
+  try {
+    raw = String((JSON.parse(args) as { destination?: string }).destination || "");
+  } catch {
+    raw = args;
+  }
+  const value = raw.trim();
+  if (allowed.includes(value)) return value;
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return "";
+  return allowed.find((item) => item === digits || item.replace(/\D/g, "") === digits) || "";
 }
 
 export function fallbackExtension(label: string) {
@@ -241,14 +253,18 @@ export function greetingResponse(greeting: string) {
   };
 }
 
-export type TalkState = { active: string; greetingOpen: boolean; dropped: string[] };
+export type TalkState = { active: string; greetingOpen: boolean; dropped: string[]; holding: boolean };
 
 export function freshTalk(): TalkState {
-  return { active: "", greetingOpen: true, dropped: [] };
+  return { active: "", greetingOpen: true, dropped: [], holding: false };
 }
 
-export function stepTalk(state: TalkState, event: { type: "response_started"; id: string } | { type: "response_finished"; id: string } | { type: "audio"; id: string } | { type: "caller_spoke" }) {
-  const idle = { play: false, cancel: "", forwardCaller: !state.greetingOpen, clearPlayback: false };
+export function stepTalk(state: TalkState, event: { type: "response_started"; id: string } | { type: "response_finished"; id: string } | { type: "audio"; id: string } | { type: "caller_spoke" } | { type: "transfer" }) {
+  const idle = { play: false, cancel: "", forwardCaller: !state.greetingOpen && !state.holding, clearPlayback: false };
+  if (event.type === "transfer") {
+    return { state: { ...state, active: "", greetingOpen: false, holding: true }, ...idle, cancel: state.active, forwardCaller: false, clearPlayback: true };
+  }
+  if (state.holding) return { state, ...idle, forwardCaller: false };
   if (event.type === "response_started") {
     const id = event.id || "current";
     if (id === state.active) return { state, ...idle };
@@ -296,11 +312,15 @@ export function realtimeSocketUrl(protocol: "openai" | "xai", model: string) {
 }
 
 export function realtimeSessionUpdate(input: { instructions: string; voice: string; transfers: string[] }) {
+  const transfers = input.transfers.map((item) => item.trim()).filter(Boolean).slice(0, 40);
+  const destination = transfers.length
+    ? { type: "string", enum: transfers }
+    : { type: "string" };
   return {
     type: "session.update",
     session: {
       type: "realtime",
-      instructions: input.instructions,
+      instructions: `${input.instructions}\n\nWhen the caller asks for a person, department, or extension, call transfer_to_approved_destination immediately and stop talking. Do not explain the transfer first.`,
       audio: {
         input: { format: { type: "audio/pcm", rate: 24000 }, turn_detection: { type: "server_vad" } },
         output: { format: { type: "audio/pcm", rate: 24000 }, voice: input.voice },
@@ -309,8 +329,8 @@ export function realtimeSessionUpdate(input: { instructions: string; voice: stri
         {
           type: "function",
           name: "transfer_to_approved_destination",
-          description: `Transfer only to one of these extensions: ${input.transfers.join(", ") || "none"}.`,
-          parameters: { type: "object", properties: { destination: { type: "string" } }, required: ["destination"] },
+          description: "Transfer the caller right now. Do not speak before this tool. Use one listed extension.",
+          parameters: { type: "object", properties: { destination }, required: ["destination"] },
         },
         {
           type: "function",

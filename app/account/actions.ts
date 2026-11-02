@@ -563,9 +563,10 @@ export async function saveDepartmentName(formData: FormData) {
 export async function savePhoneHours(formData: FormData) {
   const user = await currentUser();
   if (!user) redirect("/account/login");
-  const open = String(formData.get("open_time") || "09:00").slice(0, 5);
-  const close = String(formData.get("close_time") || "17:00").slice(0, 5);
-  if (!/^\d{2}:\d{2}$/.test(open) || !/^\d{2}:\d{2}$/.test(close)) redirect("/account/phone?error=Use%20hours%20like%2009%3A00.");
+  const { isOfficeTime } = await import("@/lib/ai-choices");
+  const open = String(formData.get("open_time") || "");
+  const close = String(formData.get("close_time") || "");
+  if (!isOfficeTime(open) || !isOfficeTime(close)) redirect("/account/phone?error=Choose%20an%20opening%20time%20and%20a%20closing%20time.");
   const { paidPlan: hoursPlan } = await import("@/lib/pbx");
   const { planAllows: hoursAllowed } = await import("@/lib/plan-features");
   const hoursSubscription = hoursPlan(user.id);

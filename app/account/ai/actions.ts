@@ -7,6 +7,7 @@ import { guardAccount } from "@/lib/guard";
 import { NOTIFICATION_ACKS, knownSwitch } from "@/lib/ai-system";
 import { acceptAgreement, requestActivation, setCustomerEnabled } from "@/lib/ai-store";
 import { knownAccountAi } from "@/lib/ai-account";
+import { accentsForPlan, packOfficeHours, readOfficeHours } from "@/lib/ai-choices";
 import { accountAiPath } from "@/lib/ai-workspace";
 import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { paidPlan } from "@/lib/pbx";
@@ -25,6 +26,24 @@ function serviceOf(formData: FormData) {
 
 function nextOf(formData: FormData, fallback: string) {
   return accountAiPath(String(formData.get("next") || ""), fallback);
+}
+
+function transfersFrom(formData: FormData, allowed: Set<string>) {
+  return [...new Set(formData.getAll("transfers").flatMap((item) => String(item).split(",")).map((item) => item.trim()).filter((item) => allowed.has(item)))].slice(0, 20);
+}
+
+function hoursFrom(formData: FormData, allowed: Set<string>) {
+  const open = String(formData.get("open_time") || "");
+  const hours = open
+    ? packOfficeHours({
+      open,
+      close: String(formData.get("close_time") || ""),
+      action: String(formData.get("after_action") || ""),
+      target: String(formData.get("after_target") || ""),
+    })
+    : packOfficeHours(readOfficeHours(String(formData.get("after_hours") || "")));
+  if (hours.target && !allowed.has(hours.target)) hours.target = "";
+  return packOfficeHours(hours).packed;
 }
 
 export async function acceptAiTerms(formData: FormData) {
@@ -98,8 +117,19 @@ export async function createVirtualAgentForm(formData: FormData) {
   const next = nextOf(formData, "/account/ai");
   if (!feature || !planAllows(plan, feature)) redirect(`${next}${next.includes("?") ? "&" : "?"}error=${encodeURIComponent("That AI extension is not included on this plan.")}`);
   const { getDb } = await import("@/lib/db");
-  const { publishVirtualAgent, saveVirtualAgent, updateVirtualAgent } = await import("@/lib/ai-virtual-store");
+  const { listTransferTargets, publishVirtualAgent, saveVirtualAgent, updateVirtualAgent } = await import("@/lib/ai-virtual-store");
   const now = new Date().toISOString();
+  const targets = new Set(listTransferTargets(getDb(), user.id).map((item) => item.value));
+  const voice = {
+    language: String(formData.get("language") || "en-US"),
+    allowedTransfers: transfersFrom(formData, targets),
+    businessSummary: String(formData.get("business_summary") || ""),
+    tone: String(formData.get("tone") || ""),
+    voiceLabel: String(formData.get("voice") || ""),
+    afterHours: hoursFrom(formData, targets),
+    allowedVoices: accentsForPlan(plan),
+    multilingual: plan.multilingual,
+  };
   const name = String(formData.get("name") || "").trim();
   const existing = getDb().prepare("SELECT id, status FROM ai_agents WHERE user_id = ? AND name = ?").get(user.id, name) as { id: number; status: string } | undefined;
   if (existing && existing.status !== "DRAFT") {
@@ -112,12 +142,14 @@ export async function createVirtualAgentForm(formData: FormData) {
       greeting: String(formData.get("greeting") || ""),
       instructions: String(formData.get("instructions") || ""),
       did: String(formData.get("did") || ""),
-      language: String(formData.get("language") || "en-US"),
-      allowedTransfers: String(formData.get("transfers") || "").split(",").map((item) => item.trim()).filter(Boolean),
-      businessSummary: String(formData.get("business_summary") || ""),
-      tone: String(formData.get("tone") || ""),
-      voiceLabel: String(formData.get("voice") || ""),
-      afterHours: String(formData.get("after_hours") || ""),
+      language: voice.language,
+      allowedTransfers: voice.allowedTransfers,
+      businessSummary: voice.businessSummary,
+      tone: voice.tone,
+      voiceLabel: voice.voiceLabel,
+      afterHours: voice.afterHours,
+      allowedVoices: voice.allowedVoices,
+      multilingual: voice.multilingual,
       now,
     });
     if (!updated.ok) redirect(`${next}${next.includes("?") ? "&" : "?"}error=${encodeURIComponent(updated.message)}`);
@@ -131,12 +163,14 @@ export async function createVirtualAgentForm(formData: FormData) {
     greeting: String(formData.get("greeting") || ""),
     instructions: String(formData.get("instructions") || ""),
     did: String(formData.get("did") || ""),
-    language: String(formData.get("language") || "en-US"),
-    allowedTransfers: String(formData.get("transfers") || "").split(",").map((item) => item.trim()).filter(Boolean),
-    businessSummary: String(formData.get("business_summary") || ""),
-    tone: String(formData.get("tone") || ""),
-    voiceLabel: String(formData.get("voice") || ""),
-    afterHours: String(formData.get("after_hours") || ""),
+    language: voice.language,
+    allowedTransfers: voice.allowedTransfers,
+    businessSummary: voice.businessSummary,
+    tone: voice.tone,
+    voiceLabel: voice.voiceLabel,
+    afterHours: voice.afterHours,
+    allowedVoices: voice.allowedVoices,
+    multilingual: voice.multilingual,
     now,
   });
   if (!saved.ok) redirect(`${next}${next.includes("?") ? "&" : "?"}error=${encodeURIComponent(saved.message)}`);
@@ -152,12 +186,14 @@ export async function createVirtualAgentForm(formData: FormData) {
 
 export async function updateVirtualAgentForm(formData: FormData) {
   const user = await guardAccount();
-  if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
+  const plan = paidPlan(user.id);
+  if (!plan) redirect(PLAN_SETUP_PATH);
   const agentId = Number(formData.get("agent_id") || 0);
   const { getDb } = await import("@/lib/db");
-  const { updateVirtualAgent } = await import("@/lib/ai-virtual-store");
+  const { listTransferTargets, updateVirtualAgent } = await import("@/lib/ai-virtual-store");
   const tab = String(formData.get("tab") || "overview");
   const next = `/account/ai/extensions/${agentId}?tab=${encodeURIComponent(tab)}`;
+  const targets = new Set(listTransferTargets(getDb(), user.id).map((item) => item.value));
   const result = updateVirtualAgent(getDb(), {
     userId: user.id,
     agentId,
@@ -167,12 +203,14 @@ export async function updateVirtualAgentForm(formData: FormData) {
     greeting: String(formData.get("greeting") || ""),
     instructions: String(formData.get("instructions") || ""),
     did: String(formData.get("did") || ""),
-    language: "en-US",
-    allowedTransfers: String(formData.get("transfers") || "").split(",").map((item) => item.trim()).filter(Boolean),
+    language: String(formData.get("language") || "en-US"),
+    allowedTransfers: transfersFrom(formData, targets),
     businessSummary: String(formData.get("business_summary") || ""),
     tone: String(formData.get("tone") || ""),
     voiceLabel: String(formData.get("voice") || ""),
-    afterHours: String(formData.get("after_hours") || ""),
+    afterHours: hoursFrom(formData, targets),
+    allowedVoices: accentsForPlan(plan),
+    multilingual: plan.multilingual,
     now: new Date().toISOString(),
   });
   if (!result.ok) redirect(`${next}&error=${encodeURIComponent(result.message)}`);

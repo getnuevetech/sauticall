@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { createVirtualAgentForm } from "../actions";
 import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { systemsForPlan } from "@/lib/ai-account";
-import { customerAgentMessage, engineLabel } from "@/lib/ai-virtual";
+import { customerAgentMessage, engineLabel, listTransferTargets } from "@/lib/ai-virtual";
+import { AccentSelect, ChoiceSelect, GreetingSelect, HoursFields, ToneSelect, TransferFields } from "@/components/account/ClosedChoices";
+import { accentSelection, languagesForPlan } from "@/lib/ai-choices";
 import { listAccountAgents } from "@/lib/ai-virtual-store";
 import { guardAccount } from "@/lib/guard";
 import { paidPlan } from "@/lib/pbx";
@@ -18,6 +20,9 @@ export default async function AiExtensionsPage({ searchParams }: { searchParams:
   const choices = systemsForPlan(plan.features).filter((item) => item.included && (item.code === "receptionist" || item.code === "personal_assistant"));
   const agents = listAccountAgents(user.id);
   const numbers = getDb().prepare("SELECT did FROM phone_lines WHERE user_id = ? AND did != '' ORDER BY id").all(user.id) as { did: string }[];
+  const accents = accentSelection(plan);
+  const languages = languagesForPlan(Boolean(plan.multilingual));
+  const targets = listTransferTargets(getDb(), user.id);
   const requestId = crypto.randomUUID();
   return (
     <div className="workspace-page">
@@ -60,9 +65,13 @@ export default async function AiExtensionsPage({ searchParams }: { searchParams:
               {numbers.length === 0 ? <option value="">Buy a number first</option> : numbers.map((item) => <option key={item.did} value={item.did}>{item.did}</option>)}
             </select>
           </label>
-          <label>Greeting <input name="greeting" placeholder="Thank you for calling. How can I help you today?" /></label>
-          <label>Instructions <textarea name="instructions" rows={6} placeholder="Business hours, questions to ask, and who a caller may reach." /></label>
-          <label>Approved transfers <input name="transfers" placeholder="516, Main" /></label>
+          <ToneSelect value="professional" />
+          <ChoiceSelect label="Language" name="language" value={languages[0]?.id || "en-US"} options={languages.map((language) => ({ value: language.id, label: language.label }))} required />
+          <AccentSelect accents={accents} value={accents[0]?.id || ""} />
+          <GreetingSelect value="" />
+          <label>Instructions <textarea name="instructions" rows={6} placeholder="Questions to ask, and answers this receptionist may give." /></label>
+          <HoursFields stored="" targets={targets} />
+          <TransferFields targets={targets} selected={[]} />
           <p>A virtual AI endpoint will be prepared. No phone hardware is needed. Saving this does not move the live route and does not place a call.</p>
           <button className="ws-btn primary" type="submit" disabled={numbers.length === 0}>Save AI extension</button>
         </form>

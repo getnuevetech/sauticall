@@ -204,4 +204,42 @@ test("a saved receptionist can be edited without moving its phone route", () => 
     allowedTransfers: [],
     now,
   }).ok, false);
+  const hours = updateVirtualAgent(db, {
+    userId: 1,
+    agentId: saved.id,
+    name: "Angy",
+    agentType: "receptionist",
+    engine: "SAUTICALL_PROGRAMMABLE",
+    greeting: "thanks",
+    instructions: "We repair roofs.",
+    did: "9708430420",
+    language: "es-MX",
+    allowedTransfers: ["800"],
+    voiceLabel: "en-ng",
+    afterHours: "09:00|17:00|message|",
+    allowedVoices: ["en-ng"],
+    multilingual: true,
+    now,
+  });
+  assert.equal(hours.ok, true);
+  const voiced = db.prepare("SELECT voice_label, after_hours, greeting, language FROM ai_agents WHERE id = ?").get(saved.id) as { voice_label: string; after_hours: string; greeting: string; language: string };
+  assert.equal(voiced.voice_label, "en-ng");
+  assert.equal(voiced.after_hours, "09:00|17:00|message|");
+  assert.match(voiced.greeting, /Thank you for calling/);
+  assert.equal(voiced.language, "es-MX");
+  assert.equal(updateVirtualAgent(db, {
+    userId: 1,
+    agentId: saved.id,
+    name: "Angy",
+    agentType: "receptionist",
+    engine: "SAUTICALL_PROGRAMMABLE",
+    greeting: "thanks",
+    instructions: "",
+    did: "9708430420",
+    language: "en-US",
+    allowedTransfers: [],
+    voiceLabel: "en-za",
+    allowedVoices: ["en-ng"],
+    now,
+  }).ok, false);
 });

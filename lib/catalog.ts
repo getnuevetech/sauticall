@@ -53,6 +53,13 @@ export function planChanges(before: Plan | null, after: Plan): CatalogChange[] {
   push("Pricing note", before.note, after.note);
   push("Button label", before.ctaLabel, after.ctaLabel);
   push("Button link", before.ctaHref, after.ctaHref);
+  const beforeAccents = [...(before.accents || [])].sort().join(",");
+  const afterAccents = [...(after.accents || [])].sort().join(",");
+  if (beforeAccents !== afterAccents) {
+    const from = `${before.accents?.length || 0} selected`;
+    const to = `${after.accents?.length || 0} selected`;
+    changes.push({ label: "Accents", from, to: from === to ? `${to}, selection updated` : to });
+  }
   for (const feature of PLAN_FEATURES) {
     const was = before.features.includes(feature.key);
     const now = after.features.includes(feature.key);
@@ -99,6 +106,11 @@ export function planImpact(input: { before: Plan | null; after: Plan; subscriber
   }
   if (before.popular !== after.popular || before.desc !== after.desc || before.note !== after.note || before.ctaLabel !== after.ctaLabel || before.ctaHref !== after.ctaHref) {
     lines.push("The public pricing page updates when this is saved. The popular mark, description, note, and button do not change entitlements.");
+  }
+  const beforeAccents = [...(before.accents || [])].sort().join(",");
+  const afterAccents = [...(after.accents || [])].sort().join(",");
+  if (beforeAccents !== afterAccents) {
+    lines.push(`Customers on this plan can choose ${after.accents?.length || 0} accents the next time they edit the receptionist. A call already in progress keeps the accent it started with.`);
   }
   if (subscribers === 0 && before.name === after.name) lines.push("No paid customer is on this plan yet.");
   lines.push("This save does not fund a provider account or provision phone service.");

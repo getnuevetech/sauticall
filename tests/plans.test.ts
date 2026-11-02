@@ -38,3 +38,15 @@ test("saved checkbox plans stay as the admin left them", () => {
   assert.equal(solo.multilingual, false);
   assert.deepEqual(featureLabels(["ai", "queues"]), ["Call queues", "AI receptionist"]);
 });
+
+test("accent lists follow the plan until an admin sets them", () => {
+  const [solo, small, team, custom] = normalizePlans(defaultPlans);
+  assert.equal(solo.accents?.length, 0);
+  assert.ok((small.accents?.length || 0) > 0);
+  assert.ok((team.accents?.length || 0) > (small.accents?.length || 0));
+  assert.equal(custom.accents?.length, team.accents?.length);
+  const cleared = normalizePlans([{ ...defaultPlans[1], accents: [] }])[0];
+  assert.deepEqual(cleared.accents, []);
+  const one = normalizePlans([{ ...defaultPlans[1], accents: ["en-ng", "missing"] }])[0];
+  assert.deepEqual(one.accents, ["en-ng"]);
+});

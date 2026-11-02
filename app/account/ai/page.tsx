@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { createVirtualAgentForm } from "./actions";
 import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { systemsForPlan } from "@/lib/ai-account";
-import { customerAgentMessage, engineLabel } from "@/lib/ai-virtual";
+import { customerAgentMessage, engineLabel, listTransferTargets } from "@/lib/ai-virtual";
+import { AccentSelect, ChoiceSelect, GreetingSelect, HoursFields, ToneSelect, TransferFields } from "@/components/account/ClosedChoices";
+import { accentSelection, languagesForPlan } from "@/lib/ai-choices";
 import { listAccountAgents } from "@/lib/ai-virtual-store";
 import { AI_PLAN_FEATURE, activationState, featureReady } from "@/lib/ai-system";
 import { acceptedVersion, currentAgreement, enabledSwitchCodes, entitlementFor } from "@/lib/ai-store";
@@ -24,6 +26,9 @@ export default async function AccountAiPage({ searchParams }: { searchParams: Pr
   const systems = systemsForPlan(plan.features);
   const agents = listAccountAgents(user.id);
   const numbers = getDb().prepare("SELECT did FROM phone_lines WHERE user_id = ? AND did != '' ORDER BY id").all(user.id) as { did: string }[];
+  const accents = accentSelection(plan);
+  const languages = languagesForPlan(Boolean(plan.multilingual));
+  const targets = listTransferTargets(getDb(), user.id);
   const enabled = enabledSwitchCodes();
   const notice = aiSaveNotice(query.saved);
   const virtualChoices = systems.filter((item) => item.included && workspaceProfile(item.code).virtualDestination);
@@ -67,7 +72,7 @@ export default async function AccountAiPage({ searchParams }: { searchParams: Pr
           <li>SautiCall AI uses those instructions through a programmable route on 3CX. 3CX Native is created in 3CX, and the prompt stays here until 3CX confirms it.</li>
           <li>No desk phone or softphone is assigned. A normal extension is not created for the receptionist.</li>
           <li>The phone number keeps ringing the Main ring group. Saving this configuration does not move that route and does not place a call.</li>
-          <li>An internal call reaches the receptionist by dialing the existing 3CX Service Principal Client ID. The phone number stays on the ring group until that route is confirmed. This page does not place a call.</li>
+          <li>An outside caller reaches the receptionist by calling the phone number on the Service Principal. This page does not place a call.</li>
         </ol>
         {virtualChoices.length === 0 ? (
           <p>This plan does not include an AI receptionist. <Link className="text-link" href="/account/billing/plan">See plans</Link></p>
@@ -106,12 +111,13 @@ export default async function AccountAiPage({ searchParams }: { searchParams: Pr
                 </select>
               </label>
               <label>Business summary <textarea name="business_summary" rows={3} placeholder="What this company does, in words the receptionist may repeat." /></label>
-              <label>Tone <input name="tone" placeholder="Professional and brief" /></label>
-              <label>Voice <input name="voice" placeholder="Clear English" /></label>
-              <label>Greeting <input name="greeting" placeholder="Thank you for calling. How can I help you today?" /></label>
-              <label>Instructions <textarea name="instructions" rows={6} placeholder="Business hours, questions to ask, and who a caller may reach." /></label>
-              <label>After hours <input name="after_hours" placeholder="Take a message" /></label>
-              <label>Approved transfers <input name="transfers" placeholder="516, Main" /></label>
+              <ToneSelect value="professional" />
+              <ChoiceSelect label="Language" name="language" value={languages[0]?.id || "en-US"} options={languages.map((language) => ({ value: language.id, label: language.label }))} required />
+              <AccentSelect accents={accents} value={accents[0]?.id || ""} />
+              <GreetingSelect value="" />
+              <label>Instructions <textarea name="instructions" rows={6} placeholder="Questions to ask, and answers this receptionist may give." /></label>
+              <HoursFields stored="" targets={targets} />
+              <TransferFields targets={targets} selected={[]} />
               <p>Saving prepares the virtual destination. The live number stays on the ring group until 3CX certifies it.</p>
               <button className="ws-btn primary" type="submit" disabled={numbers.length === 0}>Save configuration</button>
             </form>

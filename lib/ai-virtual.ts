@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import type Database from "better-sqlite3";
+import { greetingText, officeHoursSpeech, packOfficeHours, readOfficeHours, storedLanguage, storedTone, storedVoice, toneLabel } from "./ai-choices.ts";
 import { previewConversation } from "./ai-platform.ts";
 
 export const AI_ENGINES = ["SAUTICALL_PROGRAMMABLE", "THREE_CX_NATIVE"] as const;
@@ -378,6 +379,8 @@ export function saveVirtualAgent(database: Database.Database, input: {
   tone?: string;
   voiceLabel?: string;
   afterHours?: string;
+  allowedVoices?: string[];
+  multilingual?: boolean;
   now: string;
 }) {
   ensureVirtualSchema(database);
@@ -385,12 +388,14 @@ export function saveVirtualAgent(database: Database.Database, input: {
   if (!knownEngine(input.engine)) return { ok: false as const, message: "Choose SautiCall AI or 3CX Native." };
   const name = input.name.trim().slice(0, 80);
   if (!name) return { ok: false as const, message: "Name this AI extension." };
+  const fields = receptionistFields(input);
+  if (!fields.ok) return fields;
   const compiled = compileAgentPrompt({
     agentType: input.agentType,
     businessName: name,
-    greeting: input.greeting,
+    greeting: fields.greeting,
     instructions: input.instructions,
-    language: input.language || "en-US",
+    language: fields.language,
     allowedTransfers: input.allowedTransfers,
     fallback: ringLabel(database, input.userId) || "ring group",
   });
@@ -401,13 +406,13 @@ export function saveVirtualAgent(database: Database.Database, input: {
     database.prepare(
       `UPDATE ai_agents SET agent_type = ?, execution_engine = ?, language = ?, greeting = ?, instructions = ?, fallback_label = ?, did = ?, business_summary = ?, tone = ?, voice_label = ?, after_hours = ?, allowed_transfers = ?, updated_at = ?, config_revision = config_revision + 1
        WHERE id = ? AND user_id = ? AND status != 'ACTIVE'`,
-    ).run(input.agentType, input.engine, input.language || "en-US", input.greeting.trim().slice(0, 1500), input.instructions.trim().slice(0, 4000), ringLabel(database, input.userId), did, (input.businessSummary || "").trim().slice(0, 1500), (input.tone || "").trim().slice(0, 40), (input.voiceLabel || "").trim().slice(0, 40), (input.afterHours || "").trim().slice(0, 200), input.allowedTransfers.join(", ").slice(0, 200), input.now, existing.id, input.userId);
+    ).run(input.agentType, input.engine, fields.language, fields.greeting, input.instructions.trim().slice(0, 4000), ringLabel(database, input.userId), did, (input.businessSummary || "").trim().slice(0, 1500), fields.tone, fields.voice, fields.afterHours, input.allowedTransfers.join(", ").slice(0, 200), input.now, existing.id, input.userId);
     return { ok: true as const, id: existing.id, agentType: input.agentType as AiAgentType, engine: input.engine as AiEngine };
   }
   const info = database.prepare(
     `INSERT INTO ai_agents (user_id, name, agent_type, execution_engine, status, language, greeting, instructions, fallback_label, did, business_summary, tone, voice_label, after_hours, allowed_transfers, created_at, updated_at)
      VALUES (?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(input.userId, name, input.agentType, input.engine, input.language || "en-US", input.greeting.trim().slice(0, 1500), input.instructions.trim().slice(0, 4000), ringLabel(database, input.userId), did, (input.businessSummary || "").trim().slice(0, 1500), (input.tone || "").trim().slice(0, 40), (input.voiceLabel || "").trim().slice(0, 40), (input.afterHours || "").trim().slice(0, 200), input.allowedTransfers.join(", ").slice(0, 200), input.now, input.now);
+  ).run(input.userId, name, input.agentType, input.engine, fields.language, fields.greeting, input.instructions.trim().slice(0, 4000), ringLabel(database, input.userId), did, (input.businessSummary || "").trim().slice(0, 1500), fields.tone, fields.voice, fields.afterHours, input.allowedTransfers.join(", ").slice(0, 200), input.now, input.now);
   return { ok: true as const, id: Number(info.lastInsertRowid), agentType: input.agentType as AiAgentType, engine: input.engine as AiEngine };
 }
 
@@ -482,9 +487,36 @@ function promptNotes(input: { instructions: string; businessSummary: string; ton
   return [
     input.instructions.trim(),
     input.businessSummary.trim() ? `Business summary: ${input.businessSummary.trim()}` : "",
-    input.tone.trim() ? `Tone: ${input.tone.trim()}` : "",
-    input.afterHours.trim() ? `After hours: ${input.afterHours.trim()}` : "",
+    `Tone: ${toneLabel(input.tone)}`,
+    officeHoursSpeech(input.afterHours),
   ].filter(Boolean).join("\n");
+}
+
+function receptionistFields(input: { voiceLabel?: string; tone?: string; language?: string; greeting: string; afterHours?: string; allowedVoices?: string[]; multilingual?: boolean }) {
+  const voice = storedVoice(input.voiceLabel || "", input.allowedVoices);
+  if (!voice.ok) return voice;
+  const hours = packOfficeHours(readOfficeHours(input.afterHours || ""));
+  return {
+    ok: true as const,
+    voice: voice.voice,
+    tone: storedTone(input.tone || ""),
+    language: storedLanguage(input.language || "en-US", Boolean(input.multilingual)),
+    greeting: greetingText(input.greeting).slice(0, 1500),
+    afterHours: hours.packed,
+  };
+}
+
+export function listTransferTargets(database: Database.Database, userId: number) {
+  const people = database.prepare(
+    "SELECT number, first_name, last_name FROM pbx_extensions WHERE user_id = ? AND status != 'removed' AND ai_role != 'receptionist' AND number != '' ORDER BY number",
+  ).all(userId) as { number: string; first_name: string; last_name: string }[];
+  const groups = database.prepare(
+    "SELECT number, name FROM call_groups WHERE user_id = ? AND number != '' AND status != 'removed' ORDER BY number",
+  ).all(userId) as { number: string; name: string }[];
+  return [
+    ...people.map((person) => ({ value: person.number, label: `${`${person.first_name} ${person.last_name}`.trim() || "Extension"} · ${person.number}` })),
+    ...groups.map((group) => ({ value: group.number, label: `${group.name || "Ring group"} · ${group.number}` })),
+  ];
 }
 
 export function updateVirtualAgent(database: Database.Database, input: {
@@ -502,6 +534,8 @@ export function updateVirtualAgent(database: Database.Database, input: {
   tone?: string;
   voiceLabel?: string;
   afterHours?: string;
+  allowedVoices?: string[];
+  multilingual?: boolean;
   now: string;
 }) {
   ensureVirtualSchema(database);
@@ -519,17 +553,19 @@ export function updateVirtualAgent(database: Database.Database, input: {
   if (assigned) return { ok: false as const, message: "That phone number is already saved on another AI extension." };
   const transfers = input.allowedTransfers.map((item) => item.trim()).filter(Boolean).slice(0, 20);
   const summary = (input.businessSummary || "").trim().slice(0, 1500);
-  const tone = (input.tone || "").trim().slice(0, 40);
-  const voice = (input.voiceLabel || "").trim().slice(0, 40);
-  const afterHours = (input.afterHours || "").trim().slice(0, 200);
-  const greeting = input.greeting.trim().slice(0, 1500);
+  const fields = receptionistFields(input);
+  if (!fields.ok) return fields;
+  const tone = fields.tone;
+  const voice = fields.voice;
+  const afterHours = fields.afterHours;
+  const greeting = fields.greeting;
   const instructions = input.instructions.trim().slice(0, 4000);
   const compiled = compileAgentPrompt({
     agentType: input.agentType,
     businessName: name,
     greeting,
     instructions: promptNotes({ instructions, businessSummary: summary, tone, afterHours }),
-    language: input.language || "en-US",
+    language: fields.language,
     allowedTransfers: transfers,
     fallback: ringLabel(database, input.userId) || "ring group",
   });
@@ -542,7 +578,7 @@ export function updateVirtualAgent(database: Database.Database, input: {
     database.prepare(
       `UPDATE ai_agents SET name = ?, agent_type = ?, execution_engine = ?, language = ?, greeting = ?, instructions = ?, fallback_label = ?, did = ?, business_summary = ?, tone = ?, voice_label = ?, after_hours = ?, allowed_transfers = ?, prompt_sync = ?, updated_at = ?, config_revision = config_revision + 1
        WHERE id = ? AND user_id = ?`,
-    ).run(name, input.agentType, input.engine, input.language || "en-US", greeting, instructions, ringLabel(database, input.userId), did, summary, tone, voice, afterHours, transfers.join(", ").slice(0, 200), promptSync, input.now, current.id, input.userId);
+    ).run(name, input.agentType, input.engine, fields.language, greeting, instructions, ringLabel(database, input.userId), did, summary, tone, voice, afterHours, transfers.join(", ").slice(0, 200), promptSync, input.now, current.id, input.userId);
     const version = database.prepare(
       "INSERT INTO ai_prompt_publications (user_id, agent_id, compiled, compiled_hash, status, created_at) VALUES (?, ?, ?, ?, 'published', ?)",
     ).run(input.userId, current.id, compiled.compiled, compiled.compiledHash, input.now);

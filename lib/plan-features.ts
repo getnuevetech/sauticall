@@ -1,3 +1,4 @@
+import { accentsForPlan } from "./ai-choices.ts";
 import type { Plan } from "./types";
 
 export const PLAN_FEATURES = [
@@ -105,6 +106,7 @@ export function normalizePlans(plans: Plan[]) {
       seats,
       features,
       multilingual: features.includes("ai_any_language"),
+      accents: accentsForPlan({ features, custom, accents: plan.accents }),
       base: false,
       includedMinutes: Math.max(0, Math.round(Number(plan.includedMinutes) || 0)),
       carrierCredit: Math.max(0, Math.round((Number(plan.carrierCredit) || 0) * 100) / 100),

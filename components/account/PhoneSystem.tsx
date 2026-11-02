@@ -6,6 +6,7 @@ import { addPerson, removePerson, saveDepartmentName, savePerson, savePhoneHours
 import { chooseDaytimeGroup, createQueue, createRingGroup, deleteCallGroup } from "@/app/account/desk-actions";
 import { AppPassword } from "./AppPassword";
 import { clockLabel, extensionSetup, personInitials } from "@/lib/account-display";
+import { nearestOfficeTime, OFFICE_TIMES, officeTimeLabel } from "@/lib/ai-choices";
 import { Icon } from "@/components/Icon";
 
 type Person = { id: number; number: string; first: string; last: string; email: string; status: string; welcome: string; aiRole: string; aiName: string };
@@ -302,8 +303,16 @@ export function PhoneSystem({
               <h2>Call routing & hours</h2>
               {allowHours ? (
                 <form action={savePhoneHours} className="pbx-hours">
-                  <label>Opens <input name="open_time" type="time" defaultValue={hoursOpen || "09:00"} required /></label>
-                  <label>Closes <input name="close_time" type="time" defaultValue={hoursClose || "17:00"} required /></label>
+                  <label>Opens
+                    <select name="open_time" defaultValue={nearestOfficeTime(hoursOpen || "09:00")} required>
+                      {OFFICE_TIMES.map((time) => <option key={time} value={time}>{officeTimeLabel(time)}</option>)}
+                    </select>
+                  </label>
+                  <label>Closes
+                    <select name="close_time" defaultValue={nearestOfficeTime(hoursClose || "17:00")} required>
+                      {OFFICE_TIMES.map((time) => <option key={time} value={time}>{officeTimeLabel(time)}</option>)}
+                    </select>
+                  </label>
                   <button className="ws-btn primary" type="submit">Save hours</button>
                 </form>
               ) : <p>Business hours are not included on {planName}.</p>}
