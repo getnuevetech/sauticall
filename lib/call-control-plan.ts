@@ -90,9 +90,11 @@ export function transferAttempts(choice: Pick<TransferChoice, "number" | "kind">
 
 export function transferCanRetry(failure: string, tried: string, next: string) {
   if (!next || next === tried) return false;
+  if (/partyconnectionlost|\bgone\b/i.test(failure)) return false;
   if (/\b(400|422)\b/.test(failure)) return true;
   const missing = /\b424\b/.test(failure) || /doesnt exist/i.test(failure);
-  return missing && tried.includes(".") && !next.includes(".");
+  if (!missing) return false;
+  return tried.includes(".") !== next.includes(".");
 }
 
 export function transferFailureText(error: unknown) {
@@ -367,6 +369,7 @@ export function providerSetupAction(state: ProviderSetup, event: "session_update
 
 export function transferFailureLine(failure: string, who: string) {
   const name = who.trim() || "That extension";
+  if (/partyconnectionlost|\bgone\b/i.test(failure)) return `${name} is not available right now. I can take a message, try another person, or let you go.`;
   if (/doesnt exist/i.test(failure)) return `${name} is not available. That extension is not on the phone system. I can take a message, try another person, or let you go.`;
   if (/busy/i.test(failure)) return `${name} is busy right now. I can take a message, try another person, or let you go.`;
   if (/not registered|unregister/i.test(failure)) return `${name} is not at the phone. I can take a message, try another person, or let you go.`;

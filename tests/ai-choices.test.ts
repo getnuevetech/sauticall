@@ -38,6 +38,8 @@ test("office hours are two times and a chosen after-hours action", () => {
   assert.match(speakingDirections({ voiceLabel: "en-ng", language: "en-NG", afterHours: hours.packed }), /Nigerian/);
   assert.match(speakingDirections({ voiceLabel: "en-ng", language: "en-NG", afterHours: hours.packed }), /immediately/);
   const receptionist = promptTemplateText("receptionist");
+  assert.match(promptTemplateText("general_business"), /transfer immediately/);
+  assert.match(promptTemplateText("after_hours"), /office is closed/);
   assert.match(receptionist, /not available/);
   assert.match(receptionist, /take a message/);
   assert.equal(promptTemplateText("missing"), "");

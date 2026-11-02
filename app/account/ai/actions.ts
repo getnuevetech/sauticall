@@ -29,7 +29,9 @@ function nextOf(formData: FormData, fallback: string) {
 }
 
 function instructionsFrom(formData: FormData) {
-  return promptTemplateText(String(formData.get("instruction_template") || "")) || String(formData.get("instructions") || "");
+  const typed = String(formData.get("instructions") || "");
+  if (typed.trim()) return typed;
+  return promptTemplateText(String(formData.get("instruction_template") || "")) || typed;
 }
 
 function transfersFrom(formData: FormData, allowed: Set<string>) {

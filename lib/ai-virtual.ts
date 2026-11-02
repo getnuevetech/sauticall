@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import type Database from "better-sqlite3";
-import { genderLabel, greetingText, officeHoursSpeech, packOfficeHours, readOfficeHours, storedGender, storedLanguage, storedTone, storedVoice, toneLabel } from "./ai-choices.ts";
+import { PROMPT_TEMPLATES, genderLabel, greetingText, officeHoursSpeech, packOfficeHours, readOfficeHours, storedGender, storedLanguage, storedTone, storedVoice, toneLabel } from "./ai-choices.ts";
 import { previewConversation } from "./ai-platform.ts";
 
 export const AI_ENGINES = ["SAUTICALL_PROGRAMMABLE", "THREE_CX_NATIVE"] as const;
@@ -285,8 +285,11 @@ export function ensureVirtualSchema(database: Database.Database) {
   if (agentCols.size && !agentCols.has("allowed_transfers")) database.exec("ALTER TABLE ai_agents ADD COLUMN allowed_transfers TEXT NOT NULL DEFAULT ''");
   if (agentCols.size && !agentCols.has("voice_gender")) database.exec("ALTER TABLE ai_agents ADD COLUMN voice_gender TEXT NOT NULL DEFAULT ''");
   const template = database.prepare("INSERT INTO ai_prompt_templates (code, role, industry, language, body, published) VALUES (?, 'receptionist', ?, 'en-US', ?, 1) ON CONFLICT(code) DO NOTHING");
-  template.run("general_business", "General business", "Greeting: Thank you for calling. Ask the caller's name and reason. Answer only from approved company information. Offer an approved person when asked.");
-  template.run("after_hours", "After hours", "Greeting: Thank you for calling. The office is closed. Take a message or offer the after-hours destination. Do not promise a callback time that is not in the saved hours.");
+  const fillTemplate = database.prepare("UPDATE ai_prompt_templates SET body = ? WHERE code = ? AND trim(body) = ''");
+  for (const item of PROMPT_TEMPLATES) {
+    template.run(item.id, item.label, item.text);
+    fillTemplate.run(item.text, item.id);
+  }
   const insert = database.prepare("INSERT INTO pbx_capabilities (capability, status, observed_build, verified_at, evidence) VALUES (?, 'unverified', '', '', '') ON CONFLICT(capability) DO NOTHING");
   for (const capability of VIRTUAL_CAPABILITIES) insert.run(capability);
   relaxSessionMedia(database);

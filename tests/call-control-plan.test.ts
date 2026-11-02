@@ -169,7 +169,8 @@ test("provider audio is converted and tool calls stay explicit", () => {
   assert.deepEqual(transferAttempts({ number: "528", kind: "extension" }), ["528", "Extension.528."]);
   const missing = "3CX transfer returned 424 {\"finalstatus\":\"Rejected\",\"reason\":\"NotSpecified\",\"result\":null,\"reasontext\":\"Doesnt exist\"}";
   assert.equal(transferCanRetry(missing, "Extension.528.", "528"), true);
-  assert.equal(transferCanRetry(missing, "528", "Extension.528."), false);
+  assert.equal(transferCanRetry(missing, "528", "Extension.528."), true);
+  assert.equal(transferCanRetry("3CX transfer returned 424 {\"reason\":\"PartyConnectionLost\",\"reasontext\":\"Gone\"}", "539", "Extension.539."), false);
   assert.equal(transferCanRetry("3CX transfer returned 422", "528", "Extension.528."), true);
   assert.equal(transferCanRetry("3CX transfer returned 500", "528", "Extension.528."), false);
   const missingLine = transferFailureLine(missing, "extension 528");

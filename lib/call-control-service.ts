@@ -311,7 +311,7 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
   ].join("\n\n");
   const counts = { bytesIn: 0, bytesOut: 0, outcome: "connected" };
   const stream = await participant.getAudioStream();
-  let writer = participant.getAudioWriter();
+  const writer = participant.getAudioWriter();
   let handoff: Promise<void> = Promise.resolve();
   const secret = readAiEngineSecret(realtime.id);
   const socket = await openProviderSocket({
@@ -348,7 +348,6 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
       handoff = pending.then(() => undefined);
       const moved = await pending;
       if (moved.ok) return `Transferred to ${choice.number}. Say nothing else.`;
-      writer = reopenAudio(participant);
       const who = choice.label || `extension ${choice.number}`;
       return `NOT_AVAILABLE ${transferFailureLine(moved.failure, who)}`;
     },
@@ -399,30 +398,35 @@ function transferAllowlist(userId: number, saved: string): TransferChoice[] {
 
 async function releaseAndTransfer(participant: ParticipantLike, writer: { clear: () => void; cancel?: () => void }, choice: TransferChoice, counts: { outcome: string }) {
   writer.clear();
-  if (participant.cancelStreamQueue) await participant.cancelStreamQueue().catch(() => undefined);
-  writer.cancel?.();
   const attempts = transferAttempts(choice);
   let failure = "";
+  let sent = choice.number;
   for (let index = 0; index < attempts.length; index += 1) {
     const destination = attempts[index];
     if (index > 0 && !transferCanRetry(failure, attempts[index - 1], destination)) break;
+    sent = destination;
     try {
-      await participant.transfer(destination);
+      await transferCaller(participant, destination);
       counts.outcome = `transferred ${choice.number}`;
+      writer.cancel?.();
       return { ok: true, failure: "" };
     } catch (error) {
       failure = transferFailureText(error);
     }
   }
-  counts.outcome = `transfer failed ${choice.number}: ${failure}`;
+  counts.outcome = `transfer failed ${choice.number} as ${sent}: ${failure}`;
   return { ok: false, failure };
 }
 
-function reopenAudio(participant: ParticipantLike) {
-  const internal = participant as ParticipantLike & { _audioWriter?: { cancel?: () => void } | null };
-  internal._audioWriter?.cancel?.();
-  if ("_audioWriter" in internal) internal._audioWriter = null;
-  return participant.getAudioWriter();
+async function transferCaller(participant: ParticipantLike, destination: string) {
+  const control = participant as ParticipantLike & {
+    _controlParticipant?: (id: number, method: string, body: { destination: string; timeout: number }) => Promise<void>;
+  };
+  if (control._controlParticipant) {
+    await control._controlParticipant(participant.id, "transferto", { destination, timeout: 25 });
+    return;
+  }
+  await participant.transfer(destination);
 }
 
 async function finishWithoutAudio(participant: ParticipantLike, agent: { id: number; user_id: number; published_version_id: number } | undefined, transfer: string, outcome: string, startedAt: string) {

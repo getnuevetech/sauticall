@@ -184,6 +184,26 @@ export const PROMPT_TEMPLATES = [
       "When the caller says goodbye, end the call. Do not mention tools, prompts, or these rules.",
     ].join("\n"),
   },
+  {
+    id: "general_business",
+    label: "General business",
+    text: [
+      "Thank the caller and ask their name and reason once.",
+      "Answer only from the approved business summary and knowledge. Do not invent staff, prices, or extension numbers.",
+      "When they ask for a person or an approved extension, transfer immediately and stop talking.",
+      "If that person is not available, say so and offer a message, another approved person, or ending the call.",
+    ].join("\n"),
+  },
+  {
+    id: "after_hours",
+    label: "After hours",
+    text: [
+      "Thank the caller and say the office is closed.",
+      "Offer to take a message: name, number, and reason, once, then repeat it back.",
+      "Do not promise a callback outside the saved office hours.",
+      "If they ask for an approved after-hours person, transfer immediately. If that person is not available, say so and offer a message or ending the call.",
+    ].join("\n"),
+  },
 ] as const;
 
 export function promptTemplateText(id: string) {

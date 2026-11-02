@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { deleteVirtualAgentForm, pauseVirtualAgentForm, previewVirtualAgentForm, saveKnowledgeForm, updateVirtualAgentForm } from "../../actions";
 import { PLAN_SETUP_PATH } from "@/lib/account-start";
-import { customerAgentMessage, engineLabel, listAgentSessions, listKnowledge, listPromptTemplates, listTransferTargets } from "@/lib/ai-virtual";
+import { customerAgentMessage, engineLabel, listAgentSessions, listKnowledge, listTransferTargets } from "@/lib/ai-virtual";
 import { accountAgent, type VirtualAgent } from "@/lib/ai-virtual-store";
-import { AccentSelect, ChoiceSelect, GenderSelect, GreetingSelect, HoursFields, InstructionTemplateSelect, ToneSelect, TransferFields } from "@/components/account/ClosedChoices";
+import { InstructionScript } from "@/components/account/InstructionScript";
+import { AccentSelect, ChoiceSelect, GenderSelect, GreetingSelect, HoursFields, ToneSelect, TransferFields } from "@/components/account/ClosedChoices";
 import { accentSelection, languagesForPlan } from "@/lib/ai-choices";
 import { getDb } from "@/lib/db";
 import { guardAccount } from "@/lib/guard";
@@ -24,7 +25,6 @@ export default async function AiExtensionPage({ params, searchParams }: { params
   const numbers = getDb().prepare("SELECT did FROM phone_lines WHERE user_id = ? AND did != '' ORDER BY id").all(user.id) as { did: string }[];
   const knowledge = tab === "knowledge" || tab === "overview" ? listKnowledge(database, user.id, agent.id) : [];
   const sessions = tab === "calls" || tab === "test" ? listAgentSessions(database, user.id, agent.id) : [];
-  const templates = tab === "prompt" ? listPromptTemplates(database) : [];
   const plan = paidPlan(user.id);
   const accents = accentSelection(plan);
   const languages = languagesForPlan(Boolean(plan?.multilingual));
@@ -57,8 +57,6 @@ export default async function AiExtensionPage({ params, searchParams }: { params
       {tab === "prompt" ? (
         <article className="contact-form">
           <ReceptionistEditor agent={agent} numbers={numbers} tab="prompt" accents={accents} languages={languages} targets={targets} />
-          <h3>Templates</h3>
-          {templates.map((item) => <p key={item.code}><strong>{item.industry}.</strong> {item.body}</p>)}
         </article>
       ) : null}
       {tab === "knowledge" ? (
@@ -175,9 +173,7 @@ function ReceptionistEditor({ agent, numbers, tab, accents, languages, targets }
       {showVoice ? <GenderSelect value={agent.voice_gender} /> : null}
       {showVoice ? <AccentSelect accents={accents} value={agent.voice_label} /> : null}
       {showPrompt ? <GreetingSelect value={agent.greeting} /> : null}
-      {showPrompt ? <InstructionTemplateSelect /> : null}
-      {showPrompt ? <label>Instructions <textarea name="instructions" rows={6} defaultValue={agent.instructions} /></label> : null}
-      {showPrompt ? <p>Receptionist replaces the instructions with a short call script. It tells the caller when an extension is not available, then offers a message, another person, or ending the call.</p> : null}
+      {showPrompt ? <InstructionScript instructions={agent.instructions} /> : null}
       {showRoute ? <HoursFields stored={agent.after_hours} targets={targets} /> : null}
       {showRoute ? <TransferFields targets={targets} selected={transfers} /> : null}
       <p>Name, business summary, and instructions stay as text because they are the words this receptionist may use. Saving does not move the phone route, and no call is placed.</p>

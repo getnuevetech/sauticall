@@ -5,7 +5,8 @@ import { createVirtualAgentForm } from "./actions";
 import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { systemsForPlan } from "@/lib/ai-account";
 import { customerAgentMessage, engineLabel, listTransferTargets } from "@/lib/ai-virtual";
-import { AccentSelect, ChoiceSelect, GenderSelect, GreetingSelect, HoursFields, InstructionTemplateSelect, ToneSelect, TransferFields } from "@/components/account/ClosedChoices";
+import { InstructionScript } from "@/components/account/InstructionScript";
+import { AccentSelect, ChoiceSelect, GenderSelect, GreetingSelect, HoursFields, ToneSelect, TransferFields } from "@/components/account/ClosedChoices";
 import { accentSelection, languagesForPlan } from "@/lib/ai-choices";
 import { listAccountAgents } from "@/lib/ai-virtual-store";
 import { AI_PLAN_FEATURE, activationState, featureReady } from "@/lib/ai-system";
@@ -119,8 +120,7 @@ export default async function AccountAiPage({ searchParams }: { searchParams: Pr
               <GenderSelect value="neutral" />
               <AccentSelect accents={accents} value={accents[0]?.id || ""} />
               <GreetingSelect value="" />
-              <InstructionTemplateSelect />
-              <label>Instructions <textarea name="instructions" rows={6} placeholder="Questions to ask, and answers this receptionist may give." /></label>
+              <InstructionScript instructions="" />
               <HoursFields stored="" targets={targets} />
               <TransferFields targets={targets} selected={[]} />
               <p>Saving prepares the virtual destination. The live number stays on the ring group until 3CX certifies it.</p>
