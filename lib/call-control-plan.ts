@@ -82,6 +82,19 @@ export function pbxTransferDestination(number: string, kind: TransferChoice["kin
   return `Extension.${dn}.`;
 }
 
+export function transferAttempts(choice: Pick<TransferChoice, "number" | "kind">) {
+  const bare = choice.number.trim();
+  const typed = pbxTransferDestination(bare, choice.kind);
+  return typed === bare ? [bare] : [bare, typed];
+}
+
+export function transferCanRetry(failure: string, tried: string, next: string) {
+  if (!next || next === tried) return false;
+  if (/\b(400|422)\b/.test(failure)) return true;
+  const missing = /\b424\b/.test(failure) || /doesnt exist/i.test(failure);
+  return missing && tried.includes(".") && !next.includes(".");
+}
+
 export function transferFailureText(error: unknown) {
   if (error && typeof error === "object" && "response" in error) {
     const response = (error as { response?: { status?: number; data?: unknown } }).response;

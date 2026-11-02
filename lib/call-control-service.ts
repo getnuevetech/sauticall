@@ -19,9 +19,10 @@ import {
   realtimeSocketUrl,
   resolveProgrammableCall,
   selectRealtimeEngine,
-  pbxTransferDestination,
   spokenVoice,
   stepTalk,
+  transferAttempts,
+  transferCanRetry,
   transferChoice,
   transferChoices,
   transferDestination,
@@ -339,12 +340,11 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
       });
       if (!allowedTool.allowed) return allowedTool.reason;
       const choice = transferChoice(destination, allowed);
-      const moved = pbxTransferDestination(choice.number, choice.kind);
       counts.outcome = `transferring ${choice.number}`;
       writer.clear();
       writer.cancel?.();
       if (participant.cancelStreamQueue) await participant.cancelStreamQueue().catch(() => undefined);
-      handoff = moveCaller(participant, choice, moved, counts);
+      handoff = moveCaller(participant, choice, counts);
       return `Transferred to ${choice.number}. Say nothing else.`;
     },
   });
@@ -392,23 +392,21 @@ function transferAllowlist(userId: number, saved: string): TransferChoice[] {
   return chosen.length ? chosen : all;
 }
 
-async function moveCaller(participant: ParticipantLike, choice: TransferChoice, destination: string, counts: { outcome: string }) {
-  try {
-    await participant.transfer(destination);
-    counts.outcome = `transferred ${choice.number}`;
-  } catch (error) {
-    const failure = transferFailureText(error);
-    if (!/\b(400|404|422)\b/.test(failure) || destination === choice.number) {
-      counts.outcome = `transfer failed ${choice.number}: ${failure}`;
-      return;
-    }
+async function moveCaller(participant: ParticipantLike, choice: TransferChoice, counts: { outcome: string }) {
+  const attempts = transferAttempts(choice);
+  let failure = "";
+  for (let index = 0; index < attempts.length; index += 1) {
+    const destination = attempts[index];
+    if (index > 0 && !transferCanRetry(failure, attempts[index - 1], destination)) break;
     try {
-      await participant.transfer(choice.number);
+      await participant.transfer(destination);
       counts.outcome = `transferred ${choice.number}`;
-    } catch (second) {
-      counts.outcome = `transfer failed ${choice.number}: ${transferFailureText(second)}`;
+      return;
+    } catch (error) {
+      failure = transferFailureText(error);
     }
   }
+  counts.outcome = `transfer failed ${choice.number}: ${failure}`;
 }
 
 async function finishWithoutAudio(participant: ParticipantLike, agent: { id: number; user_id: number; published_version_id: number } | undefined, transfer: string, outcome: string, startedAt: string) {
