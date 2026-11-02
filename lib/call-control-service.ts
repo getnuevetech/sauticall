@@ -19,9 +19,14 @@ import {
   realtimeSocketUrl,
   resolveProgrammableCall,
   selectRealtimeEngine,
+  pbxTransferDestination,
   spokenVoice,
   stepTalk,
+  transferChoice,
+  transferChoices,
   transferDestination,
+  transferFailureText,
+  type TransferChoice,
   type RealtimeProtocol,
 } from "./call-control-plan.ts";
 import { getDb } from "./db.ts";
@@ -238,7 +243,8 @@ type ParticipantLike = {
   id: number;
   info: { party_did?: string | null; party_caller_id?: string | null };
   getAudioStream: () => Promise<NodeJS.ReadableStream>;
-  getAudioWriter: () => { write: (chunk: Buffer) => void; clear: () => void };
+  getAudioWriter: () => { write: (chunk: Buffer) => void; clear: () => void; cancel?: () => void };
+  cancelStreamQueue?: () => Promise<void>;
   transfer: (destination: string) => Promise<void>;
   drop: () => Promise<void>;
 };
@@ -286,6 +292,7 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
     return;
   }
   const allowed = transferAllowlist(agent.user_id, agent.allowed_transfers);
+  const directory = allowed.map((item) => item.label ? `${item.number} ${item.label}` : item.number).join(", ");
   const knowledge = getDb().prepare(
     "SELECT c.body FROM ai_knowledge_chunks c JOIN ai_knowledge_sources s ON s.id = c.source_id WHERE s.user_id = ? AND s.agent_id = ?",
   ).all(agent.user_id, agent.id) as { body: string }[];
@@ -295,11 +302,13 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
     "Say the opening sentence once, then wait. Do not repeat the greeting and do not start a second welcome.",
     `APPROVED KNOWLEDGE:\n${knowledge.map((item) => item.body).join("\n").slice(0, 6000) || agent.business_summary}`,
     speakingDirections({ voiceLabel: agent.voice_label, gender: agent.voice_gender, language: agent.language, afterHours: agent.after_hours }),
+    `Approved extensions: ${directory || "none"}. When the caller names one, call transfer_to_approved_destination with that extension number.`,
     "Do not place an outbound call. Transfer only through the approved tool.",
   ].join("\n\n");
   const counts = { bytesIn: 0, bytesOut: 0, outcome: "connected" };
   const stream = await participant.getAudioStream();
   const writer = participant.getAudioWriter();
+  let handoff: Promise<void> = Promise.resolve();
   const secret = readAiEngineSecret(realtime.id);
   const socket = await openProviderSocket({
     protocol: realtime.protocol,
@@ -326,13 +335,17 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
         sessionTenantId: agent.user_id,
         argumentTenantId: agent.user_id,
         destination,
-        allowedDestinations: allowed,
+        allowedDestinations: allowed.map((item) => item.number),
       });
       if (!allowedTool.allowed) return allowedTool.reason;
+      const choice = transferChoice(destination, allowed);
+      const moved = pbxTransferDestination(choice.number, choice.kind);
+      counts.outcome = `transferring ${choice.number}`;
       writer.clear();
-      await participant.transfer(destination);
-      counts.outcome = `transferred ${destination}`;
-      return `Transferred to ${destination}. Say nothing else.`;
+      writer.cancel?.();
+      if (participant.cancelStreamQueue) await participant.cancelStreamQueue().catch(() => undefined);
+      handoff = moveCaller(participant, choice, moved, counts);
+      return `Transferred to ${choice.number}. Say nothing else.`;
     },
   });
   registerStop(() => socket.stop());
@@ -345,6 +358,7 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
     stream.on("close", resolve);
     stream.on("error", resolve);
   });
+  await handoff;
   socket.stop();
   const sessionId = recordLiveSession(getDb(), {
     userId: agent.user_id,
@@ -362,14 +376,39 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
   }
 }
 
-function transferAllowlist(userId: number, saved: string) {
+function transferAllowlist(userId: number, saved: string): TransferChoice[] {
   const extensions = getDb().prepare(
-    "SELECT number FROM pbx_extensions WHERE user_id = ? AND status != 'removed' AND ai_role != 'receptionist' AND number != ''",
-  ).all(userId) as { number: string }[];
-  const groups = getDb().prepare("SELECT number FROM call_groups WHERE user_id = ? AND number != ''").all(userId) as { number: string }[];
-  const all = [...extensions, ...groups].map((row) => row.number);
-  const picked = saved.split(",").map((item) => item.trim()).filter((item) => all.includes(item));
-  return picked.length ? picked : all;
+    "SELECT number, first_name, last_name FROM pbx_extensions WHERE user_id = ? AND status != 'removed' AND ai_role != 'receptionist' AND number != ''",
+  ).all(userId) as { number: string; first_name: string; last_name: string }[];
+  const groups = getDb().prepare(
+    "SELECT number, name, kind FROM call_groups WHERE user_id = ? AND number != '' AND status != 'removed'",
+  ).all(userId) as { number: string; name: string; kind: string }[];
+  const all = transferChoices([
+    ...extensions.map((row) => ({ number: row.number, label: `${row.first_name} ${row.last_name}`.trim(), kind: "extension" as const })),
+    ...groups.map((row) => ({ number: row.number, label: row.name.trim(), kind: row.kind === "queue" ? "queue" as const : "ring" as const })),
+  ]);
+  const picked = saved.split(",").map((item) => item.trim()).filter(Boolean);
+  const chosen = picked.length ? all.filter((item) => picked.includes(item.number)) : all;
+  return chosen.length ? chosen : all;
+}
+
+async function moveCaller(participant: ParticipantLike, choice: TransferChoice, destination: string, counts: { outcome: string }) {
+  try {
+    await participant.transfer(destination);
+    counts.outcome = `transferred ${choice.number}`;
+  } catch (error) {
+    const failure = transferFailureText(error);
+    if (!/\b(400|404|422)\b/.test(failure) || destination === choice.number) {
+      counts.outcome = `transfer failed ${choice.number}: ${failure}`;
+      return;
+    }
+    try {
+      await participant.transfer(choice.number);
+      counts.outcome = `transferred ${choice.number}`;
+    } catch (second) {
+      counts.outcome = `transfer failed ${choice.number}: ${transferFailureText(second)}`;
+    }
+  }
 }
 
 async function finishWithoutAudio(participant: ParticipantLike, agent: { id: number; user_id: number; published_version_id: number } | undefined, transfer: string, outcome: string, startedAt: string) {
@@ -402,7 +441,7 @@ function openProviderSocket(input: {
   instructions: string;
   voice: string;
   greeting: string;
-  transfers: string[];
+  transfers: readonly (string | TransferChoice)[];
   onPcm: (pcm8k: Buffer) => void;
   onBargeIn: () => void;
   onTool: (name: string, args: string) => Promise<string>;

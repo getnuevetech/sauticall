@@ -40,7 +40,20 @@ export function fallbackVoice(protocol: "openai" | "xai") {
   return protocol === "xai" ? "eve" : "alloy";
 }
 
-export function transferDestination(args: string, allowed: readonly string[]) {
+export type TransferChoice = { number: string; label: string; kind: "extension" | "ring" | "queue" };
+
+export function transferChoices(allowed: readonly (string | TransferChoice)[]): TransferChoice[] {
+  const choices: TransferChoice[] = [];
+  for (const item of allowed) {
+    const choice = typeof item === "string" ? { number: item.trim(), label: "", kind: "extension" as const } : { number: item.number.trim(), label: item.label.trim(), kind: item.kind };
+    if (!choice.number || choices.some((existing) => existing.number === choice.number)) continue;
+    choices.push(choice);
+  }
+  return choices;
+}
+
+export function transferDestination(args: string, allowed: readonly (string | TransferChoice)[]) {
+  const choices = transferChoices(allowed);
   let raw = "";
   try {
     raw = String((JSON.parse(args) as { destination?: string }).destination || "");
@@ -48,10 +61,37 @@ export function transferDestination(args: string, allowed: readonly string[]) {
     raw = args;
   }
   const value = raw.trim();
-  if (allowed.includes(value)) return value;
+  const exact = choices.find((item) => item.number === value);
+  if (exact) return exact.number;
   const digits = value.replace(/\D/g, "");
-  if (!digits) return "";
-  return allowed.find((item) => item === digits || item.replace(/\D/g, "") === digits) || "";
+  const byNumber = digits ? choices.find((item) => item.number === digits || item.number.replace(/\D/g, "") === digits) : undefined;
+  if (byNumber) return byNumber.number;
+  const folded = value.toLowerCase();
+  const byLabel = choices.find((item) => item.label && folded.includes(item.label.toLowerCase()));
+  return byLabel?.number || "";
+}
+
+export function transferChoice(number: string, allowed: readonly (string | TransferChoice)[]) {
+  return transferChoices(allowed).find((item) => item.number === number) || { number, label: "", kind: "extension" as const };
+}
+
+export function pbxTransferDestination(number: string, kind: TransferChoice["kind"] = "extension") {
+  const dn = number.trim();
+  if (kind === "ring") return `RingGroup.${dn}.`;
+  if (kind === "queue") return `Queue.${dn}.`;
+  return `Extension.${dn}.`;
+}
+
+export function transferFailureText(error: unknown) {
+  if (error && typeof error === "object" && "response" in error) {
+    const response = (error as { response?: { status?: number; data?: unknown } }).response;
+    if (response) {
+      const detail = typeof response.data === "string" ? response.data : response.data ? JSON.stringify(response.data) : "";
+      return `3CX transfer returned ${response.status || 0}${detail ? ` ${detail}` : ""}`.replace(/\s+/g, " ").trim().slice(0, 240);
+    }
+  }
+  const message = error instanceof Error ? error.message : "Transfer failed.";
+  return message.replace(/\s+/g, " ").trim().slice(0, 240);
 }
 
 export function fallbackExtension(label: string) {
@@ -355,8 +395,8 @@ export function realtimeSocketUrl(protocol: "openai" | "xai", model: string) {
   return `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(chosen)}`;
 }
 
-export function realtimeSessionUpdate(input: { instructions: string; voice: string; transfers: string[]; protocol?: "openai" | "xai"; plain?: boolean }) {
-  const transfers = input.plain ? [] : input.transfers.map((item) => item.trim()).filter(Boolean).slice(0, 40);
+export function realtimeSessionUpdate(input: { instructions: string; voice: string; transfers: readonly (string | TransferChoice)[]; protocol?: "openai" | "xai"; plain?: boolean }) {
+  const transfers = input.plain ? [] : transferChoices(input.transfers).map((item) => item.number).slice(0, 40);
   const destination = transfers.length
     ? { type: "string", enum: transfers }
     : { type: "string" };
@@ -365,7 +405,7 @@ export function realtimeSessionUpdate(input: { instructions: string; voice: stri
     {
       type: "function",
       name: "transfer_to_approved_destination",
-      description: "Transfer the caller to one listed extension. Call this only when the caller asks for a person, department, or extension.",
+      description: "Transfer the caller now. destination is the extension number from the approved list. Call this only when the caller asks for a person, department, or extension.",
       parameters: { type: "object", properties: { destination }, required: ["destination"] },
     },
     {
