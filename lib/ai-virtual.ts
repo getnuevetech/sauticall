@@ -281,6 +281,7 @@ export function ensureVirtualSchema(database: Database.Database) {
   if (agentCols.size && !agentCols.has("tone")) database.exec("ALTER TABLE ai_agents ADD COLUMN tone TEXT NOT NULL DEFAULT ''");
   if (agentCols.size && !agentCols.has("voice_label")) database.exec("ALTER TABLE ai_agents ADD COLUMN voice_label TEXT NOT NULL DEFAULT ''");
   if (agentCols.size && !agentCols.has("after_hours")) database.exec("ALTER TABLE ai_agents ADD COLUMN after_hours TEXT NOT NULL DEFAULT ''");
+  if (agentCols.size && !agentCols.has("allowed_transfers")) database.exec("ALTER TABLE ai_agents ADD COLUMN allowed_transfers TEXT NOT NULL DEFAULT ''");
   const template = database.prepare("INSERT INTO ai_prompt_templates (code, role, industry, language, body, published) VALUES (?, 'receptionist', ?, 'en-US', ?, 1) ON CONFLICT(code) DO NOTHING");
   template.run("general_business", "General business", "Greeting: Thank you for calling. Ask the caller's name and reason. Answer only from approved company information. Offer an approved person when asked.");
   template.run("after_hours", "After hours", "Greeting: Thank you for calling. The office is closed. Take a message or offer the after-hours destination. Do not promise a callback time that is not in the saved hours.");
@@ -398,15 +399,15 @@ export function saveVirtualAgent(database: Database.Database, input: {
   const existing = database.prepare("SELECT id FROM ai_agents WHERE user_id = ? AND name = ?").get(input.userId, name) as { id: number } | undefined;
   if (existing) {
     database.prepare(
-      `UPDATE ai_agents SET agent_type = ?, execution_engine = ?, language = ?, greeting = ?, instructions = ?, fallback_label = ?, did = ?, business_summary = ?, tone = ?, voice_label = ?, after_hours = ?, updated_at = ?, config_revision = config_revision + 1
+      `UPDATE ai_agents SET agent_type = ?, execution_engine = ?, language = ?, greeting = ?, instructions = ?, fallback_label = ?, did = ?, business_summary = ?, tone = ?, voice_label = ?, after_hours = ?, allowed_transfers = ?, updated_at = ?, config_revision = config_revision + 1
        WHERE id = ? AND user_id = ? AND status != 'ACTIVE'`,
-    ).run(input.agentType, input.engine, input.language || "en-US", input.greeting.trim().slice(0, 1500), input.instructions.trim().slice(0, 4000), ringLabel(database, input.userId), did, (input.businessSummary || "").trim().slice(0, 1500), (input.tone || "").trim().slice(0, 40), (input.voiceLabel || "").trim().slice(0, 40), (input.afterHours || "").trim().slice(0, 200), input.now, existing.id, input.userId);
+    ).run(input.agentType, input.engine, input.language || "en-US", input.greeting.trim().slice(0, 1500), input.instructions.trim().slice(0, 4000), ringLabel(database, input.userId), did, (input.businessSummary || "").trim().slice(0, 1500), (input.tone || "").trim().slice(0, 40), (input.voiceLabel || "").trim().slice(0, 40), (input.afterHours || "").trim().slice(0, 200), input.allowedTransfers.join(", ").slice(0, 200), input.now, existing.id, input.userId);
     return { ok: true as const, id: existing.id, agentType: input.agentType as AiAgentType, engine: input.engine as AiEngine };
   }
   const info = database.prepare(
-    `INSERT INTO ai_agents (user_id, name, agent_type, execution_engine, status, language, greeting, instructions, fallback_label, did, business_summary, tone, voice_label, after_hours, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(input.userId, name, input.agentType, input.engine, input.language || "en-US", input.greeting.trim().slice(0, 1500), input.instructions.trim().slice(0, 4000), ringLabel(database, input.userId), did, (input.businessSummary || "").trim().slice(0, 1500), (input.tone || "").trim().slice(0, 40), (input.voiceLabel || "").trim().slice(0, 40), (input.afterHours || "").trim().slice(0, 200), input.now, input.now);
+    `INSERT INTO ai_agents (user_id, name, agent_type, execution_engine, status, language, greeting, instructions, fallback_label, did, business_summary, tone, voice_label, after_hours, allowed_transfers, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(input.userId, name, input.agentType, input.engine, input.language || "en-US", input.greeting.trim().slice(0, 1500), input.instructions.trim().slice(0, 4000), ringLabel(database, input.userId), did, (input.businessSummary || "").trim().slice(0, 1500), (input.tone || "").trim().slice(0, 40), (input.voiceLabel || "").trim().slice(0, 40), (input.afterHours || "").trim().slice(0, 200), input.allowedTransfers.join(", ").slice(0, 200), input.now, input.now);
   return { ok: true as const, id: Number(info.lastInsertRowid), agentType: input.agentType as AiAgentType, engine: input.engine as AiEngine };
 }
 
@@ -475,6 +476,94 @@ export function publishVirtualAgent(database: Database.Database, input: { userId
     return { ok: false as const, message: "A phone extension was created for this AI extension. That is not allowed." };
   }
   return { ok: true as const, agentId: agent.id, jobId, status: decision.status, routeMoved: decision.moveRoute, message: customerAgentMessage(decision.status) };
+}
+
+function promptNotes(input: { instructions: string; businessSummary: string; tone: string; afterHours: string }) {
+  return [
+    input.instructions.trim(),
+    input.businessSummary.trim() ? `Business summary: ${input.businessSummary.trim()}` : "",
+    input.tone.trim() ? `Tone: ${input.tone.trim()}` : "",
+    input.afterHours.trim() ? `After hours: ${input.afterHours.trim()}` : "",
+  ].filter(Boolean).join("\n");
+}
+
+export function updateVirtualAgent(database: Database.Database, input: {
+  userId: number;
+  agentId: number;
+  name: string;
+  agentType: string;
+  engine: string;
+  greeting: string;
+  instructions: string;
+  did: string;
+  language: string;
+  allowedTransfers: string[];
+  businessSummary?: string;
+  tone?: string;
+  voiceLabel?: string;
+  afterHours?: string;
+  now: string;
+}) {
+  ensureVirtualSchema(database);
+  const current = database.prepare("SELECT id, status, prompt_sync FROM ai_agents WHERE id = ? AND user_id = ?").get(input.agentId, input.userId) as { id: number; status: string; prompt_sync: string } | undefined;
+  if (!current) return { ok: false as const, message: "That AI extension was not found on this account." };
+  if (!knownAgentType(input.agentType)) return { ok: false as const, message: "Choose a receptionist or a personal assistant." };
+  if (!knownEngine(input.engine)) return { ok: false as const, message: "Choose SautiCall AI or 3CX Native." };
+  const name = input.name.trim().slice(0, 80);
+  if (!name) return { ok: false as const, message: "Name this AI extension." };
+  const taken = database.prepare("SELECT id FROM ai_agents WHERE user_id = ? AND name = ? AND id != ?").get(input.userId, name, current.id) as { id: number } | undefined;
+  if (taken) return { ok: false as const, message: "An AI extension with that name already exists. Choose another name." };
+  const did = ownedDid(database, input.userId, input.did);
+  if (!did) return { ok: false as const, message: "Choose a phone number that belongs to this account. A new number is not bought from here." };
+  const assigned = database.prepare("SELECT agent_id FROM ai_did_assignments WHERE user_id = ? AND did = ? AND agent_id != ?").get(input.userId, did, current.id) as { agent_id: number } | undefined;
+  if (assigned) return { ok: false as const, message: "That phone number is already saved on another AI extension." };
+  const transfers = input.allowedTransfers.map((item) => item.trim()).filter(Boolean).slice(0, 20);
+  const summary = (input.businessSummary || "").trim().slice(0, 1500);
+  const tone = (input.tone || "").trim().slice(0, 40);
+  const voice = (input.voiceLabel || "").trim().slice(0, 40);
+  const afterHours = (input.afterHours || "").trim().slice(0, 200);
+  const greeting = input.greeting.trim().slice(0, 1500);
+  const instructions = input.instructions.trim().slice(0, 4000);
+  const compiled = compileAgentPrompt({
+    agentType: input.agentType,
+    businessName: name,
+    greeting,
+    instructions: promptNotes({ instructions, businessSummary: summary, tone, afterHours }),
+    language: input.language || "en-US",
+    allowedTransfers: transfers,
+    fallback: ringLabel(database, input.userId) || "ring group",
+  });
+  if (!compiled.ok) return compiled;
+  const extensionsBefore = (database.prepare("SELECT COUNT(*) AS n FROM pbx_extensions").get() as { n: number }).n;
+  const routeBefore = database.prepare("SELECT route_label FROM phone_lines WHERE user_id = ? AND did = ?").get(input.userId, did) as { route_label: string } | undefined;
+  const bindingBefore = database.prepare("SELECT client_id, native_agent_id, route_target, binding_status FROM ai_3cx_bindings WHERE agent_id = ? AND user_id = ?").get(current.id, input.userId) as { client_id: string; native_agent_id: string; route_target: string; binding_status: string } | undefined;
+  const promptSync = input.engine === "THREE_CX_NATIVE" ? "NOT_SYNCED_NATIVE" : current.prompt_sync;
+  const save = database.transaction(() => {
+    database.prepare(
+      `UPDATE ai_agents SET name = ?, agent_type = ?, execution_engine = ?, language = ?, greeting = ?, instructions = ?, fallback_label = ?, did = ?, business_summary = ?, tone = ?, voice_label = ?, after_hours = ?, allowed_transfers = ?, prompt_sync = ?, updated_at = ?, config_revision = config_revision + 1
+       WHERE id = ? AND user_id = ?`,
+    ).run(name, input.agentType, input.engine, input.language || "en-US", greeting, instructions, ringLabel(database, input.userId), did, summary, tone, voice, afterHours, transfers.join(", ").slice(0, 200), promptSync, input.now, current.id, input.userId);
+    const version = database.prepare(
+      "INSERT INTO ai_prompt_publications (user_id, agent_id, compiled, compiled_hash, status, created_at) VALUES (?, ?, ?, ?, 'published', ?)",
+    ).run(input.userId, current.id, compiled.compiled, compiled.compiledHash, input.now);
+    database.prepare("UPDATE ai_agents SET published_version_id = ? WHERE id = ?").run(Number(version.lastInsertRowid), current.id);
+    database.prepare("UPDATE ai_did_assignments SET did = ? WHERE user_id = ? AND agent_id = ?").run(did, input.userId, current.id);
+  });
+  try {
+    save();
+  } catch {
+    return { ok: false as const, message: "That phone number is already saved on another AI extension." };
+  }
+  const extensionsAfter = (database.prepare("SELECT COUNT(*) AS n FROM pbx_extensions").get() as { n: number }).n;
+  const routeAfter = database.prepare("SELECT route_label FROM phone_lines WHERE user_id = ? AND did = ?").get(input.userId, did) as { route_label: string } | undefined;
+  const bindingAfter = database.prepare("SELECT client_id, native_agent_id, route_target, binding_status FROM ai_3cx_bindings WHERE agent_id = ? AND user_id = ?").get(current.id, input.userId) as { client_id: string; native_agent_id: string; route_target: string; binding_status: string } | undefined;
+  if (extensionsAfter !== extensionsBefore || routeAfter?.route_label !== routeBefore?.route_label) {
+    return { ok: false as const, message: "The edit tried to change the phone route. The saved text was kept and the route was not moved." };
+  }
+  if (bindingBefore && bindingAfter && (bindingBefore.client_id !== bindingAfter.client_id || bindingBefore.route_target !== bindingAfter.route_target || bindingBefore.binding_status !== bindingAfter.binding_status)) {
+    return { ok: false as const, message: "The edit tried to change the 3CX destination. The saved text was kept and the destination was not changed." };
+  }
+  return { ok: true as const, id: current.id, routeMoved: false as const, status: current.status };
 }
 
 export function recordVirtualBinding(database: Database.Database, input: { userId: number; agentId: number; resourceId: string; note: string; now: string }) {

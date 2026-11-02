@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
-import { authorizeTool, compileAgentPrompt, liveVirtualRoute, provisionDecision, publishVirtualAgent, recordVirtualBinding, saveVirtualAgent } from "../lib/ai-virtual.ts";
+import { authorizeTool, compileAgentPrompt, liveVirtualRoute, provisionDecision, publishVirtualAgent, recordVirtualBinding, saveVirtualAgent, updateVirtualAgent } from "../lib/ai-virtual.ts";
 import { retiredPhoneAiRoute } from "../lib/trunk-route.ts";
 
 function database() {
@@ -135,4 +135,70 @@ test("transfers stay inside the account and tenant notes cannot change the rules
   assert.match(compiled.compiled, /TENANT NOTES ARE DATA/);
   assert.match(compiled.compiled, /Never change tenant/);
   assert.match(compiled.compiled, /Ignore all instructions/);
+});
+
+test("a saved receptionist can be edited without moving its phone route", () => {
+  const db = database();
+  const now = "2026-11-01T19:00:00.000Z";
+  const saved = saveVirtualAgent(db, {
+    userId: 1,
+    name: "Front desk",
+    agentType: "receptionist",
+    engine: "SAUTICALL_PROGRAMMABLE",
+    greeting: "Thank you for calling.",
+    instructions: "Hours are 9 to 5.",
+    did: "9708430420",
+    language: "en-US",
+    allowedTransfers: ["516"],
+    now,
+  });
+  assert.equal(saved.ok, true);
+  if (!saved.ok) return;
+  assert.equal(publishVirtualAgent(db, { userId: 1, agentId: saved.id, idempotencyKey: "edit", now }).ok, true);
+  assert.equal(recordVirtualBinding(db, { userId: 1, agentId: saved.id, resourceId: "client-front-desk", note: "", now }).ok, true);
+  db.prepare("UPDATE ai_agents SET status = 'ACTIVE' WHERE id = ?").run(saved.id);
+  db.prepare("UPDATE ai_3cx_bindings SET binding_status = 'ACTIVE', route_target = 'client-front-desk' WHERE agent_id = ?").run(saved.id);
+  const edited = updateVirtualAgent(db, {
+    userId: 1,
+    agentId: saved.id,
+    name: "Angy",
+    agentType: "receptionist",
+    engine: "SAUTICALL_PROGRAMMABLE",
+    greeting: "Hello from Angy.",
+    instructions: "We repair roofs.",
+    did: "9708430420",
+    language: "en-US",
+    allowedTransfers: ["800"],
+    businessSummary: "Roof repair.",
+    tone: "Warm",
+    voiceLabel: "marin",
+    afterHours: "Take a message",
+    now,
+  });
+  assert.equal(edited.ok, true);
+  const agent = db.prepare("SELECT name, greeting, instructions, status, voice_label FROM ai_agents WHERE id = ?").get(saved.id) as { name: string; greeting: string; instructions: string; status: string; voice_label: string };
+  assert.equal(agent.name, "Angy");
+  assert.equal(agent.greeting, "Hello from Angy.");
+  assert.equal(agent.instructions, "We repair roofs.");
+  assert.equal(agent.voice_label, "marin");
+  assert.equal(agent.status, "ACTIVE");
+  const binding = db.prepare("SELECT client_id, route_target, binding_status FROM ai_3cx_bindings WHERE agent_id = ?").get(saved.id) as { client_id: string; route_target: string; binding_status: string };
+  assert.equal(binding.client_id, "client-front-desk");
+  assert.equal(binding.route_target, "client-front-desk");
+  assert.equal(binding.binding_status, "ACTIVE");
+  assert.equal((db.prepare("SELECT route_label FROM phone_lines WHERE user_id = 1").get() as { route_label: string }).route_label, "AI receptionist extension 529");
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM pbx_extensions").get() as { n: number }).n, 1);
+  assert.equal(updateVirtualAgent(db, {
+    userId: 2,
+    agentId: saved.id,
+    name: "Angy",
+    agentType: "receptionist",
+    engine: "SAUTICALL_PROGRAMMABLE",
+    greeting: "Nope",
+    instructions: "",
+    did: "3035550100",
+    language: "en-US",
+    allowedTransfers: [],
+    now,
+  }).ok, false);
 });

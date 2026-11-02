@@ -98,8 +98,31 @@ export async function createVirtualAgentForm(formData: FormData) {
   const next = nextOf(formData, "/account/ai");
   if (!feature || !planAllows(plan, feature)) redirect(`${next}${next.includes("?") ? "&" : "?"}error=${encodeURIComponent("That AI extension is not included on this plan.")}`);
   const { getDb } = await import("@/lib/db");
-  const { publishVirtualAgent, saveVirtualAgent } = await import("@/lib/ai-virtual-store");
+  const { publishVirtualAgent, saveVirtualAgent, updateVirtualAgent } = await import("@/lib/ai-virtual-store");
   const now = new Date().toISOString();
+  const name = String(formData.get("name") || "").trim();
+  const existing = getDb().prepare("SELECT id, status FROM ai_agents WHERE user_id = ? AND name = ?").get(user.id, name) as { id: number; status: string } | undefined;
+  if (existing && existing.status !== "DRAFT") {
+    const updated = updateVirtualAgent(getDb(), {
+      userId: user.id,
+      agentId: existing.id,
+      name,
+      agentType,
+      engine: String(formData.get("engine") || ""),
+      greeting: String(formData.get("greeting") || ""),
+      instructions: String(formData.get("instructions") || ""),
+      did: String(formData.get("did") || ""),
+      language: String(formData.get("language") || "en-US"),
+      allowedTransfers: String(formData.get("transfers") || "").split(",").map((item) => item.trim()).filter(Boolean),
+      businessSummary: String(formData.get("business_summary") || ""),
+      tone: String(formData.get("tone") || ""),
+      voiceLabel: String(formData.get("voice") || ""),
+      afterHours: String(formData.get("after_hours") || ""),
+      now,
+    });
+    if (!updated.ok) redirect(`${next}${next.includes("?") ? "&" : "?"}error=${encodeURIComponent(updated.message)}`);
+    redirect(`/account/ai/extensions/${existing.id}?saved=updated`);
+  }
   const saved = saveVirtualAgent(getDb(), {
     userId: user.id,
     name: String(formData.get("name") || ""),
@@ -125,6 +148,35 @@ export async function createVirtualAgentForm(formData: FormData) {
   });
   if (!published.ok) redirect(`${next}${next.includes("?") ? "&" : "?"}error=${encodeURIComponent(published.message)}`);
   redirect(`${next}${next.includes("?") ? "&" : "?"}saved=extension`);
+}
+
+export async function updateVirtualAgentForm(formData: FormData) {
+  const user = await guardAccount();
+  if (!paidPlan(user.id)) redirect(PLAN_SETUP_PATH);
+  const agentId = Number(formData.get("agent_id") || 0);
+  const { getDb } = await import("@/lib/db");
+  const { updateVirtualAgent } = await import("@/lib/ai-virtual-store");
+  const tab = String(formData.get("tab") || "overview");
+  const next = `/account/ai/extensions/${agentId}?tab=${encodeURIComponent(tab)}`;
+  const result = updateVirtualAgent(getDb(), {
+    userId: user.id,
+    agentId,
+    name: String(formData.get("name") || ""),
+    agentType: String(formData.get("agent_type") || ""),
+    engine: String(formData.get("engine") || ""),
+    greeting: String(formData.get("greeting") || ""),
+    instructions: String(formData.get("instructions") || ""),
+    did: String(formData.get("did") || ""),
+    language: "en-US",
+    allowedTransfers: String(formData.get("transfers") || "").split(",").map((item) => item.trim()).filter(Boolean),
+    businessSummary: String(formData.get("business_summary") || ""),
+    tone: String(formData.get("tone") || ""),
+    voiceLabel: String(formData.get("voice") || ""),
+    afterHours: String(formData.get("after_hours") || ""),
+    now: new Date().toISOString(),
+  });
+  if (!result.ok) redirect(`${next}&error=${encodeURIComponent(result.message)}`);
+  redirect(`${next}&saved=updated`);
 }
 
 export async function saveKnowledgeForm(formData: FormData) {
