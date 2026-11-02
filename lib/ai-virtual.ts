@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import type Database from "better-sqlite3";
-import { greetingText, officeHoursSpeech, packOfficeHours, readOfficeHours, storedLanguage, storedTone, storedVoice, toneLabel } from "./ai-choices.ts";
+import { genderLabel, greetingText, officeHoursSpeech, packOfficeHours, readOfficeHours, storedGender, storedLanguage, storedTone, storedVoice, toneLabel } from "./ai-choices.ts";
 import { previewConversation } from "./ai-platform.ts";
 
 export const AI_ENGINES = ["SAUTICALL_PROGRAMMABLE", "THREE_CX_NATIVE"] as const;
@@ -283,6 +283,7 @@ export function ensureVirtualSchema(database: Database.Database) {
   if (agentCols.size && !agentCols.has("voice_label")) database.exec("ALTER TABLE ai_agents ADD COLUMN voice_label TEXT NOT NULL DEFAULT ''");
   if (agentCols.size && !agentCols.has("after_hours")) database.exec("ALTER TABLE ai_agents ADD COLUMN after_hours TEXT NOT NULL DEFAULT ''");
   if (agentCols.size && !agentCols.has("allowed_transfers")) database.exec("ALTER TABLE ai_agents ADD COLUMN allowed_transfers TEXT NOT NULL DEFAULT ''");
+  if (agentCols.size && !agentCols.has("voice_gender")) database.exec("ALTER TABLE ai_agents ADD COLUMN voice_gender TEXT NOT NULL DEFAULT ''");
   const template = database.prepare("INSERT INTO ai_prompt_templates (code, role, industry, language, body, published) VALUES (?, 'receptionist', ?, 'en-US', ?, 1) ON CONFLICT(code) DO NOTHING");
   template.run("general_business", "General business", "Greeting: Thank you for calling. Ask the caller's name and reason. Answer only from approved company information. Offer an approved person when asked.");
   template.run("after_hours", "After hours", "Greeting: Thank you for calling. The office is closed. Take a message or offer the after-hours destination. Do not promise a callback time that is not in the saved hours.");
@@ -378,6 +379,7 @@ export function saveVirtualAgent(database: Database.Database, input: {
   businessSummary?: string;
   tone?: string;
   voiceLabel?: string;
+  gender?: string;
   afterHours?: string;
   allowedVoices?: string[];
   multilingual?: boolean;
@@ -404,15 +406,15 @@ export function saveVirtualAgent(database: Database.Database, input: {
   const existing = database.prepare("SELECT id FROM ai_agents WHERE user_id = ? AND name = ?").get(input.userId, name) as { id: number } | undefined;
   if (existing) {
     database.prepare(
-      `UPDATE ai_agents SET agent_type = ?, execution_engine = ?, language = ?, greeting = ?, instructions = ?, fallback_label = ?, did = ?, business_summary = ?, tone = ?, voice_label = ?, after_hours = ?, allowed_transfers = ?, updated_at = ?, config_revision = config_revision + 1
+      `UPDATE ai_agents SET agent_type = ?, execution_engine = ?, language = ?, greeting = ?, instructions = ?, fallback_label = ?, did = ?, business_summary = ?, tone = ?, voice_label = ?, voice_gender = ?, after_hours = ?, allowed_transfers = ?, updated_at = ?, config_revision = config_revision + 1
        WHERE id = ? AND user_id = ? AND status != 'ACTIVE'`,
-    ).run(input.agentType, input.engine, fields.language, fields.greeting, input.instructions.trim().slice(0, 4000), ringLabel(database, input.userId), did, (input.businessSummary || "").trim().slice(0, 1500), fields.tone, fields.voice, fields.afterHours, input.allowedTransfers.join(", ").slice(0, 200), input.now, existing.id, input.userId);
+    ).run(input.agentType, input.engine, fields.language, fields.greeting, input.instructions.trim().slice(0, 4000), ringLabel(database, input.userId), did, (input.businessSummary || "").trim().slice(0, 1500), fields.tone, fields.voice, fields.gender, fields.afterHours, input.allowedTransfers.join(", ").slice(0, 200), input.now, existing.id, input.userId);
     return { ok: true as const, id: existing.id, agentType: input.agentType as AiAgentType, engine: input.engine as AiEngine };
   }
   const info = database.prepare(
-    `INSERT INTO ai_agents (user_id, name, agent_type, execution_engine, status, language, greeting, instructions, fallback_label, did, business_summary, tone, voice_label, after_hours, allowed_transfers, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(input.userId, name, input.agentType, input.engine, fields.language, fields.greeting, input.instructions.trim().slice(0, 4000), ringLabel(database, input.userId), did, (input.businessSummary || "").trim().slice(0, 1500), fields.tone, fields.voice, fields.afterHours, input.allowedTransfers.join(", ").slice(0, 200), input.now, input.now);
+    `INSERT INTO ai_agents (user_id, name, agent_type, execution_engine, status, language, greeting, instructions, fallback_label, did, business_summary, tone, voice_label, voice_gender, after_hours, allowed_transfers, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(input.userId, name, input.agentType, input.engine, fields.language, fields.greeting, input.instructions.trim().slice(0, 4000), ringLabel(database, input.userId), did, (input.businessSummary || "").trim().slice(0, 1500), fields.tone, fields.voice, fields.gender, fields.afterHours, input.allowedTransfers.join(", ").slice(0, 200), input.now, input.now);
   return { ok: true as const, id: Number(info.lastInsertRowid), agentType: input.agentType as AiAgentType, engine: input.engine as AiEngine };
 }
 
@@ -483,22 +485,25 @@ export function publishVirtualAgent(database: Database.Database, input: { userId
   return { ok: true as const, agentId: agent.id, jobId, status: decision.status, routeMoved: decision.moveRoute, message: customerAgentMessage(decision.status) };
 }
 
-function promptNotes(input: { instructions: string; businessSummary: string; tone: string; afterHours: string }) {
+function promptNotes(input: { instructions: string; businessSummary: string; tone: string; afterHours: string; gender: string }) {
+  const gender = genderLabel(input.gender);
   return [
     input.instructions.trim(),
     input.businessSummary.trim() ? `Business summary: ${input.businessSummary.trim()}` : "",
     `Tone: ${toneLabel(input.tone)}`,
+    gender ? `Voice: ${gender}.` : "",
     officeHoursSpeech(input.afterHours),
   ].filter(Boolean).join("\n");
 }
 
-function receptionistFields(input: { voiceLabel?: string; tone?: string; language?: string; greeting: string; afterHours?: string; allowedVoices?: string[]; multilingual?: boolean }) {
+function receptionistFields(input: { voiceLabel?: string; gender?: string; tone?: string; language?: string; greeting: string; afterHours?: string; allowedVoices?: string[]; multilingual?: boolean }) {
   const voice = storedVoice(input.voiceLabel || "", input.allowedVoices);
   if (!voice.ok) return voice;
   const hours = packOfficeHours(readOfficeHours(input.afterHours || ""));
   return {
     ok: true as const,
     voice: voice.voice,
+    gender: storedGender(input.gender || ""),
     tone: storedTone(input.tone || ""),
     language: storedLanguage(input.language || "en-US", Boolean(input.multilingual)),
     greeting: greetingText(input.greeting).slice(0, 1500),
@@ -533,6 +538,7 @@ export function updateVirtualAgent(database: Database.Database, input: {
   businessSummary?: string;
   tone?: string;
   voiceLabel?: string;
+  gender?: string;
   afterHours?: string;
   allowedVoices?: string[];
   multilingual?: boolean;
@@ -564,7 +570,7 @@ export function updateVirtualAgent(database: Database.Database, input: {
     agentType: input.agentType,
     businessName: name,
     greeting,
-    instructions: promptNotes({ instructions, businessSummary: summary, tone, afterHours }),
+    instructions: promptNotes({ instructions, businessSummary: summary, tone, afterHours, gender: fields.gender }),
     language: fields.language,
     allowedTransfers: transfers,
     fallback: ringLabel(database, input.userId) || "ring group",
@@ -576,9 +582,9 @@ export function updateVirtualAgent(database: Database.Database, input: {
   const promptSync = input.engine === "THREE_CX_NATIVE" ? "NOT_SYNCED_NATIVE" : current.prompt_sync;
   const save = database.transaction(() => {
     database.prepare(
-      `UPDATE ai_agents SET name = ?, agent_type = ?, execution_engine = ?, language = ?, greeting = ?, instructions = ?, fallback_label = ?, did = ?, business_summary = ?, tone = ?, voice_label = ?, after_hours = ?, allowed_transfers = ?, prompt_sync = ?, updated_at = ?, config_revision = config_revision + 1
+      `UPDATE ai_agents SET name = ?, agent_type = ?, execution_engine = ?, language = ?, greeting = ?, instructions = ?, fallback_label = ?, did = ?, business_summary = ?, tone = ?, voice_label = ?, voice_gender = ?, after_hours = ?, allowed_transfers = ?, prompt_sync = ?, updated_at = ?, config_revision = config_revision + 1
        WHERE id = ? AND user_id = ?`,
-    ).run(name, input.agentType, input.engine, fields.language, greeting, instructions, ringLabel(database, input.userId), did, summary, tone, voice, afterHours, transfers.join(", ").slice(0, 200), promptSync, input.now, current.id, input.userId);
+    ).run(name, input.agentType, input.engine, fields.language, greeting, instructions, ringLabel(database, input.userId), did, summary, tone, voice, fields.gender, afterHours, transfers.join(", ").slice(0, 200), promptSync, input.now, current.id, input.userId);
     const version = database.prepare(
       "INSERT INTO ai_prompt_publications (user_id, agent_id, compiled, compiled_hash, status, created_at) VALUES (?, ?, ?, ?, 'published', ?)",
     ).run(input.userId, current.id, compiled.compiled, compiled.compiledHash, input.now);

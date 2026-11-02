@@ -244,7 +244,7 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
   const resolved = resolveProgrammableCall({ bindings: bindings(), appId, callerDid, callControlVerified: true });
   ensureVirtualSchema(getDb());
   const agent = resolved.ok
-    ? getDb().prepare("SELECT id, user_id, status, greeting, instructions, business_summary, voice_label, language, after_hours, allowed_transfers, fallback_label, published_version_id, agent_type FROM ai_agents WHERE id = ?").get(resolved.binding.agentId) as {
+    ? getDb().prepare("SELECT id, user_id, status, greeting, instructions, business_summary, voice_label, voice_gender, language, after_hours, allowed_transfers, fallback_label, published_version_id, agent_type FROM ai_agents WHERE id = ?").get(resolved.binding.agentId) as {
       id: number;
       user_id: number;
       status: string;
@@ -252,6 +252,7 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
       instructions: string;
       business_summary: string;
       voice_label: string;
+      voice_gender: string;
       language: string;
       after_hours: string;
       allowed_transfers: string;
@@ -288,7 +289,7 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
     publication?.compiled || agent.instructions,
     "Say the opening sentence once, then wait. Do not repeat the greeting and do not start a second welcome.",
     `APPROVED KNOWLEDGE:\n${knowledge.map((item) => item.body).join("\n").slice(0, 6000) || agent.business_summary}`,
-    speakingDirections({ voiceLabel: agent.voice_label, language: agent.language, afterHours: agent.after_hours }),
+    speakingDirections({ voiceLabel: agent.voice_label, gender: agent.voice_gender, language: agent.language, afterHours: agent.after_hours }),
     "Do not place an outbound call. Transfer only through the approved tool.",
   ].join("\n\n");
   const counts = { bytesIn: 0, bytesOut: 0, outcome: "connected" };
@@ -300,7 +301,7 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
     model: realtime.model,
     secret,
     instructions,
-    voice: spokenVoice(agent.voice_label),
+    voice: spokenVoice(agent.voice_label, agent.voice_gender),
     greeting: agent.greeting,
     transfers: allowed,
     onPcm: (pcm8k) => {

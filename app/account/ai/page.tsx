@@ -5,7 +5,7 @@ import { createVirtualAgentForm } from "./actions";
 import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { systemsForPlan } from "@/lib/ai-account";
 import { customerAgentMessage, engineLabel, listTransferTargets } from "@/lib/ai-virtual";
-import { AccentSelect, ChoiceSelect, GreetingSelect, HoursFields, ToneSelect, TransferFields } from "@/components/account/ClosedChoices";
+import { AccentSelect, ChoiceSelect, GenderSelect, GreetingSelect, HoursFields, ToneSelect, TransferFields } from "@/components/account/ClosedChoices";
 import { accentSelection, languagesForPlan } from "@/lib/ai-choices";
 import { listAccountAgents } from "@/lib/ai-virtual-store";
 import { AI_PLAN_FEATURE, activationState, featureReady } from "@/lib/ai-system";
@@ -116,6 +116,7 @@ export default async function AccountAiPage({ searchParams }: { searchParams: Pr
               <label>Business summary <textarea name="business_summary" rows={3} placeholder="What this company does, in words the receptionist may repeat." /></label>
               <ToneSelect value="professional" />
               <ChoiceSelect label="Language" name="language" value={languages[0]?.id || "en-US"} options={languages.map((language) => ({ value: language.id, label: language.label }))} required />
+              <GenderSelect value="neutral" />
               <AccentSelect accents={accents} value={accents[0]?.id || ""} />
               <GreetingSelect value="" />
               <label>Instructions <textarea name="instructions" rows={6} placeholder="Questions to ask, and answers this receptionist may give." /></label>

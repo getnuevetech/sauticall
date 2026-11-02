@@ -14,6 +14,7 @@ export type VirtualAgent = {
   business_summary: string;
   tone: string;
   voice_label: string;
+  voice_gender: string;
   after_hours: string;
   allowed_transfers: string;
   fallback_label: string;
@@ -30,7 +31,7 @@ export type VirtualAgent = {
 
 const AGENT_SQL = `
   SELECT a.id, a.user_id, a.name, a.agent_type, a.execution_engine, a.status, a.language, a.greeting, a.instructions,
-         COALESCE(a.business_summary, '') AS business_summary, COALESCE(a.tone, '') AS tone, COALESCE(a.voice_label, '') AS voice_label,
+         COALESCE(a.business_summary, '') AS business_summary, COALESCE(a.tone, '') AS tone, COALESCE(a.voice_label, '') AS voice_label, COALESCE(a.voice_gender, '') AS voice_gender,
          COALESCE(a.after_hours, '') AS after_hours, COALESCE(a.allowed_transfers, '') AS allowed_transfers,
          a.fallback_label, a.did, a.prompt_sync, a.config_revision,
          COALESCE(b.client_id, '') AS client_id, COALESCE(b.native_agent_id, '') AS native_agent_id,

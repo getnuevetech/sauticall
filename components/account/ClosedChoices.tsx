@@ -1,4 +1,4 @@
-import { AFTER_ACTIONS, GREETINGS, OFFICE_TIMES, TONES, greetingValue, officeTimeLabel, readOfficeHours, type Accent } from "@/lib/ai-choices";
+import { AFTER_ACTIONS, GENDERS, GREETINGS, OFFICE_TIMES, TONES, greetingValue, officeTimeLabel, readOfficeHours, type Accent } from "@/lib/ai-choices";
 
 export function ChoiceSelect({ label, name, value, options, required = false }: { label: string; name: string; value: string; options: { value: string; label: string }[]; required?: boolean }) {
   const known = options.some((option) => option.value === value);
@@ -10,6 +10,10 @@ export function ChoiceSelect({ label, name, value, options, required = false }: 
       </select>
     </label>
   );
+}
+
+export function GenderSelect({ value }: { value: string }) {
+  return <ChoiceSelect label="Gender" name="gender" value={value || "neutral"} options={GENDERS.map((gender) => ({ value: gender.id, label: gender.label }))} required />;
 }
 
 export function AccentSelect({ accents, value }: { accents: Accent[]; value: string }) {
