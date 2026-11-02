@@ -7,7 +7,7 @@ import { guardAccount } from "@/lib/guard";
 import { NOTIFICATION_ACKS, knownSwitch } from "@/lib/ai-system";
 import { acceptAgreement, requestActivation, setCustomerEnabled } from "@/lib/ai-store";
 import { knownAccountAi } from "@/lib/ai-account";
-import { accentsForPlan, packOfficeHours, readOfficeHours } from "@/lib/ai-choices";
+import { accentsForPlan, packOfficeHours, promptTemplateText, readOfficeHours } from "@/lib/ai-choices";
 import { accountAiPath } from "@/lib/ai-workspace";
 import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { paidPlan } from "@/lib/pbx";
@@ -26,6 +26,12 @@ function serviceOf(formData: FormData) {
 
 function nextOf(formData: FormData, fallback: string) {
   return accountAiPath(String(formData.get("next") || ""), fallback);
+}
+
+function instructionsFrom(formData: FormData) {
+  const typed = String(formData.get("instructions") || "");
+  if (typed.trim()) return typed;
+  return promptTemplateText(String(formData.get("instruction_template") || "")) || typed;
 }
 
 function transfersFrom(formData: FormData, allowed: Set<string>) {
@@ -131,6 +137,7 @@ export async function createVirtualAgentForm(formData: FormData) {
     allowedVoices: accentsForPlan(plan),
     multilingual: plan.multilingual,
   };
+  const instructions = instructionsFrom(formData);
   const name = String(formData.get("name") || "").trim();
   const existing = getDb().prepare("SELECT id, status FROM ai_agents WHERE user_id = ? AND name = ?").get(user.id, name) as { id: number; status: string } | undefined;
   if (existing && existing.status !== "DRAFT") {
@@ -141,7 +148,7 @@ export async function createVirtualAgentForm(formData: FormData) {
       agentType,
       engine: String(formData.get("engine") || ""),
       greeting: String(formData.get("greeting") || ""),
-      instructions: String(formData.get("instructions") || ""),
+      instructions,
       did: String(formData.get("did") || ""),
       language: voice.language,
       allowedTransfers: voice.allowedTransfers,
@@ -163,7 +170,7 @@ export async function createVirtualAgentForm(formData: FormData) {
     agentType,
     engine: String(formData.get("engine") || ""),
     greeting: String(formData.get("greeting") || ""),
-    instructions: String(formData.get("instructions") || ""),
+    instructions,
     did: String(formData.get("did") || ""),
     language: voice.language,
     allowedTransfers: voice.allowedTransfers,
@@ -204,7 +211,7 @@ export async function updateVirtualAgentForm(formData: FormData) {
     agentType: String(formData.get("agent_type") || ""),
     engine: String(formData.get("engine") || ""),
     greeting: String(formData.get("greeting") || ""),
-    instructions: String(formData.get("instructions") || ""),
+    instructions: instructionsFrom(formData),
     did: String(formData.get("did") || ""),
     language: String(formData.get("language") || "en-US"),
     allowedTransfers: transfersFrom(formData, targets),

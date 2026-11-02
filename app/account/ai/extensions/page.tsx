@@ -5,6 +5,7 @@ import { createVirtualAgentForm } from "../actions";
 import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { systemsForPlan } from "@/lib/ai-account";
 import { customerAgentMessage, engineLabel, listTransferTargets } from "@/lib/ai-virtual";
+import { InstructionScript } from "@/components/account/InstructionScript";
 import { AccentSelect, ChoiceSelect, GenderSelect, GreetingSelect, HoursFields, ToneSelect, TransferFields } from "@/components/account/ClosedChoices";
 import { accentSelection, languagesForPlan } from "@/lib/ai-choices";
 import { listAccountAgents } from "@/lib/ai-virtual-store";
@@ -73,7 +74,7 @@ export default async function AiExtensionsPage({ searchParams }: { searchParams:
           <GenderSelect value="neutral" />
           <AccentSelect accents={accents} value={accents[0]?.id || ""} />
           <GreetingSelect value="" />
-          <label>Instructions <textarea name="instructions" rows={6} placeholder="Questions to ask, and answers this receptionist may give." /></label>
+          <InstructionScript instructions="" />
           <HoursFields stored="" targets={targets} />
           <TransferFields targets={targets} selected={[]} />
           <p>A virtual AI endpoint will be prepared. No phone hardware is needed. Saving this does not move the live route and does not place a call.</p>

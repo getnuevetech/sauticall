@@ -26,7 +26,9 @@ import {
   transferChoice,
   transferChoices,
   transferDestination,
+  transferFailureLine,
   transferFailureText,
+  unavailableSpeech,
   type TransferChoice,
   type RealtimeProtocol,
 } from "./call-control-plan.ts";
@@ -304,6 +306,7 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
     `APPROVED KNOWLEDGE:\n${knowledge.map((item) => item.body).join("\n").slice(0, 6000) || agent.business_summary}`,
     speakingDirections({ voiceLabel: agent.voice_label, gender: agent.voice_gender, language: agent.language, afterHours: agent.after_hours }),
     `Approved extensions: ${directory || "none"}. When the caller names one, call transfer_to_approved_destination with that extension number.`,
+    "If the transfer result says the person is not available, tell the caller and offer a message, another approved person, or ending the call.",
     "Do not place an outbound call. Transfer only through the approved tool.",
   ].join("\n\n");
   const counts = { bytesIn: 0, bytesOut: 0, outcome: "connected" };
@@ -341,11 +344,12 @@ async function handleParticipant(participant: ParticipantLike, appId: string, re
       if (!allowedTool.allowed) return allowedTool.reason;
       const choice = transferChoice(destination, allowed);
       counts.outcome = `transferring ${choice.number}`;
-      writer.clear();
-      writer.cancel?.();
-      if (participant.cancelStreamQueue) await participant.cancelStreamQueue().catch(() => undefined);
-      handoff = moveCaller(participant, choice, counts);
-      return `Transferred to ${choice.number}. Say nothing else.`;
+      const pending = releaseAndTransfer(participant, writer, choice, counts);
+      handoff = pending.then(() => undefined);
+      const moved = await pending;
+      if (moved.ok) return `Transferred to ${choice.number}. Say nothing else.`;
+      const who = choice.label || `extension ${choice.number}`;
+      return `NOT_AVAILABLE ${transferFailureLine(moved.failure, who)}`;
     },
   });
   registerStop(() => socket.stop());
@@ -392,21 +396,37 @@ function transferAllowlist(userId: number, saved: string): TransferChoice[] {
   return chosen.length ? chosen : all;
 }
 
-async function moveCaller(participant: ParticipantLike, choice: TransferChoice, counts: { outcome: string }) {
+async function releaseAndTransfer(participant: ParticipantLike, writer: { clear: () => void; cancel?: () => void }, choice: TransferChoice, counts: { outcome: string }) {
+  writer.clear();
   const attempts = transferAttempts(choice);
   let failure = "";
+  let sent = choice.number;
   for (let index = 0; index < attempts.length; index += 1) {
     const destination = attempts[index];
     if (index > 0 && !transferCanRetry(failure, attempts[index - 1], destination)) break;
+    sent = destination;
     try {
-      await participant.transfer(destination);
+      await transferCaller(participant, destination);
       counts.outcome = `transferred ${choice.number}`;
-      return;
+      writer.cancel?.();
+      return { ok: true, failure: "" };
     } catch (error) {
       failure = transferFailureText(error);
     }
   }
-  counts.outcome = `transfer failed ${choice.number}: ${failure}`;
+  counts.outcome = `transfer failed ${choice.number} as ${sent}: ${failure}`;
+  return { ok: false, failure };
+}
+
+async function transferCaller(participant: ParticipantLike, destination: string) {
+  const control = participant as ParticipantLike & {
+    _controlParticipant?: (id: number, method: string, body: { destination: string; timeout: number }) => Promise<void>;
+  };
+  if (control._controlParticipant) {
+    await control._controlParticipant(participant.id, "transferto", { destination, timeout: 25 });
+    return;
+  }
+  await participant.transfer(destination);
 }
 
 async function finishWithoutAudio(participant: ParticipantLike, agent: { id: number; user_id: number; published_version_id: number } | undefined, transfer: string, outcome: string, startedAt: string) {
@@ -534,11 +554,14 @@ function openProviderSocket(input: {
       if (parsed.type === "tool") {
         void input.onTool(parsed.name, parsed.arguments).then((result) => {
           if (socket.readyState !== WebSocket.OPEN) return;
+          const unavailable = result.startsWith("NOT_AVAILABLE ") ? result.slice("NOT_AVAILABLE ".length) : "";
+          if (unavailable) apply({ type: "transfer_failed" });
           socket.send(JSON.stringify({
             type: "conversation.item.create",
             item: { type: "function_call_output", call_id: parsed.callId, output: result },
           }));
-          if (!talk.holding && parsed.name !== "end_call") socket.send(JSON.stringify(followUpResponse()));
+          if (unavailable) socket.send(JSON.stringify(unavailableSpeech(unavailable)));
+          else if (!talk.holding && parsed.name !== "end_call") socket.send(JSON.stringify(followUpResponse()));
         });
       }
     });
