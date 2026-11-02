@@ -182,8 +182,16 @@ export async function saveConnection(formData: FormData) {
       sms_did: (await import("@/lib/sms-number")).smsDestination(String(formData.get("sms_did") || "")),
     }, secret);
   } else {
+    const { pbxOrigin } = await import("@/lib/call-control-plan");
+    let baseUrl = "";
+    try {
+      baseUrl = pbxOrigin(String(formData.get("base_url") || ""));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Enter the 3CX hostname, for example https://kwiktech.3cx.us.";
+      redirect(`/admin/connections?provider=3cx&error=${encodeURIComponent(message)}`);
+    }
     persist(provider, enabled, {
-      base_url: String(formData.get("base_url") || "").trim(),
+      base_url: baseUrl,
       client_id: String(formData.get("client_id") || "").trim(),
       trunk_template: String(formData.get("trunk_template") || "voipms.pv.xml").trim() || "voipms.pv.xml",
     }, secret);

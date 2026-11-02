@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
-import { classifyCallControlProbe, describeStoredConnection, fallbackExtension, freshTalk, greetingResponse, isPhoneExtensionNumber, liveCallDecision, matchRealtimeProtocol, mediaWasOpen, phoneExtensionRouteMessage, readRealtimeEvent, realtimeSessionUpdate, resolveProgrammableCall, selectRealtimeEngine, servicePrincipalDial, servicePrincipalDirections, spokenVoice, stepTalk } from "../lib/call-control-plan.ts";
+import { classifyCallControlProbe, describeStoredConnection, fallbackExtension, freshTalk, greetingResponse, isPhoneExtensionNumber, liveCallDecision, matchRealtimeProtocol, mediaWasOpen, pbxOrigin, phoneExtensionRouteMessage, readRealtimeEvent, realtimeSessionUpdate, resolveProgrammableCall, selectRealtimeEngine, servicePrincipalDial, servicePrincipalDirections, spokenVoice, stepTalk } from "../lib/call-control-plan.ts";
 import { downsample24kTo8k, upsample8kTo24k } from "../lib/pcm-rate.ts";
 import { recordLiveSession } from "../lib/ai-virtual.ts";
 import type { RouteBinding } from "../lib/ai-platform.ts";
@@ -38,6 +38,13 @@ test("a chat model is not treated as telephone audio", () => {
   assert.equal(selectRealtimeEngine([{ ...engine, enabled: false }]), null);
   assert.equal(spokenVoice("Marin"), "marin");
   assert.equal(spokenVoice("custom"), "alloy");
+});
+
+test("a 3CX hostname is accepted and the Service Principal name is not an address", () => {
+  assert.equal(pbxOrigin("kwiktech.3cx.us"), "https://kwiktech.3cx.us");
+  assert.equal(pbxOrigin("https://kwiktech.3cx.us/xapi/v1"), "https://kwiktech.3cx.us");
+  assert.throws(() => pbxOrigin("sauticall"), /Service Principal name/);
+  assert.throws(() => pbxOrigin("http://kwiktech.3cx.us"), /https/);
 });
 
 test("a phone extension is not the Service Principal route point", () => {

@@ -47,6 +47,25 @@ export function isPhoneExtensionNumber(value: string) {
   return /^\d{2,6}$/.test(value.trim());
 }
 
+export function pbxOrigin(address: string) {
+  const raw = address.trim();
+  if (!raw) throw new Error("Enter the 3CX hostname, for example https://kwiktech.3cx.us.");
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
+  let url: URL;
+  try {
+    url = new URL(withScheme);
+  } catch {
+    throw new Error("Enter the 3CX hostname, for example https://kwiktech.3cx.us.");
+  }
+  if (url.protocol !== "https:") throw new Error("The 3CX address must use https.");
+  const host = url.hostname.toLowerCase();
+  if (!host.includes(".")) throw new Error(`${raw} is the Service Principal name. The 3CX address is the hostname, for example https://kwiktech.3cx.us.`);
+  if (host === "localhost" || host.endsWith(".local") || host === "169.254.169.254" || host.startsWith("127.") || host.startsWith("10.") || host.startsWith("192.168.") || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) {
+    throw new Error("Use the public 3CX hostname.");
+  }
+  return url.origin;
+}
+
 export function servicePrincipalDial(clientId: string) {
   const id = clientId.trim();
   return { id, dialable: false };

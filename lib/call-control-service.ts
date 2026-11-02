@@ -7,6 +7,7 @@ import {
   freshTalk,
   greetingResponse,
   liveCallDecision,
+  pbxOrigin,
   mediaWasOpen,
   readRealtimeEvent,
   stepTalk,
@@ -26,12 +27,6 @@ import WebSocket from "ws";
 
 type Listener = { stop: () => void; startedAt: string };
 const runtime = globalThis as { sauticallCallControl?: Listener };
-
-function originOf(address: string) {
-  const url = new URL(address);
-  if (url.protocol !== "https:") throw new Error("The 3CX address must use https.");
-  return url.origin;
-}
 
 function bindings(): RouteBinding[] {
   return getDb().prepare(
@@ -80,7 +75,7 @@ export function callControlReport() {
 
 function safeHost(address: string) {
   try {
-    return new URL(address).host;
+    return new URL(pbxOrigin(address)).host;
   } catch {
     return "";
   }
@@ -117,7 +112,7 @@ export async function probeExistingCallControl(now: string) {
   let callControlStatus = 0;
   let version = "";
   try {
-    const origin = originOf(connection.public.base_url);
+    const origin = pbxOrigin(connection.public.base_url);
     const tokenResponse = await fetch(`${origin}/connect/token`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -181,7 +176,7 @@ export async function startExistingCallControl(now: string) {
   const connection = getConnection("3cx");
   const { CallControlClient } = await import("@3cx/call-control-sdk");
   const client = new CallControlClient({
-    pbxBase: originOf(connection.public.base_url),
+    pbxBase: pbxOrigin(connection.public.base_url),
     appId: connection.public.client_id,
     appSecret: connection.secret,
     websocket: { maxReconnects: 5, reconnectDelayMs: 2000 },
