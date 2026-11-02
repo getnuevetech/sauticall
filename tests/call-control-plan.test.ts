@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
-import { classifyCallControlProbe, describeStoredConnection, fallbackExtension, isPhoneExtensionNumber, liveCallDecision, matchRealtimeProtocol, mediaWasOpen, phoneExtensionRouteMessage, readRealtimeEvent, realtimeSessionUpdate, resolveProgrammableCall, selectRealtimeEngine, spokenVoice } from "../lib/call-control-plan.ts";
+import { classifyCallControlProbe, describeStoredConnection, fallbackExtension, isPhoneExtensionNumber, liveCallDecision, matchRealtimeProtocol, mediaWasOpen, phoneExtensionRouteMessage, readRealtimeEvent, realtimeSessionUpdate, resolveProgrammableCall, selectRealtimeEngine, servicePrincipalDial, servicePrincipalDirections, spokenVoice } from "../lib/call-control-plan.ts";
 import { downsample24kTo8k, upsample8kTo24k } from "../lib/pcm-rate.ts";
 import { recordLiveSession } from "../lib/ai-virtual.ts";
 import type { RouteBinding } from "../lib/ai-platform.ts";
@@ -43,6 +43,10 @@ test("a chat model is not treated as telephone audio", () => {
 test("a phone extension is not the Service Principal route point", () => {
   assert.equal(isPhoneExtensionNumber("529"), true);
   assert.equal(isPhoneExtensionNumber("ai-receptionist"), false);
+  assert.equal(servicePrincipalDial("ai-receptionist").dialable, true);
+  assert.equal(servicePrincipalDial("4f8c2a1e-9b7d-4c3a-8e21-6d5b0a9c1f22").dialable, false);
+  assert.match(servicePrincipalDirections("ai-receptionist"), /does not list ai-receptionist under Users/);
+  assert.match(servicePrincipalDirections("4f8c2a1e-9b7d-4c3a-8e21-6d5b0a9c1f22"), /does not create an extension/);
   const message = phoneExtensionRouteMessage("529", "ai-receptionist");
   assert.match(message, /529 is a phone extension/);
   assert.match(message, /dial ai-receptionist/);

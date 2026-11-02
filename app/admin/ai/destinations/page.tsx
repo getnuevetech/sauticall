@@ -4,7 +4,7 @@ import { requirePermission } from "@/lib/access";
 import { engineLabel } from "@/lib/ai-virtual";
 import { listAllAgents, type VirtualAgent } from "@/lib/ai-virtual-store";
 import { callControlReport } from "@/lib/call-control-service";
-import { isPhoneExtensionNumber, phoneExtensionRouteMessage } from "@/lib/call-control-plan";
+import { isPhoneExtensionNumber, phoneExtensionRouteMessage, servicePrincipalDial, servicePrincipalDirections } from "@/lib/call-control-plan";
 import { probeCallControlForm, recordVirtualBindingForm, startCallControlForm, stopCallControlForm } from "./actions";
 
 export default async function AiDestinationsPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
@@ -45,13 +45,8 @@ export default async function AiDestinationsPage({ searchParams }: { searchParam
         <p>These buttons do not place a call.</p>
 
         <h2>Where the call goes</h2>
-        {report.servicePrincipalId ? (
-          <>
-            <p>SautiCall listens as Service Principal <strong>{report.servicePrincipalId}</strong>. That Client ID is the route point. It is not a desk phone, so it does not go offline.</p>
-            <p>From a registered extension, dial <strong>{report.servicePrincipalId}</strong>. 3CX gives that call’s audio to SautiCall, and the realtime voice model speaks back on the same call.</p>
-            <p>For the outside number, open 3CX Admin, then Integrations, then API, select this Service Principal, and assign the number there. Do not send it to a normal extension. A normal extension stays offline until a phone registers, and 3CX ends the call before SautiCall sees it.</p>
-          </>
-        ) : <p>The saved 3CX connection has no Service Principal Client ID, so there is no route point to dial.</p>}
+        <p>The Service Principal has no extension. It does not appear under Users. Extension 529 is a separate user, and it stays offline until a phone registers.</p>
+        <p>{servicePrincipalDirections(report.servicePrincipalId)} While Listen for calls is on, 3CX gives that call’s audio to SautiCall, and the realtime voice model speaks back on the same call.</p>
         {agents.filter((agent) => isPhoneExtensionNumber(agent.client_id)).map((agent) => (
           <p className="ops-alert" role="alert" key={agent.id}>{phoneExtensionRouteMessage(agent.client_id, report.servicePrincipalId)}</p>
         ))}
@@ -86,7 +81,7 @@ function Receptionist({ agent, servicePrincipalId }: { agent: VirtualAgent; serv
   const native = agent.execution_engine === "THREE_CX_NATIVE";
   const recorded = native ? agent.native_agent_id : agent.client_id;
   const status = receptionistStatus(agent, recorded);
-  const replaceExtension = !native && isPhoneExtensionNumber(recorded) && Boolean(servicePrincipalId);
+  const replaceExtension = !native && isPhoneExtensionNumber(recorded) && servicePrincipalDial(servicePrincipalId).dialable;
   return (
     <article className="ops-destination">
       <h3>{agent.name}</h3>
@@ -113,7 +108,7 @@ function receptionistStatus(agent: VirtualAgent, recorded: string) {
 
 function savedMessage(saved: string | undefined) {
   if (saved === "probe") return "Checked the existing 3CX connection. No call was placed.";
-  if (saved === "listen") return "Listening. From a registered extension, dial the Service Principal Client ID on this page. A normal extension stays offline, and 3CX ends that call.";
+  if (saved === "listen") return "Listening. Dial the Client ID from a 3CX phone. It is not listed under Users. A normal extension stays offline, and 3CX ends that call.";
   if (saved === "stopped") return "Stopped listening. No call was placed.";
   if (saved) return "Client ID saved. Calls still ring the group.";
   return "";
