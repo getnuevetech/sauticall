@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
-import { classifyCallControlProbe, describeStoredConnection, fallbackExtension, fallbackVoice, freshProviderSetup, freshTalk, greetingResponse, isPhoneExtensionNumber, liveCallDecision, matchRealtimeProtocol, mediaWasOpen, pbxOrigin, phoneExtensionRouteMessage, providerSetupAction, readRealtimeEvent, realtimeSessionUpdate, resolveProgrammableCall, selectRealtimeEngine, servicePrincipalDial, servicePrincipalDirections, spokenVoice, stepTalk, transferDestination } from "../lib/call-control-plan.ts";
+import { classifyCallControlProbe, describeStoredConnection, fallbackExtension, fallbackVoice, freshProviderSetup, freshTalk, greetingResponse, isPhoneExtensionNumber, liveCallDecision, matchRealtimeProtocol, mediaWasOpen, pbxOrigin, pbxTransferDestination, phoneExtensionRouteMessage, providerSetupAction, readRealtimeEvent, realtimeSessionUpdate, resolveProgrammableCall, selectRealtimeEngine, servicePrincipalDial, servicePrincipalDirections, spokenVoice, stepTalk, transferDestination, transferFailureText } from "../lib/call-control-plan.ts";
 import { downsample24kTo8k, upsample8kTo24k } from "../lib/pcm-rate.ts";
 import { recordLiveSession } from "../lib/ai-virtual.ts";
 import type { RouteBinding } from "../lib/ai-platform.ts";
@@ -162,6 +162,11 @@ test("provider audio is converted and tool calls stay explicit", () => {
   assert.equal(fallbackVoice("xai"), "eve");
   assert.equal(fallbackVoice("openai"), "alloy");
   assert.equal(transferDestination("{\"destination\":\"extension 516\"}", ["516", "800"]), "516");
+  assert.equal(transferDestination("{\"destination\":\"Ada\"}", [{ number: "516", label: "Ada", kind: "extension" }, { number: "800", label: "Main", kind: "ring" }]), "516");
+  assert.equal(pbxTransferDestination("516", "extension"), "Extension.516.");
+  assert.equal(pbxTransferDestination("800", "ring"), "RingGroup.800.");
+  assert.equal(pbxTransferDestination("801", "queue"), "Queue.801.");
+  assert.equal(transferFailureText({ response: { status: 422, data: "destination" } }), "3CX transfer returned 422 destination");
   const handoff = stepTalk(freshTalk(), { type: "transfer" });
   assert.equal(handoff.clearPlayback, true);
   assert.equal(handoff.state.holding, true);
