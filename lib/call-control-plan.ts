@@ -43,6 +43,28 @@ export function fallbackExtension(label: string) {
   return match?.[1] || "";
 }
 
+export function isPhoneExtensionNumber(value: string) {
+  return /^\d{2,6}$/.test(value.trim());
+}
+
+export function servicePrincipalDial(clientId: string) {
+  const id = clientId.trim();
+  return { id, dialable: false };
+}
+
+export function servicePrincipalDirections(clientId: string, did = "") {
+  const id = clientId.trim();
+  const number = did.replace(/\D/g, "");
+  const name = id || "the Service Principal";
+  const call = number ? `Call ${number}.` : "Call the outside phone number.";
+  return `${name} is the Service Principal name on Integrations, API. A keypad cannot dial that name. On that same Service Principal, put the phone number in the DID field. ${call} 3CX then sends the call to ${name}. Leave a normal user extension out of this route. If no phone is registered on that user, 3CX ends the call.`;
+}
+
+export function phoneExtensionRouteMessage(extension: string, servicePrincipalId: string, did = "") {
+  const number = extension.trim();
+  return `${number} is a user extension. No phone is registered on it, so 3CX ends the call before the AI can answer. ${servicePrincipalDirections(servicePrincipalId, did)}`;
+}
+
 export function mediaWasOpen(bytesIn: number, bytesOut: number) {
   return bytesIn > 0 && bytesOut > 0;
 }
@@ -171,20 +193,72 @@ export function classifyCallControlProbe(input: {
 }
 
 export type RealtimeEvent =
-  | { type: "audio"; pcm24k: Buffer }
+  | { type: "audio"; pcm24k: Buffer; id: string }
   | { type: "speech_started" }
+  | { type: "response_started"; id: string }
+  | { type: "response_finished"; id: string }
   | { type: "tool"; name: string; arguments: string; callId: string }
   | { type: "ignore" };
+
+function responseId(event: Record<string, unknown>) {
+  if (typeof event.response_id === "string") return event.response_id;
+  const response = event.response;
+  if (response && typeof response === "object" && typeof (response as { id?: unknown }).id === "string") return (response as { id: string }).id;
+  return "";
+}
+
+export function openingLine(greeting: string) {
+  const line = greeting.replace(/\s+/g, " ").trim().slice(0, 300);
+  return line || "Thank you for calling. How can I help you today?";
+}
+
+export function greetingResponse(greeting: string) {
+  return {
+    type: "response.create" as const,
+    response: {
+      tool_choice: "none" as const,
+      instructions: `Say exactly this one sentence, then stop and wait: ${openingLine(greeting)}`,
+    },
+  };
+}
+
+export type TalkState = { active: string; greetingOpen: boolean; dropped: string[] };
+
+export function freshTalk(): TalkState {
+  return { active: "", greetingOpen: true, dropped: [] };
+}
+
+export function stepTalk(state: TalkState, event: { type: "response_started"; id: string } | { type: "response_finished"; id: string } | { type: "audio"; id: string } | { type: "caller_spoke" }) {
+  const idle = { play: false, cancel: "", forwardCaller: !state.greetingOpen, clearPlayback: false };
+  if (event.type === "response_started") {
+    const id = event.id || "current";
+    if (id === state.active) return { state, ...idle };
+    if (!state.active) return { state: { ...state, active: id }, ...idle };
+    return { state: { ...state, dropped: state.dropped.includes(id) ? state.dropped : [...state.dropped, id] }, ...idle, cancel: id };
+  }
+  if (event.type === "audio") {
+    const id = event.id || state.active;
+    return { state, ...idle, play: Boolean(state.active) && id === state.active && !state.dropped.includes(id) };
+  }
+  if (event.type === "response_finished") {
+    if (!event.id || event.id !== state.active) return { state, ...idle };
+    return { state: { ...state, active: "", greetingOpen: false }, ...idle, forwardCaller: true };
+  }
+  if (state.greetingOpen) return { state, ...idle, forwardCaller: false };
+  return { state: { ...state, active: "" }, ...idle, forwardCaller: true, cancel: state.active, clearPlayback: Boolean(state.active) };
+}
 
 export function readRealtimeEvent(event: Record<string, unknown>): RealtimeEvent {
   const type = String(event.type || "");
   if (type === "input_audio_buffer.speech_started" || type === "conversation.item.input_audio_buffer.speech_started") {
     return { type: "speech_started" };
   }
+  if (type === "response.created") return { type: "response_started", id: responseId(event) };
+  if (type === "response.done" || type === "response.cancelled") return { type: "response_finished", id: responseId(event) };
   if (type === "response.audio.delta" || type === "response.output_audio.delta") {
     const delta = String(event.delta || "");
     if (!delta) return { type: "ignore" };
-    return { type: "audio", pcm24k: Buffer.from(delta, "base64") };
+    return { type: "audio", pcm24k: Buffer.from(delta, "base64"), id: responseId(event) };
   }
   if (type === "response.function_call_arguments.done") {
     return { type: "tool", name: String(event.name || ""), arguments: String(event.arguments || ""), callId: String(event.call_id || "") };

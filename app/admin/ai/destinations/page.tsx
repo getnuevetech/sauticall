@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/access";
 import { engineLabel } from "@/lib/ai-virtual";
 import { listAllAgents, type VirtualAgent } from "@/lib/ai-virtual-store";
 import { callControlReport } from "@/lib/call-control-service";
+import { isPhoneExtensionNumber, phoneExtensionRouteMessage, servicePrincipalDirections } from "@/lib/call-control-plan";
 import { probeCallControlForm, recordVirtualBindingForm, startCallControlForm, stopCallControlForm } from "./actions";
 
 export default async function AiDestinationsPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
@@ -34,18 +35,24 @@ export default async function AiDestinationsPage({ searchParams }: { searchParam
             {report.switches.master && report.switches.receptionist ? "Receptionist switch on" : "Receptionist switch off"}
           </span>
         </div>
-        {report.xapi ? <p>{report.xapi}</p> : <p>The 3CX connection has not been checked.</p>}
+        {report.xapi && !report.xapi.startsWith("Connected") ? <p className="ops-alert" role="alert">{report.xapi} This is the last configuration check. A call still reaches the AI only when 3CX sends it to the Service Principal below.</p> : <p>{report.xapi || "The 3CX connection has not been checked."}</p>}
         {problems.map((problem) => <p className="ops-alert" role="alert" key={problem}>{problem}{problem.startsWith("No realtime") ? <> <Link href="/admin/ai">Open Engines</Link></> : null}</p>)}
         <div className="ops-toolbar">
           <form action={probeCallControlForm}><button className="btn btn-secondary" type="submit">Check Call Control</button></form>
           <form action={startCallControlForm}><button className="btn btn-primary" type="submit">Listen for calls</button></form>
           <form action={stopCallControlForm}><button className="btn btn-secondary" type="submit">Stop listening</button></form>
         </div>
-        <p>These buttons do not place a call. From a registered extension, dial the Service Principal Client ID.</p>
+        <p>These buttons do not place a call.</p>
+
+        <h2>Where the call goes</h2>
+        <p>{servicePrincipalDirections(report.servicePrincipalId, agents.find((agent) => agent.did)?.did || "")} While Listen for calls is on, SautiCall connects the realtime voice model to that call.</p>
+        {agents.filter((agent) => isPhoneExtensionNumber(agent.client_id)).map((agent) => (
+          <p className="ops-alert" role="alert" key={agent.id}>{phoneExtensionRouteMessage(agent.client_id, report.servicePrincipalId, agent.did)}</p>
+        ))}
 
         <h2>Receptionists</h2>
-        <p>The Client ID comes from 3CX. Open 3CX Admin, then Integrations, then API, and copy the Client ID of the Service Principal SautiCall already uses. A phone dials that Client ID. Paste the Client ID here, not the secret.</p>
-        {agents.length === 0 ? <p>No receptionist is saved.</p> : agents.map((agent) => <Receptionist key={agent.id} agent={agent} />)}
+        <p>Save the Service Principal name from Integrations, API. Callers dial the phone number in its DID field. Do not paste the secret.</p>
+        {agents.length === 0 ? <p>No receptionist is saved.</p> : agents.map((agent) => <Receptionist key={agent.id} agent={agent} servicePrincipalId={report.servicePrincipalId} />)}
 
         <h2>Recent calls</h2>
         {report.calls.length === 0 ? <p>No telephone call has been recorded.</p> : (
@@ -69,10 +76,11 @@ export default async function AiDestinationsPage({ searchParams }: { searchParam
   );
 }
 
-function Receptionist({ agent }: { agent: VirtualAgent }) {
+function Receptionist({ agent, servicePrincipalId }: { agent: VirtualAgent; servicePrincipalId: string }) {
   const native = agent.execution_engine === "THREE_CX_NATIVE";
   const recorded = native ? agent.native_agent_id : agent.client_id;
   const status = receptionistStatus(agent, recorded);
+  const replaceExtension = !native && isPhoneExtensionNumber(recorded) && Boolean(servicePrincipalId);
   return (
     <article className="ops-destination">
       <h3>{agent.name}</h3>
@@ -80,10 +88,10 @@ function Receptionist({ agent }: { agent: VirtualAgent }) {
       <p><span className={`ops-badge ${status.tone}`}>{status.label}</span></p>
       <form className="ops-toolbar" action={recordVirtualBindingForm}>
         <input type="hidden" name="agent_id" value={agent.id} />
-        <label>{native ? "3CX agent id" : "3CX Client ID"}
-          <input name="resource_id" defaultValue={recorded} aria-label={native ? `3CX agent id for ${agent.name}` : `3CX Client ID for ${agent.name}`} placeholder={native ? "Agent id from 3CX" : "Client ID from 3CX Integrations, API"} />
+          <label>{native ? "3CX agent id" : "Service Principal name"}
+          <input name="resource_id" defaultValue={replaceExtension ? servicePrincipalId : recorded} aria-label={native ? `3CX agent id for ${agent.name}` : `Service Principal name for ${agent.name}`} placeholder={native ? "Agent id from 3CX" : "Name shown as the Service Principal extension"} />
         </label>
-        <button className="btn btn-secondary" type="submit">Save Client ID</button>
+        <button className="btn btn-secondary" type="submit">{replaceExtension ? "Use the Service Principal name" : "Save name"}</button>
       </form>
     </article>
   );
@@ -92,15 +100,16 @@ function Receptionist({ agent }: { agent: VirtualAgent }) {
 function receptionistStatus(agent: VirtualAgent, recorded: string) {
   if (agent.status === "PAUSED") return { label: "Paused. Calls stay on the ring group.", tone: "warn" };
   if (agent.binding_status === "ACTIVE" && agent.route_target) return { label: "Certified. The number can route to this receptionist.", tone: "ok" };
-  if (recorded) return { label: "Client ID saved. Calls still ring the group.", tone: "pending" };
+  if (isPhoneExtensionNumber(recorded)) return { label: `${recorded} is a user extension. A keypad call to it ends while that user is offline.`, tone: "bad" };
+  if (recorded) return { label: "Name saved. Put the phone number in this Service Principal’s DID field, then call that number.", tone: "pending" };
   return { label: "Needs the 3CX Client ID.", tone: "warn" };
 }
 
 function savedMessage(saved: string | undefined) {
   if (saved === "probe") return "Checked the existing 3CX connection. No call was placed.";
-  if (saved === "listen") return "Listening. Dial the Client ID from a registered extension.";
+  if (saved === "listen") return "Listening. Call the phone number in the Service Principal DID field. A keypad cannot dial the Service Principal name.";
   if (saved === "stopped") return "Stopped listening. No call was placed.";
-  if (saved) return "Client ID saved. Calls still ring the group.";
+  if (saved) return "Name saved. Call the phone number in the Service Principal DID field.";
   return "";
 }
 

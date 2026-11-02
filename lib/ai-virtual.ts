@@ -571,6 +571,9 @@ export function recordVirtualBinding(database: Database.Database, input: { userI
   const agent = database.prepare("SELECT id, user_id, execution_engine, status FROM ai_agents WHERE id = ?").get(input.agentId) as { id: number; user_id: number; execution_engine: string; status: string } | undefined;
   if (!agent || agent.user_id !== input.userId) return { ok: false as const, message: "That AI extension was not found on this account." };
   const resourceId = input.resourceId.trim().slice(0, 120);
+  if (/^\d{2,6}$/.test(resourceId)) {
+    return { ok: false as const, message: `${resourceId} is a phone extension. No phone is registered on it, so 3CX ends the call before the AI can answer. Use the Service Principal Client ID from 3CX Admin, Integrations, then API. Assign the outside number to that Service Principal. Do not route the call to extension ${resourceId}.` };
+  }
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{2,119}$/.test(resourceId)) {
     return { ok: false as const, message: "Enter the Client ID or native agent identifier from 3CX. Do not paste a secret." };
   }
