@@ -111,7 +111,7 @@ function connectionProblems(report: ReturnType<typeof callControlReport>, callCo
   else if (callControlStatus !== "supported_verified") problems.push("Call Control has not been confirmed. Use Check Call Control.");
   if (!report.realtime) {
     const names = report.textEngines.length ? report.textEngines.join(", ") : "None";
-    problems.push(`No realtime voice model is enabled. Enabled engines: ${names}. Those can draft text. Open Engines and enable OpenAI Realtime or xAI before a caller can hear the receptionist.`);
+    problems.push(`No realtime voice model is enabled. Enabled engines: ${names}. Those can draft text. Enable OpenAI Realtime or xAI before a caller can hear the receptionist.`);
   }
   if (!report.switches.master || !report.switches.receptionist) problems.push("Turn on Master AI and AI receptionist. Both switches must be on before a call is answered.");
   return problems;
