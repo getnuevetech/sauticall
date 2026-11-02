@@ -287,12 +287,21 @@ export function genderLabel(id: string) {
   return GENDERS.find((gender) => gender.id === id)?.label || "";
 }
 
-export function spokenVoiceFor(label: string, gender = "") {
+const XAI_WOMAN = ["eve", "ara"];
+const XAI_MAN = ["rex", "leo"];
+
+export function spokenVoiceFor(label: string, gender = "", protocol: "openai" | "xai" = "openai") {
   const accent = accentById(label);
   const chosen = storedGender(gender);
+  const index = accent ? Math.max(0, ACCENTS.findIndex((item) => item.id === accent.id)) : 0;
+  if (protocol === "xai") {
+    if (chosen === "man") return XAI_MAN[index % XAI_MAN.length];
+    if (chosen === "woman") return XAI_WOMAN[index % XAI_WOMAN.length];
+    if (accent) return "sal";
+    return "eve";
+  }
   if (accent && chosen) {
     const set = chosen === "woman" ? WOMAN_VOICES : chosen === "man" ? MAN_VOICES : ["alloy"];
-    const index = Math.max(0, ACCENTS.findIndex((item) => item.id === accent.id));
     return set[index % set.length];
   }
   if (accent) return accent.voice;
@@ -396,7 +405,7 @@ export function speakingDirections(input: { voiceLabel: string; gender?: string;
   const gender = genderLabel(storedGender(input.gender || ""));
   const voiceLine = gender ? `Use a ${gender.toLowerCase()} voice.` : "";
   const accentLine = accent ? `Speak ${language} with a ${accent.label} accent for the whole call.` : `Speak ${language}.`;
-  return `${voiceLine} ${accentLine} ${officeHoursSpeech(input.afterHours)} When the caller asks for a person, department, or extension, call transfer_to_approved_destination immediately and stop talking.`.replace(/\s+/g, " ").trim();
+  return `${voiceLine} ${accentLine} ${officeHoursSpeech(input.afterHours)} After the greeting, answer the caller. When the caller asks for a person, department, or extension, call transfer_to_approved_destination immediately, then stop speaking.`.replace(/\s+/g, " ").trim();
 }
 
 export function accentSelection(plan: Plan | null | undefined) {

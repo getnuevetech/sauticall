@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Database from "better-sqlite3";
-import { classifyCallControlProbe, describeStoredConnection, fallbackExtension, freshTalk, greetingResponse, isPhoneExtensionNumber, liveCallDecision, matchRealtimeProtocol, mediaWasOpen, pbxOrigin, phoneExtensionRouteMessage, readRealtimeEvent, realtimeSessionUpdate, resolveProgrammableCall, selectRealtimeEngine, servicePrincipalDial, servicePrincipalDirections, spokenVoice, stepTalk, transferDestination } from "../lib/call-control-plan.ts";
+import { classifyCallControlProbe, describeStoredConnection, fallbackExtension, fallbackVoice, freshProviderSetup, freshTalk, greetingResponse, isPhoneExtensionNumber, liveCallDecision, matchRealtimeProtocol, mediaWasOpen, pbxOrigin, phoneExtensionRouteMessage, providerSetupAction, readRealtimeEvent, realtimeSessionUpdate, resolveProgrammableCall, selectRealtimeEngine, servicePrincipalDial, servicePrincipalDirections, spokenVoice, stepTalk, transferDestination } from "../lib/call-control-plan.ts";
 import { downsample24kTo8k, upsample8kTo24k } from "../lib/pcm-rate.ts";
 import { recordLiveSession } from "../lib/ai-virtual.ts";
 import type { RouteBinding } from "../lib/ai-platform.ts";
@@ -100,12 +100,40 @@ test("one call keeps a single greeting and drops a second voice", () => {
   const echo = stepTalk(state, { type: "caller_spoke" });
   assert.equal(echo.cancel, "");
   assert.equal(echo.clearPlayback, false);
+  const dropped = stepTalk({ ...overlap.state, dropped: overlap.state.dropped }, { type: "response_finished", id: "other" });
+  assert.equal(dropped.state.greetingOpen, true);
+  assert.equal(dropped.forwardCaller, false);
   state = stepTalk(state, { type: "response_finished", id: "greet" }).state;
   assert.equal(state.greetingOpen, false);
   state = stepTalk(state, { type: "response_started", id: "answer" }).state;
   const interrupt = stepTalk(state, { type: "caller_spoke" });
   assert.equal(interrupt.cancel, "answer");
   assert.equal(interrupt.clearPlayback, true);
+});
+
+test("the greeting opens the microphone when the finished id does not match", () => {
+  let state = stepTalk(freshTalk(), { type: "response_started", id: "" }).state;
+  assert.equal(state.active, "current");
+  const played = stepTalk(state, { type: "audio", id: "resp_greet" });
+  assert.equal(played.play, true);
+  const finished = stepTalk(state, { type: "response_finished", id: "resp_greet" });
+  assert.equal(finished.state.greetingOpen, false);
+  assert.equal(finished.forwardCaller, true);
+  const audioDone = readRealtimeEvent({ type: "response.output_audio.done", response_id: "resp_greet" });
+  assert.equal(audioDone.type, "response_finished");
+  const missed = stepTalk(freshTalk(), { type: "greeting_timeout" });
+  assert.equal(missed.state.greetingOpen, false);
+  assert.equal(missed.forwardCaller, true);
+  let setup = freshProviderSetup();
+  const rejected = providerSetupAction(setup, "error");
+  assert.equal(rejected.action, "retry");
+  setup = rejected.state;
+  assert.equal(providerSetupAction(setup, "session_updated").action, "greet");
+  assert.equal(providerSetupAction(freshProviderSetup(), "timeout").action, "greet");
+  assert.equal(readRealtimeEvent({ type: "session.updated" }).type, "session_updated");
+  const failure = readRealtimeEvent({ type: "error", error: { message: "Unknown voice coral" } });
+  assert.equal(failure.type, "provider_error");
+  if (failure.type === "provider_error") assert.match(failure.message, /coral/);
 });
 
 test("provider audio is converted and tool calls stay explicit", () => {
@@ -125,6 +153,14 @@ test("provider audio is converted and tool calls stay explicit", () => {
   assert.equal(session.session.tools.length, 2);
   assert.match(session.session.instructions, /immediately/);
   assert.deepEqual(session.session.tools[0].parameters.properties.destination.enum, ["516"]);
+  assert.match(session.session.instructions, /answer the caller/i);
+  assert.equal(session.session.audio.output.voice, "alloy");
+  const xai = realtimeSessionUpdate({ instructions: "Answer from approved knowledge.", voice: spokenVoice("en-ng", "woman", "xai"), transfers: ["516"], protocol: "xai" });
+  assert.equal(xai.session.voice, spokenVoice("en-ng", "woman", "xai"));
+  assert.equal("voice" in xai.session.audio.output, false);
+  assert.notEqual(spokenVoice("en-ng", "woman", "xai"), spokenVoice("en-ng", "man", "xai"));
+  assert.equal(fallbackVoice("xai"), "eve");
+  assert.equal(fallbackVoice("openai"), "alloy");
   assert.equal(transferDestination("{\"destination\":\"extension 516\"}", ["516", "800"]), "516");
   const handoff = stepTalk(freshTalk(), { type: "transfer" });
   assert.equal(handoff.clearPlayback, true);

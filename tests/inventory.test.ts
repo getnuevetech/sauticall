@@ -10,7 +10,7 @@ import { nextOutboundPriority, outboundRuleBody, outboundScopeVerdict } from "..
 import { manualTrunkNote, trunkArrayBody, trunkClientBody, trunkContentTypes, trunkCreateBody, trunkDeltaBody, trunkDeltaLists, trunkFailureText, trunkFilledDeltas, trunkGroupBody, trunkLeanBody, trunkPassthroughBody, trunkPlainBody, trunkPostBody, trunkReadyBody, trunkReplayBody, trunkServiceBody, trunkShape, trunkSmallBody } from "../lib/trunk-body.ts";
 import { assignBlocks, chooseExtension, extensionPlanError, extensionPlanFromFields, extensionRange, keptRange, normalizeExtensionPlan, replacementExtension } from "../lib/extension-numbers.ts";
 import { idFromPbx } from "../lib/pbx-id.ts";
-import { describeExtensionFailure, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, roleFromToken } from "../lib/pbx-access.ts";
+import { describeExtensionFailure, explainConfigurationCheck, numberAlreadyUsed, pbxAccessMessage, pbxErrorText, pbxTokenAccepted, pbxTokenScopes, roleFromToken } from "../lib/pbx-access.ts";
 import { extensionAddedNoticeIsOn, extensionWelcomeText, webClientUrl, welcomeCustomerNote } from "../lib/extension-welcome.ts";
 import { mfaIsRequired } from "../lib/mfa-rules.ts";
 import { DEPARTMENT_NAME_RULES, acceptedDepartmentName, departmentCreateBody, departmentNameIssue, departmentNameTakenMessage, departmentRejectedMessage, userCreateBody } from "../lib/pbx-user.ts";
@@ -157,6 +157,13 @@ test("a 403 from 3CX names the API role that was refused", () => {
   assert.match(pbxAccessMessage(403, "", ""), /no System Owner role/);
   assert.match(pbxAccessMessage(403, "", ""), /Configuration API Access/);
   assert.match(pbxAccessMessage(403, "system_owners", ""), /Allow access from everywhere/);
+  assert.match(pbxAccessMessage(401, "", ""), /configuration check/);
+  assert.match(pbxAccessMessage(401, "", ""), /does not block a call/);
+  assert.deepEqual(pbxTokenScopes(), ["", "mcp xapi"]);
+  assert.equal(pbxTokenAccepted(401), false);
+  assert.equal(pbxTokenAccepted(200), true);
+  assert.match(explainConfigurationCheck("3CX answered 401."), /Configuration API Access/);
+  assert.equal(explainConfigurationCheck("Connected. Version 20."), "Connected. Version 20.");
 });
 
 test("extension numbers start at 2000 and skip numbers already taken", () => {
