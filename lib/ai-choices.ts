@@ -266,8 +266,35 @@ export function accentById(id: string) {
   return ACCENTS.find((accent) => accent.id === id.trim()) || null;
 }
 
-export function spokenVoiceFor(label: string) {
+const WOMAN_VOICES = ["coral", "shimmer", "sage", "marin"];
+const MAN_VOICES = ["ash", "echo", "verse", "cedar"];
+
+export const GENDERS = [
+  { id: "woman", label: "Woman" },
+  { id: "man", label: "Man" },
+  { id: "neutral", label: "Neutral" },
+] as const;
+
+export function storedGender(value: string) {
+  const text = value.trim().toLowerCase();
+  if (text === "woman" || text === "female") return "woman";
+  if (text === "man" || text === "male") return "man";
+  if (text === "neutral") return "neutral";
+  return "";
+}
+
+export function genderLabel(id: string) {
+  return GENDERS.find((gender) => gender.id === id)?.label || "";
+}
+
+export function spokenVoiceFor(label: string, gender = "") {
   const accent = accentById(label);
+  const chosen = storedGender(gender);
+  if (accent && chosen) {
+    const set = chosen === "woman" ? WOMAN_VOICES : chosen === "man" ? MAN_VOICES : ["alloy"];
+    const index = Math.max(0, ACCENTS.findIndex((item) => item.id === accent.id));
+    return set[index % set.length];
+  }
   if (accent) return accent.voice;
   const voice = label.trim().toLowerCase();
   return VOICE_IDS.has(voice) ? voice : "alloy";
@@ -363,11 +390,13 @@ export function officeHoursSpeech(stored: string) {
   return `Office hours are ${open} to ${close}. Outside those hours, ${action}. Do not promise a callback outside those hours.`;
 }
 
-export function speakingDirections(input: { voiceLabel: string; language: string; afterHours: string }) {
+export function speakingDirections(input: { voiceLabel: string; gender?: string; language: string; afterHours: string }) {
   const accent = accentById(input.voiceLabel);
   const language = languageLabel(storedLanguage(input.language, true));
+  const gender = genderLabel(storedGender(input.gender || ""));
+  const voiceLine = gender ? `Use a ${gender.toLowerCase()} voice.` : "";
   const accentLine = accent ? `Speak ${language} with a ${accent.label} accent for the whole call.` : `Speak ${language}.`;
-  return `${accentLine} ${officeHoursSpeech(input.afterHours)} When the caller asks for a person, department, or extension, call transfer_to_approved_destination immediately and stop talking.`;
+  return `${voiceLine} ${accentLine} ${officeHoursSpeech(input.afterHours)} When the caller asks for a person, department, or extension, call transfer_to_approved_destination immediately and stop talking.`.replace(/\s+/g, " ").trim();
 }
 
 export function accentSelection(plan: Plan | null | undefined) {

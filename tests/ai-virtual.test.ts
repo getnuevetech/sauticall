@@ -216,14 +216,16 @@ test("a saved receptionist can be edited without moving its phone route", () => 
     language: "es-MX",
     allowedTransfers: ["800"],
     voiceLabel: "en-ng",
+    gender: "woman",
     afterHours: "09:00|17:00|message|",
     allowedVoices: ["en-ng"],
     multilingual: true,
     now,
   });
   assert.equal(hours.ok, true);
-  const voiced = db.prepare("SELECT voice_label, after_hours, greeting, language FROM ai_agents WHERE id = ?").get(saved.id) as { voice_label: string; after_hours: string; greeting: string; language: string };
+  const voiced = db.prepare("SELECT voice_label, voice_gender, after_hours, greeting, language FROM ai_agents WHERE id = ?").get(saved.id) as { voice_label: string; voice_gender: string; after_hours: string; greeting: string; language: string };
   assert.equal(voiced.voice_label, "en-ng");
+  assert.equal(voiced.voice_gender, "woman");
   assert.equal(voiced.after_hours, "09:00|17:00|message|");
   assert.match(voiced.greeting, /Thank you for calling/);
   assert.equal(voiced.language, "es-MX");

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACCENTS, accentsForPlan, defaultAccentIds, isOfficeTime, packOfficeHours, readOfficeHours, speakingDirections, storedVoice } from "../lib/ai-choices.ts";
+import { ACCENTS, accentsForPlan, defaultAccentIds, isOfficeTime, packOfficeHours, readOfficeHours, speakingDirections, spokenVoiceFor as spokenVoice, storedVoice } from "../lib/ai-choices.ts";
 
 test("the accent catalog covers every region and stays unique", () => {
   assert.ok(ACCENTS.length >= 100);
@@ -23,6 +23,10 @@ test("an admin accent list overrides the plan default", () => {
   assert.equal(storedVoice("en-ng", ["en-us"]).ok, false);
   assert.equal(storedVoice("en-ng", ["en-ng"]).ok, true);
   assert.equal(storedVoice("marin").ok, true);
+  assert.equal(spokenVoice("Marin"), "marin");
+  assert.notEqual(spokenVoice("en-ng", "woman"), spokenVoice("en-ng", "man"));
+  assert.equal(spokenVoice("en-ng", "neutral"), "alloy");
+  assert.match(speakingDirections({ voiceLabel: "en-ng", gender: "woman", language: "en-NG", afterHours: "09:00|17:00|message|" }), /woman/);
 });
 
 test("office hours are two times and a chosen after-hours action", () => {

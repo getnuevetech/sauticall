@@ -4,7 +4,7 @@ import { deleteVirtualAgentForm, pauseVirtualAgentForm, previewVirtualAgentForm,
 import { PLAN_SETUP_PATH } from "@/lib/account-start";
 import { customerAgentMessage, engineLabel, listAgentSessions, listKnowledge, listPromptTemplates, listTransferTargets } from "@/lib/ai-virtual";
 import { accountAgent, type VirtualAgent } from "@/lib/ai-virtual-store";
-import { AccentSelect, ChoiceSelect, GreetingSelect, HoursFields, ToneSelect, TransferFields } from "@/components/account/ClosedChoices";
+import { AccentSelect, ChoiceSelect, GenderSelect, GreetingSelect, HoursFields, ToneSelect, TransferFields } from "@/components/account/ClosedChoices";
 import { accentSelection, languagesForPlan } from "@/lib/ai-choices";
 import { getDb } from "@/lib/db";
 import { guardAccount } from "@/lib/guard";
@@ -80,7 +80,7 @@ export default async function AiExtensionPage({ params, searchParams }: { params
       ) : null}
       {tab === "voice" ? (
         <article className="contact-form">
-          <p>Choose an accent from the ones included on this plan. The connected voice speaks in that accent. Text preview does not open a phone call.</p>
+          <p>Choose a gender and an accent included on this plan. The connected voice uses that gender and speaks in that accent. Text preview does not open a phone call.</p>
           <ReceptionistEditor agent={agent} numbers={numbers} tab="voice" accents={accents} languages={languages} targets={targets} />
         </article>
       ) : null}
@@ -147,6 +147,7 @@ function ReceptionistEditor({ agent, numbers, tab, accents, languages, targets }
       {tab !== "overview" ? <input type="hidden" name="business_summary" value={agent.business_summary} /> : null}
       {!showVoice ? <input type="hidden" name="tone" value={agent.tone} /> : null}
       {!showVoice ? <input type="hidden" name="voice" value={agent.voice_label} /> : null}
+      {!showVoice ? <input type="hidden" name="gender" value={agent.voice_gender} /> : null}
       {!showVoice ? <input type="hidden" name="language" value={agent.language} /> : null}
       {!showPrompt ? <input type="hidden" name="greeting" value={agent.greeting} /> : null}
       {!showPrompt ? <input type="hidden" name="instructions" value={agent.instructions} /> : null}
@@ -171,6 +172,7 @@ function ReceptionistEditor({ agent, numbers, tab, accents, languages, targets }
       {tab === "overview" ? <label>Business summary <textarea name="business_summary" rows={3} defaultValue={agent.business_summary} /></label> : null}
       {showVoice ? <ToneSelect value={agent.tone} /> : null}
       {showVoice ? <ChoiceSelect label="Language" name="language" value={agent.language || "en-US"} options={languages.map((language) => ({ value: language.id, label: language.label }))} required /> : null}
+      {showVoice ? <GenderSelect value={agent.voice_gender} /> : null}
       {showVoice ? <AccentSelect accents={accents} value={agent.voice_label} /> : null}
       {showPrompt ? <GreetingSelect value={agent.greeting} /> : null}
       {showPrompt ? <label>Instructions <textarea name="instructions" rows={6} defaultValue={agent.instructions} /></label> : null}

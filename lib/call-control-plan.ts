@@ -32,8 +32,8 @@ export function selectRealtimeEngine(engines: EngineCandidate[]) {
   return null;
 }
 
-export function spokenVoice(label: string) {
-  return spokenVoiceFor(label);
+export function spokenVoice(label: string, gender = "") {
+  return spokenVoiceFor(label, gender);
 }
 
 export function transferDestination(args: string, allowed: readonly string[]) {
