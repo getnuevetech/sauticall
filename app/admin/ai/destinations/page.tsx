@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { AiSectionNav } from "@/components/admin/AiSectionNav";
 import { requirePermission } from "@/lib/access";
-import { customerAgentMessage, engineLabel } from "@/lib/ai-virtual";
-import { listAllAgents, listCapabilities, listManualTasks } from "@/lib/ai-virtual-store";
+import { engineLabel } from "@/lib/ai-virtual";
+import { listAllAgents, type VirtualAgent } from "@/lib/ai-virtual-store";
 import { callControlReport } from "@/lib/call-control-service";
 import { probeCallControlForm, recordVirtualBindingForm, startCallControlForm, stopCallControlForm } from "./actions";
 
@@ -9,101 +10,109 @@ export default async function AiDestinationsPage({ searchParams }: { searchParam
   await requirePermission("settings.ai");
   const query = await searchParams;
   const agents = listAllAgents();
-  const tasks = listManualTasks();
-  const capabilities = listCapabilities();
   const report = callControlReport();
-  const saved = query.saved === "probe"
-    ? "Call Control was checked on the existing 3CX connection. No call was placed."
-    : query.saved === "listen"
-      ? "Listening on the existing Service Principal. Dial its Client ID from a registered extension."
-      : query.saved === "stopped"
-        ? "Stopped listening. No call was placed."
-        : query.saved
-          ? "Identifier recorded. The route was not moved and the destination was not certified."
-          : "";
+  const callControl = report.capabilities.find((item) => item.capability === "call_control");
+  const problems = connectionProblems(report, callControl?.status || "unverified");
+  const saved = savedMessage(query.saved);
   return (
     <div className="ops ops-single">
       <div>
         <p className="ops-kicker">AI System / Virtual destinations</p>
         <h1>Virtual destinations</h1>
         <AiSectionNav current="destinations" />
-        <p>AI extensions are virtual destinations on the 3CX connection already used for trunks and extensions. No desk phone, softphone, or extra trunk is created for them. A recorded Client ID is not certified by itself. Nothing on this page places an outbound call.</p>
-        <h2>Existing connection</h2>
-        <p>{report.host ? `3CX host ${report.host}.` : "No 3CX host is stored on this server."} {report.xapi || "The XAPI connection has not been checked."}</p>
-        <ul>
-          {report.stored.reused.map((item) => <li key={item}>{item}</li>)}
-        </ul>
-        {report.stored.missing ? <p>{report.stored.missing}</p> : null}
-        <p>{report.realtime ? `Realtime voice engine: ${report.realtime.name} (${report.realtime.protocol}).` : "No enabled realtime voice engine is stored. Text engines stay available for drafts."} {report.textEngines.length ? `Enabled engines: ${report.textEngines.join(", ")}.` : ""}</p>
-        <p>AI switches: master {report.switches.master ? "on" : "off"}, receptionist {report.switches.receptionist ? "on" : "off"}. Listener: {report.listening ? "running" : "stopped"}.</p>
-        {capabilities.filter((item) => item.capability === "call_control" || item.capability === "programmable_extensions").map((item) => (
-          <p key={item.capability}>{item.capability}: {item.status}. {item.evidence}</p>
-        ))}
-        <form action={probeCallControlForm}><button className="btn btn-secondary" type="submit">Check Call Control on the existing connection</button></form>
-        <form action={startCallControlForm}><button className="btn btn-secondary" type="submit">Listen for calls</button></form>
-        <form action={stopCallControlForm}><button className="btn btn-secondary" type="submit">Stop listening</button></form>
-        {saved ? <p className="form-feedback">{saved}</p> : null}
-        {query.error ? <p className="ops-alert">{query.error}</p> : null}
-        <h2>Call results</h2>
-        {report.calls.length === 0 ? <p>No live call has been recorded. A text preview is not listed here.</p> : (
+        {query.error ? <p className="ops-alert" role="alert">{query.error}</p> : null}
+        {saved ? <p className="ops-note" role="status">{saved}</p> : null}
+
+        <h2>Connection</h2>
+        <div className="ops-status">
+          <span className={report.host ? "ops-badge ok" : "ops-badge bad"}>{report.host ? report.host : "No 3CX host saved"}</span>
+          <span className={callControl?.status === "supported_verified" ? "ops-badge ok" : "ops-badge warn"}>
+            {callControl?.status === "supported_verified" ? `Call Control accepted${callControl.observed_build ? ` · ${callControl.observed_build}` : ""}` : "Call Control not confirmed"}
+          </span>
+          <span className={report.listening ? "ops-badge ok" : "ops-badge"}>{report.listening ? "Listening for calls" : "Not listening"}</span>
+          <span className={report.switches.master && report.switches.receptionist ? "ops-badge ok" : "ops-badge warn"}>
+            {report.switches.master && report.switches.receptionist ? "Receptionist switch on" : "Receptionist switch off"}
+          </span>
+        </div>
+        {report.xapi ? <p>{report.xapi}</p> : <p>The 3CX connection has not been checked.</p>}
+        {problems.map((problem) => <p className="ops-alert" role="alert" key={problem}>{problem}{problem.startsWith("No realtime") ? <> <Link href="/admin/ai">Open Engines</Link></> : null}</p>)}
+        <div className="ops-toolbar">
+          <form action={probeCallControlForm}><button className="btn btn-secondary" type="submit">Check Call Control</button></form>
+          <form action={startCallControlForm}><button className="btn btn-primary" type="submit">Listen for calls</button></form>
+          <form action={stopCallControlForm}><button className="btn btn-secondary" type="submit">Stop listening</button></form>
+        </div>
+        <p>These buttons do not place a call. From a registered extension, dial the Service Principal Client ID.</p>
+
+        <h2>Receptionists</h2>
+        <p>The Client ID comes from 3CX. Open 3CX Admin, then Integrations, then API, and copy the Client ID of the Service Principal SautiCall already uses. A phone dials that Client ID. Paste the Client ID here, not the secret.</p>
+        {agents.length === 0 ? <p>No receptionist is saved.</p> : agents.map((agent) => <Receptionist key={agent.id} agent={agent} />)}
+
+        <h2>Recent calls</h2>
+        {report.calls.length === 0 ? <p>No telephone call has been recorded.</p> : (
           <div className="ops-table-wrap">
             <table className="ops-table">
-              <thead><tr><th>Participant</th><th>State</th><th>Audio both ways</th><th>Outbound</th><th>Outcome</th></tr></thead>
+              <thead><tr><th>Call</th><th>Result</th><th>Caller heard the AI</th></tr></thead>
               <tbody>
                 {report.calls.map((call) => (
                   <tr key={call.id}>
                     <td>{call.pbx_call_id}</td>
-                    <td>{call.state}</td>
-                    <td>{call.media_open === 1 ? "yes" : "no"}</td>
-                    <td>{call.place_call === 0 ? "not placed" : "placed"}</td>
-                    <td>{call.outcome}</td>
+                    <td>{call.outcome || call.state}</td>
+                    <td>{call.media_open === 1 ? "Yes" : "No"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-        <h2>Capabilities</h2>
-        <div className="ops-table-wrap">
-          <table className="ops-table">
-            <thead><tr><th>Capability</th><th>Status</th></tr></thead>
-            <tbody>
-              {capabilities.map((item) => <tr key={item.capability}><td>{item.capability}</td><td>{item.status}</td></tr>)}
-            </tbody>
-          </table>
-        </div>
-        <h2>AI extensions</h2>
-        <div className="ops-table-wrap">
-          <table className="ops-table">
-            <thead><tr><th>Name</th><th>Account</th><th>Engine</th><th>Number</th><th>Status</th><th>Record identifier</th></tr></thead>
-            <tbody>
-              {agents.length === 0 ? <tr><td colSpan={6}>No AI extension is saved.</td></tr> : agents.map((agent) => (
-                <tr key={agent.id}>
-                  <td>{agent.name}</td>
-                  <td>{agent.user_id}</td>
-                  <td>{engineLabel(agent.execution_engine)}{agent.prompt_sync === "NOT_SYNCED_NATIVE" ? " · prompt not synced" : ""}</td>
-                  <td>{agent.did}</td>
-                  <td>{customerAgentMessage(agent.status)}</td>
-                  <td>
-                    <form action={recordVirtualBindingForm}>
-                      <input type="hidden" name="agent_id" value={agent.id} />
-                      <input name="resource_id" aria-label={`3CX identifier for ${agent.name}`} placeholder="Client ID or native agent id" />
-                      <input name="note" aria-label={`Note for ${agent.name}`} placeholder="Where this was created" />
-                      <button className="btn btn-secondary" type="submit">Record</button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <h2>Administrator steps</h2>
-        {tasks.length === 0 ? <p>No open phone-system step.</p> : (
-          <ul>
-            {tasks.map((task) => <li key={task.id}>{task.email}: {task.required_action} {task.verification_status === "recorded_unverified" ? "Identifier recorded, not certified." : ""}</li>)}
-          </ul>
-        )}
       </div>
     </div>
   );
+}
+
+function Receptionist({ agent }: { agent: VirtualAgent }) {
+  const native = agent.execution_engine === "THREE_CX_NATIVE";
+  const recorded = native ? agent.native_agent_id : agent.client_id;
+  const status = receptionistStatus(agent, recorded);
+  return (
+    <article className="ops-destination">
+      <h3>{agent.name}</h3>
+      <p>Account {agent.user_id} · {engineLabel(agent.execution_engine)} · {agent.did || "No number"}</p>
+      <p><span className={`ops-badge ${status.tone}`}>{status.label}</span></p>
+      <form className="ops-toolbar" action={recordVirtualBindingForm}>
+        <input type="hidden" name="agent_id" value={agent.id} />
+        <label>{native ? "3CX agent id" : "3CX Client ID"}
+          <input name="resource_id" defaultValue={recorded} aria-label={native ? `3CX agent id for ${agent.name}` : `3CX Client ID for ${agent.name}`} placeholder={native ? "Agent id from 3CX" : "Client ID from 3CX Integrations, API"} />
+        </label>
+        <button className="btn btn-secondary" type="submit">Save Client ID</button>
+      </form>
+    </article>
+  );
+}
+
+function receptionistStatus(agent: VirtualAgent, recorded: string) {
+  if (agent.status === "PAUSED") return { label: "Paused. Calls stay on the ring group.", tone: "warn" };
+  if (agent.binding_status === "ACTIVE" && agent.route_target) return { label: "Certified. The number can route to this receptionist.", tone: "ok" };
+  if (recorded) return { label: "Client ID saved. Calls still ring the group.", tone: "pending" };
+  return { label: "Needs the 3CX Client ID.", tone: "warn" };
+}
+
+function savedMessage(saved: string | undefined) {
+  if (saved === "probe") return "Checked the existing 3CX connection. No call was placed.";
+  if (saved === "listen") return "Listening. Dial the Client ID from a registered extension.";
+  if (saved === "stopped") return "Stopped listening. No call was placed.";
+  if (saved) return "Client ID saved. Calls still ring the group.";
+  return "";
+}
+
+function connectionProblems(report: ReturnType<typeof callControlReport>, callControlStatus: string) {
+  const problems: string[] = [];
+  if (!report.stored.ready) problems.push("The 3CX connection on this server is empty. Trunks and extensions use that same connection.");
+  else if (callControlStatus === "unsupported") problems.push("3CX refused Call Control for the existing Service Principal. In 3CX Admin, open Integrations, then API, and enable Call Control on that principal.");
+  else if (callControlStatus !== "supported_verified") problems.push("Call Control has not been confirmed. Use Check Call Control.");
+  if (!report.realtime) {
+    const names = report.textEngines.length ? report.textEngines.join(", ") : "None";
+    problems.push(`No realtime voice model is enabled. Enabled engines: ${names}. Those can draft text. Enable OpenAI Realtime or xAI before a caller can hear the receptionist.`);
+  }
+  if (!report.switches.master || !report.switches.receptionist) problems.push("Turn on Master AI and AI receptionist. Both switches must be on before a call is answered.");
+  return problems;
 }
